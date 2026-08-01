@@ -1460,7 +1460,7 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
 
         {/* TODAY'S ACTIVITY */}
         <div>
-           <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Activity size={22} className="text-[#00D4FF]" /> {language === 'id' ? 'Aktivitas Hari Ini' : "Today's Activity"}</h3>
+           <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Activity size={22} className="text-[#00D4FF]" /> {language === 'id' ? 'Activities Hari Ini' : "Today's Activity"}</h3>
            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {/* Next Class */}
               <Card className="bg-[#151B26]/80 backdrop-blur-md border-t-4 border-t-emerald-400 p-4 sm:p-5 hover:-translate-y-1 transition-transform shadow-lg flex flex-col">
@@ -1765,7 +1765,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
               className="bg-[#0B0F19] border border-gray-700 text-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-yellow-400 appearance-none cursor-pointer w-full sm:w-auto"
               style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394A3B8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem top 50%', backgroundSize: '0.65rem auto', paddingRight: '2rem' }}
             >
-              <option value="All">{language === 'id' ? 'Semua Sesi' : 'All Sessions'}</option>
+              <option value="All">{language === 'id' ? 'All Sessions' : 'All Sessions'}</option>
               {SESSIONS.map(session => (
                 <option key={session} value={session}>{session}</option>
               ))}
@@ -1830,7 +1830,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                                         setExpModalStudent(null);
                                         setExpInput('');
                                      }} className="p-1 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded transition-colors" title={language === 'id' ? 'Simpan' : 'Save'}><Check size={14}/></button>
-                                     <button type="button" onClick={() => { setExpModalStudent(null); setExpInput(''); }} className="p-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors" title={language === 'id' ? 'Batal' : 'Cancel'}><X size={14}/></button>
+                                     <button type="button" onClick={() => { setExpModalStudent(null); setExpInput(''); }} className="p-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors" title={language === 'id' ? 'Cancel' : 'Cancel'}><X size={14}/></button>
                                   </div>
                                ) : (
                                   <button onClick={() => { setExpModalStudent(s); setExpInput(''); }} className="p-1.5 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 rounded-lg transition-colors border border-yellow-500/20 shadow-sm" title={language === 'id' ? 'Edit EXP' : 'Edit EXP'}>
@@ -1982,7 +1982,7 @@ const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                  <UserCheck size={20} className="text-teal-400 mr-2" />
                  <div className="flex flex-col items-start">
                    <span className="font-bold">{language === 'id' ? 'Isi Kehadiran' : 'Complete Attendance'}</span>
-                   <span className="text-xs text-gray-400 font-normal mt-0.5">{language === 'id' ? 'Tandai kehadiran siswa' : "Mark students' presence"}</span>
+                   <span className="text-xs text-gray-400 font-normal mt-0.5">{language === 'id' ? 'Fields markedi kehadiran siswa' : "Mark students' presence"}</span>
                  </div>
                </Button>
                <Button onClick={() => setActiveTab('assessments')} className="w-full justify-start py-4 text-left border border-gray-700 bg-[#0B0F19] hover:bg-[#1A2234] hover:border-rose-500/50 transition-all text-white shadow-md rounded-xl" variant="secondary">
@@ -2103,7 +2103,7 @@ const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                                         setExpModalStudent(null);
                                         setExpInput('');
                                      }} className="p-1 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded transition-colors" title={language === 'id' ? 'Simpan' : 'Save'}><Check size={14}/></button>
-                                     <button type="button" onClick={() => { setExpModalStudent(null); setExpInput(''); }} className="p-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors" title={language === 'id' ? 'Batal' : 'Cancel'}><X size={14}/></button>
+                                     <button type="button" onClick={() => { setExpModalStudent(null); setExpInput(''); }} className="p-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded transition-colors" title={language === 'id' ? 'Cancel' : 'Cancel'}><X size={14}/></button>
                                   </div>
                                ) : (
                                   <button onClick={() => { setExpModalStudent(s); setExpInput(''); }} className="p-1.5 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 rounded-lg transition-colors border border-yellow-500/20 shadow-sm" title={language === 'id' ? 'Edit EXP' : 'Edit EXP'}>
@@ -2650,7 +2650,7 @@ function MainApp() {
        .catch(() => {});
      }
 
-     // 2. Tampilkan secara instan di UI System Logs Monitor
+     // 2. Show secara instan di UI System Logs Monitor
      const now = new Date();
      const timestamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
      const newLog = { Timestamp: timestamp, User: userName, Action: actionName, Status: isError ? 'FAILED' : 'SUCCESS', Details: details, 'Error Details': isError ? details : undefined };
@@ -2698,9 +2698,9 @@ function MainApp() {
          'Please provide either a link or an open-ended question': 'Mohon berikan tautan atau instruksi tugas',
          'You can only manage materials for your assigned session.': 'Anda hanya dapat mengelola materi untuk sesi Anda.',
          'Please write your comment or submission first': 'Silakan tulis komentar atau tugas Anda terlebih dahulu',
-         'Schedule ID is required': 'ID Jadwal wajib diisi',
+         'Schedule ID is required': 'ID Jadwal are required',
          'Enter valid amount': 'Masukkan nominal yang valid',
-         'Tutor and Base Salary required.': 'Tutor dan Gaji Pokok wajib diisi.',
+         'Tutor and Base Salary required.': 'Tutor dan Gaji Pokok are required.',
          'Payroll marked as Paid!': 'Penggajian ditandai Lunas!',
          'Draft Saved!': 'Draf Tersimpan!',
          'Please select a tutor to link': 'Pilih tutor untuk dihubungkan',
@@ -2967,7 +2967,7 @@ function MainApp() {
                const MERGE_COLS_CHECK = [
                  'users', 'students', 'tutors', 'studentAttendance', 'tutorAttendance',
                  'journals', 'assessments', 'payments', 'payroll', 'calendar',
-                 'announcements', 'materials'
+                 'announcements', 'materials', 'recycleBin'
                ];
                const localHasExtra = MERGE_COLS_CHECK.some(col => {
                  const localArr = Array.isArray(prevDb[col]) ? prevDb[col] : [];
@@ -3039,7 +3039,7 @@ function MainApp() {
       // TANDAI BAHWA DATABASE LOKAL SUDAH DIMODIFIKASI OLEH USER DI SESI INI
       // (Ini mengunci data lokal agar tidak ditimpa oleh delay response dari Cloud)
       isDbDirty.current = true;
-      // FIX: Tampilkan 'saving' dulu (data sudah aman di localStorage),
+      // FIX: Show 'saving' dulu (data sudah aman di localStorage),
       // bukan langsung 'syncing' yang menyesatkan user seolah sedang kirim network.
       setSyncStatus('saving');
 
@@ -3470,7 +3470,7 @@ function MainApp() {
                     const merged: any = mergeCloudData(prevDb, normalizedCloud);
                     skipCloudSave.current = true;
                     localStorage.setItem('ecg_db', JSON.stringify(merged));
-                    const MERGE_COLS_CHECK2 = ['users','students','tutors','studentAttendance','tutorAttendance','journals','assessments','payments','payroll','calendar','announcements','materials'];
+                    const MERGE_COLS_CHECK2 = ['users','students','tutors','studentAttendance','tutorAttendance','journals','assessments','payments','payroll','calendar','announcements','materials','recycleBin'];
                     const localHasExtra = MERGE_COLS_CHECK2.some(col => {
                       const localArr = Array.isArray(prevDb[col]) ? prevDb[col] : [];
                       const cloudIds = new Set((Array.isArray(normalizedCloud[col]) ? normalizedCloud[col] : []).map(i => String(i.id)));
@@ -3892,7 +3892,7 @@ function MainApp() {
       case 'announcements':
         return <AnnouncementsModule db={db} setDb={setDb} generateId={generateId} user={currentUser} showToast={showToast} softDelete={softDelete} setActiveTab={setActiveTab} />;
       case 'history':
-        return <HistoryReportsModule db={db} setDb={setDb} showToast={showToast} handlePrint={() => window.print()} user={currentUser} />;
+        return <HistoryReportsModule db={db} setDb={setDb} showToast={showToast} handlePrint={() => window.print()} user={currentUser} handleShareImage={handleShareImage} downloadPNG={downloadPNG} />;
       case 'settings':
         return <SettingsModule db={db} setDb={setDb} generateId={generateId} user={currentUser} showToast={showToast} requestConfirm={requestConfirm} getAuthToken={getAuthToken} dbVersion={dbVersion} currentUser={currentUser} setSyncStatus={setSyncStatus} />;
       case 'account_settings':
@@ -3938,7 +3938,7 @@ function MainApp() {
           <p className="text-gray-400">{language === 'id' ? 'Apakah Anda yakin ingin keluar?' : 'Are you sure you want to log out?'}</p>
         </div>
         <div className="flex justify-end gap-3">
-          <Button variant="ghost" onClick={() => setLogoutConfirm(false)}>{language === 'id' ? 'Batal' : 'Cancel'}</Button>
+          <Button variant="ghost" onClick={() => setLogoutConfirm(false)}>{language === 'id' ? 'Cancel' : 'Cancel'}</Button>
           <Button className="bg-red-500 hover:bg-red-600 text-white border-none shadow-none" onClick={confirmLogout}>{language === 'id' ? 'Konfirmasi' : 'Confirm'}</Button>
         </div>
       </CustomModal>
@@ -4467,7 +4467,8 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
   }, [db.studentAttendance]);
 
   const availableSchedules = useMemo(() => {
-     let scheds = [...(db.calendar || [])].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+     // Sort ASCENDING (earliest date first) for easier tracking
+     let scheds = [...(db.calendar || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
      if (user && user.role === 'tutor') {
         scheds = scheds.filter(c => c.tutor && c.tutor.split(' & ').includes(user.name));
      }
@@ -4476,7 +4477,8 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
   }, [db.calendar, user, markedScheduleIds]);
 
   const markedSchedules = useMemo(() => {
-     let scheds = [...(db.calendar || [])].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+     // Sort ASCENDING (earliest date first)
+     let scheds = [...(db.calendar || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
      if (user && user.role === 'tutor') {
         scheds = scheds.filter(c => c.tutor && c.tutor.split(' & ').includes(user.name));
      }
@@ -4490,11 +4492,14 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
     return markedSchedules.filter(c => (c.date || '').startsWith(prefix));
   }, [markedSchedules, editFilterMonth, editFilterYear]);
 
-  // Schedules available for attendance marking, filtered by picker month
+  // ALL schedules for picker (unmarked + marked), sorted ascending, filtered by month
   const schedulesForPicker = useMemo(() => {
     const prefix = `${pickerYear}-${String(pickerMonth).padStart(2, '0')}`;
-    return availableSchedules.filter(c => (c.date || '').startsWith(prefix));
-  }, [availableSchedules, pickerMonth, pickerYear]);
+    const unmarked = availableSchedules.filter(c => (c.date || '').startsWith(prefix));
+    const marked = markedSchedules.filter(c => (c.date || '').startsWith(prefix));
+    // Merge and sort ascending by date
+    return [...unmarked, ...marked].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  }, [availableSchedules, markedSchedules, pickerMonth, pickerYear]);
 
   const selectedSchedule = useMemo(() => {
      return availableSchedules.find(s => s.id === selectedScheduleId) || null;
@@ -4702,17 +4707,18 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
           </div>
         </div>
 
-        {availableSchedules.length === 0 ? (
+        {availableSchedules.length === 0 && markedSchedules.length === 0 ? (
           <div className="w-full p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 font-medium text-sm">
             No Academic Calendar schedule available. Please create a schedule first.
           </div>
         ) : schedulesForPicker.length === 0 ? (
           <div className="w-full p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-400 font-medium text-sm">
-            No unmarked sessions in {MONTHS[pickerMonth - 1]} {pickerYear}. Try a different month or all sessions are already marked.
+            No sessions in {MONTHS[pickerMonth - 1]} {pickerYear}. Try a different month.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {schedulesForPicker.map(c => {
+              const isMarkedDone = markedScheduleIds.includes(c.id);
               const isSelected = selectedScheduleId === c.id;
               const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
               const [y, mo, d] = (c.date || '').split('-');
@@ -4720,27 +4726,40 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelectedScheduleId(isSelected ? '' : c.id)}
-                  className={`text-left p-4 rounded-xl border-2 transition-all duration-150 ${
-                    isSelected
-                      ? 'border-[#00D4FF] bg-[#00D4FF]/10 shadow-[0_0_20px_rgba(0,212,255,0.2)]'
-                      : 'border-gray-700 bg-[#151B26] hover:border-gray-500 hover:bg-[#1A2234]'
+                  onClick={() => !isMarkedDone && setSelectedScheduleId(isSelected ? '' : c.id)}
+                  disabled={isMarkedDone}
+                  className={`text-left p-4 rounded-xl border-2 transition-all duration-150 relative ${
+                    isMarkedDone
+                      ? 'border-emerald-700/60 bg-emerald-950/40 cursor-default opacity-80'
+                      : isSelected
+                        ? 'border-[#00D4FF] bg-[#00D4FF]/10 shadow-[0_0_20px_rgba(0,212,255,0.2)]'
+                        : 'border-gray-700 bg-[#151B26] hover:border-gray-500 hover:bg-[#1A2234]'
                   }`}
                 >
+                  {isMarkedDone && (
+                    <span className="absolute top-3 right-3 flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      <CheckCircle2 size={10} />
+                      Done
+                    </span>
+                  )}
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <p className={`text-base font-bold leading-tight ${isSelected ? 'text-[#00D4FF]' : 'text-white'}`}>
-                        {dayName}, {parseInt(d, 10)} {MONTHS[parseInt(mo, 10) - 1]}
+                      <p className={`text-base font-bold leading-tight ${isMarkedDone ? 'text-emerald-400' : isSelected ? 'text-[#00D4FF]' : 'text-white'}`}>
+                        {dayName}, {parseInt(d, 10)} {MONTHS[parseInt(mo, 10) - 1]} {y}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">{c.date}</p>
                     </div>
-                    {isSelected && (
+                    {isSelected && !isMarkedDone && (
                       <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#00D4FF] flex items-center justify-center">
                         <Check size={12} className="text-[#0B0F19]" strokeWidth={3} />
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-semibold text-[#00D4FF]/80 bg-[#00D4FF]/10 px-2 py-0.5 rounded-full inline-block mb-1.5">
+                  <p className={`text-xs font-semibold px-2 py-0.5 rounded-full inline-block mb-1.5 ${
+                    isMarkedDone
+                      ? 'text-emerald-400/80 bg-emerald-500/10'
+                      : 'text-[#00D4FF]/80 bg-[#00D4FF]/10'
+                  }`}>
                     {c.sessionGroup || c.name}
                   </p>
                   <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
@@ -5785,7 +5804,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
             >
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
-                  <span className="text-violet-400 text-base">👁️</span>
+                  <DollarSign size={18} className="text-violet-400" />
                 </div>
                 <div>
                   <p className="text-sm font-bold text-white">{language === 'id' ? 'Ringkasan Status Bayar — Cepat' : 'Quick Payment Overview'}</p>
@@ -6141,7 +6160,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
   );
 }
 
-function HistoryReportsModule({ db, setDb, showToast, handlePrint, user }) {
+function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleShareImage, downloadPNG }) {
   const [view, setView] = useState('directory');
   const [dirType, setDirType] = useState('student');
   const [selectedId, setSelectedId] = useState(null);
@@ -6480,7 +6499,9 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user }) {
               </span>
             </div>
 
-            <Button onClick={handlePrintStudentReport} icon={Printer}>Print Premium PDF</Button>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <Button onClick={handlePrintStudentReport} icon={Printer}>Print Premium PDF</Button>
+            </div>
           </div>
 
           <div className="mb-8 bg-[#151B26] p-5 rounded-xl border border-gray-800 shadow-xl">
@@ -7138,6 +7159,10 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   
+  // State for schedule picker filter (separate from list filter)
+  const [pickerMonth, setPickerMonth] = useState(new Date().getMonth() + 1);
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+
   // NEW: State for Filters & Pagination
   const [filterSession, setFilterSession] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState<number | string>(10);
@@ -7193,15 +7218,53 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
     setIsAdding(false);
   };
 
+  // Session color mapping for visual distinction
+  const SESSION_COLORS = {
+    [SESSIONS[0]]: { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400', dot: 'bg-pink-400', bar: 'bg-pink-500' },
+    [SESSIONS[1]]: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', dot: 'bg-blue-400', bar: 'bg-blue-500' },
+    [SESSIONS[2]]: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', dot: 'bg-emerald-400', bar: 'bg-emerald-500' },
+    [SESSIONS[3]]: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', dot: 'bg-amber-400', bar: 'bg-amber-500' },
+    [SESSIONS[4]]: { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400', dot: 'bg-purple-400', bar: 'bg-purple-500' },
+  };
+  const getSessionColor = (sg) => SESSION_COLORS[sg] || { bg: 'bg-gray-500/10', border: 'border-gray-500/30', text: 'text-gray-400', dot: 'bg-gray-400', bar: 'bg-gray-500' };
+
+  // Stats for the month
+  const sessionStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredJournals.forEach(j => { counts[j.sessionGroup] = (counts[j.sessionGroup] || 0) + 1; });
+    return counts;
+  }, [filteredJournals]);
+
+  // Group journals by date for timeline
+  const groupedByDate = useMemo(() => {
+    const groups: Record<string, typeof paginatedData> = {};
+    paginatedData.forEach(j => {
+      if (!groups[j.date]) groups[j.date] = [];
+      groups[j.date].push(j);
+    });
+    return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
+  }, [paginatedData]);
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div><h2 className="text-2xl font-bold text-white mb-1">Learning Journals</h2><p className="text-gray-400 text-sm">Log topics and activities covered in each session.</p></div>
-        <Button onClick={() => { setFormData({ id: '', scheduleId: '', date: '', sessionGroup: '', topic: '', activities: '', followUp: '' }); setIsAdding(!isAdding); }} icon={Plus}>Write Journal</Button>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-0.5">Learning Journals</h2>
+          <p className="text-gray-500 text-sm">Log topics and activities covered in each session.</p>
+        </div>
+        <Button
+          onClick={() => { setFormData({ id: '', scheduleId: '', date: '', sessionGroup: '', topic: '', activities: '', followUp: '' }); setIsAdding(!isAdding); }}
+          icon={Plus}
+        >
+          Write Journal
+        </Button>
       </div>
+
+      {/* Write/Edit Form */}
       {isAdding && (
-        <Card className="border border-purple-500/20 shadow-[0_0_24px_rgba(168,85,247,0.06)]">
-          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-800">
+        <Card className="border border-purple-500/25 shadow-[0_0_32px_rgba(168,85,247,0.08)]">
+          <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-800">
             <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
               <BookOpen size={20} className="text-purple-400" />
             </div>
@@ -7212,35 +7275,93 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
           </div>
           <form onSubmit={handleSave}>
             {!formData.id ? (
-               <div className="mb-4">
-                 <Input 
-                    label="Select Class Schedule (From Calendar)" 
-                    type="select" 
-                    options={[
-                      { value: '', label: 'Select a past schedule...' },
-                      ...availableSchedules.map(c => ({ value: c.id, label: `${c.date} • ${c.sessionGroup || c.name} (${c.startTime})` }))
-                    ]} 
-                    value={formData.scheduleId || ''} 
-                    onChange={handleScheduleChange} 
-                    required 
-                 />
-               </div>
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-2">Select Class Schedule <span className="text-red-400">*</span></label>
+                {/* Step 1: Month / Year filter */}
+                <div className="flex gap-2 mb-3">
+                  <select
+                    className="flex-1 bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#00D4FF] transition-all"
+                    value={pickerMonth}
+                    onChange={e => { setPickerMonth(Number(e.target.value)); handleScheduleChange(''); }}
+                  >
+                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    className="w-24 bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#00D4FF] transition-all"
+                    value={pickerYear}
+                    onChange={e => { setPickerYear(Number(e.target.value)); handleScheduleChange(''); }}
+                  />
+                </div>
+                {/* Step 2: Schedule cards for chosen month */}
+                {(() => {
+                  const prefix = `${pickerYear}-${String(pickerMonth).padStart(2, '0')}`;
+                  const monthScheds = availableSchedules.filter(c => (c.date || '').startsWith(prefix));
+                  if (monthScheds.length === 0) return (
+                    <p className="text-center text-gray-600 text-sm py-4 bg-[#0B0F19] rounded-lg border border-gray-800">
+                      No schedules found for {MONTHS[pickerMonth - 1]} {pickerYear}
+                    </p>
+                  );
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                      {monthScheds.map(c => {
+                        const isSelected = formData.scheduleId === c.id;
+                        const col = (() => {
+                          const sg = c.sessionGroup || c.name || '';
+                          if (sg.includes('PAUD') || sg.includes('TK')) return { border: 'border-pink-500/40', bg: 'bg-pink-500/10', text: 'text-pink-400', sel: 'border-pink-400 bg-pink-500/20' };
+                          if (sg.includes('Grade 1') || sg.includes('Grade 2')) return { border: 'border-blue-500/40', bg: 'bg-blue-500/10', text: 'text-blue-400', sel: 'border-blue-400 bg-blue-500/20' };
+                          if (sg.includes('Grade 3') || sg.includes('Grade 4')) return { border: 'border-emerald-500/40', bg: 'bg-emerald-500/10', text: 'text-emerald-400', sel: 'border-emerald-400 bg-emerald-500/20' };
+                          if (sg.includes('Grade 5') || sg.includes('Grade 6')) return { border: 'border-amber-500/40', bg: 'bg-amber-500/10', text: 'text-amber-400', sel: 'border-amber-400 bg-amber-500/20' };
+                          return { border: 'border-purple-500/40', bg: 'bg-purple-500/10', text: 'text-purple-400', sel: 'border-purple-400 bg-purple-500/20' };
+                        })();
+                        const dateObj = new Date(c.date + 'T00:00:00');
+                        const dayShort = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                        const dayNum = dateObj.getDate();
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => handleScheduleChange(c.id)}
+                            className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${isSelected ? col.sel + ' border-2' : 'border-gray-700 bg-[#0B0F19] hover:' + col.bg + ' hover:' + col.border}`}
+                          >
+                            {/* Date badge */}
+                            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center ${isSelected ? col.bg : 'bg-[#151B26]'}`}>
+                              <span className={`text-[10px] font-bold uppercase ${col.text}`}>{dayShort}</span>
+                              <span className="text-white text-sm font-bold leading-none">{dayNum}</span>
+                            </div>
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-semibold truncate ${col.text}`}>{c.sessionGroup || c.name}</p>
+                              <p className="text-gray-400 text-[11px] mt-0.5">{c.startTime}{c.tutor ? ` · ${c.tutor}` : ''}</p>
+                            </div>
+                            {isSelected && <CheckCircle2 size={16} className={col.text} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+                {/* Validation hint */}
+                {!formData.scheduleId && (
+                  <p className="text-[11px] text-gray-600 mt-2">Pick a schedule card above to continue.</p>
+                )}
+              </div>
             ) : (
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                 <Input label="Date" type="date" value={formData.date} disabled />
-                 <Input label="Session Group" type="text" value={formData.sessionGroup} disabled />
-               </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <Input label="Date" type="date" value={formData.date} disabled />
+                <Input label="Session" type="text" value={formData.sessionGroup} disabled />
+              </div>
             )}
             <div className="mb-4">
-              <Input label="Material / Topic" value={formData.topic} onChange={v => setFormData({...formData, topic: v})} required />
+              <Input label="Topic / Material" value={formData.topic} onChange={v => setFormData({...formData, topic: v})} required />
             </div>
             <div className="mb-4">
-              <label className="block text-sm text-gray-400 mb-1.5">Activities <span className="text-red-400">*</span></label>
-              <textarea className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors" rows={3} value={formData.activities} onChange={e => setFormData({...formData, activities: e.target.value})} required></textarea>
+              <label className="block text-sm text-gray-400 mb-1.5">Class Activities <span className="text-red-400">*</span></label>
+              <textarea className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors text-sm" rows={3} value={formData.activities} onChange={e => setFormData({...formData, activities: e.target.value})} required placeholder="Describe the activities done in class..." />
             </div>
             <div className="mb-6">
               <label className="block text-sm text-gray-400 mb-1.5">Follow Up / Notes</label>
-              <textarea className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors" rows={2} value={formData.followUp} onChange={e => setFormData({...formData, followUp: e.target.value})}></textarea>
+              <textarea className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors text-sm" rows={2} value={formData.followUp} onChange={e => setFormData({...formData, followUp: e.target.value})} placeholder="Homework, special notes, or plans for the next session..." />
             </div>
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
               <Button variant="secondary" onClick={() => setIsAdding(false)}>Cancel</Button>
@@ -7249,70 +7370,172 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
           </form>
         </Card>
       )}
-      <Card className="p-0 flex flex-col">
-         {/* Filter Row */}
-         <div className="p-4 bg-[#0A0E17] border-b border-gray-800 flex flex-col md:flex-row gap-4 items-center">
-            <div className="flex gap-4 w-full md:w-auto">
-              <Input label="" type="select" options={MONTHS.map((m,i) => ({value: i+1, label: m}))} value={month} onChange={setMonth} className="mb-0 flex-1 md:w-40" />
-              <Input label="" type="number" value={year} onChange={setYear} className="mb-0 flex-1 md:w-24" />
-            </div>
-            <select 
-               className="w-full md:w-48 bg-[#151B26] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] transition-all" 
-               value={filterSession} 
-               onChange={(e) => setFilterSession(e.target.value)}
-            >
-               {user?.role === 'tutor' ? (
-                 <>
-                   <option value="">All My Sessions</option>
-                   {parseSessions(user.teachingSession).map(s => <option key={s} value={s}>{s}</option>)}
-                 </>
-               ) : (
-                 <>
-                   <option value="">All Sessions</option>
-                   {SESSIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                 </>
-               )}
-            </select>
-         </div>
-         
-         <div className="p-4 space-y-4 bg-[#151B26] flex-1">
-            {paginatedData.map(j => (
-               <div key={j.id} className="p-4 bg-[#0B0F19] rounded-xl border border-gray-800 relative group transition-colors hover:border-blue-500/30">
-                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                     <button onClick={() => { setFormData(j); setIsAdding(true); }} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Journal"><Edit2 size={18}/></button>
-                     <button onClick={() => softDelete('journals', j.id, 'Journal')} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Journal"><Trash2 size={18}/></button>
-                  </div>
-                  <h3 className="text-lg font-bold text-white mb-1">{j.topic}</h3>
-                  <p className="text-xs text-gray-500 mb-3">{j.date} • {j.sessionGroup} • by {j.tutorName}</p>
-                  <p className="text-sm text-gray-300 mb-2"><strong>Activities:</strong> {j.activities}</p>
-                  {j.followUp && <p className="text-sm text-gray-400"><strong>Notes:</strong> {j.followUp}</p>}
-               </div>
-            ))}
-            {paginatedData.length === 0 && <p className="text-center text-gray-500 py-8">No journals recorded for this period.</p>}
-         </div>
 
-         {/* Pagination Footer */}
-         <div className="p-4 bg-[#0A0E17] border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-400">
-             <div className="flex items-center gap-2">
-               <span>Show</span>
-               <select value={rowsPerPage} onChange={(e) => setRowsPerPage(e.target.value === 'All' ? 'All' : Number(e.target.value))} className="bg-[#151B26] border border-gray-700 rounded px-2 py-1 text-white focus:outline-none focus:border-[#00D4FF] cursor-pointer">
-                 <option value={10}>10</option>
-                 <option value={20}>20</option>
-                 <option value={50}>50</option>
-                 <option value="All">All</option>
-               </select>
-               <span>entries {filteredJournals.length > 0 && `(Total: ${filteredJournals.length})`}</span>
-             </div>
-             
-             {!isAll && totalPages > 1 && (
-               <div className="flex items-center gap-2">
-                 <Button variant="ghost" className="px-3 py-1.5 h-auto text-xs bg-[#151B26] border border-gray-700 hover:bg-gray-800" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>Prev</Button>
-                 <span className="px-3 py-1.5 text-white font-medium">{currentPage} / {totalPages}</span>
-                 <Button variant="ghost" className="px-3 py-1.5 h-auto text-xs bg-[#151B26] border border-gray-700 hover:bg-gray-800" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next</Button>
-               </div>
-             )}
+      {/* Filter Bar */}
+      <div className="bg-[#151B26] border border-gray-800 rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center">
+        <div className="flex gap-2 w-full md:w-auto">
+          <select
+            className="flex-1 md:w-36 bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#00D4FF] transition-all"
+            value={month} onChange={e => setMonth(Number(e.target.value))}
+          >
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <input
+            type="number"
+            className="w-20 bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#00D4FF] transition-all"
+            value={year} onChange={e => setYear(Number(e.target.value))}
+          />
+        </div>
+        <select
+          className="w-full md:w-56 bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-[#00D4FF] transition-all"
+          value={filterSession} onChange={(e) => setFilterSession(e.target.value)}
+        >
+          {user?.role === 'tutor' ? (
+            <>
+              <option value="">All My Sessions</option>
+              {parseSessions(user.teachingSession).map(s => <option key={s} value={s}>{s}</option>)}
+            </>
+          ) : (
+            <>
+              <option value="">All Sessions</option>
+              {SESSIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </>
+          )}
+        </select>
+
+        {/* Stats chips */}
+        {filteredJournals.length > 0 && (
+          <div className="flex flex-wrap gap-2 ml-auto">
+            {Object.entries(sessionStats).map(([sg, count]) => {
+              const c = getSessionColor(sg);
+              const shortLabel = sg.replace(' Session', '').replace('Grade ', 'Gr.');
+              return (
+                <span key={sg} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${c.bg} ${c.text} border ${c.border}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
+                  {shortLabel} · {count}
+                </span>
+              );
+            })}
           </div>
-      </Card>
+        )}
+      </div>
+
+      {/* Timeline / Journal List */}
+      {groupedByDate.length === 0 ? (
+        <div className="bg-[#151B26] border border-gray-800 rounded-xl py-16 flex flex-col items-center gap-3">
+          <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center">
+            <BookOpen size={24} className="text-gray-600" />
+          </div>
+          <p className="text-gray-500 font-medium">No journals recorded for this period.</p>
+          <p className="text-gray-600 text-sm">Klik "Write Journal" untuk menambahkan</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {groupedByDate.map(([date, journals]) => {
+            const dateObj = new Date(date + 'T00:00:00');
+            const dayName = dateObj.toLocaleDateString('id-ID', { weekday: 'long' });
+            const dateStr = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+            return (
+              <div key={date}>
+                {/* Date separator */}
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-1.5 flex items-center gap-2">
+                    <CalendarIcon size={13} className="text-[#00D4FF]" />
+                    <span className="text-white text-xs font-bold">{dayName},</span>
+                    <span className="text-gray-400 text-xs">{dateStr}</span>
+                  </div>
+                  <div className="flex-1 h-px bg-gray-800" />
+                  <span className="text-gray-600 text-xs">{journals.length} jurnal</span>
+                </div>
+
+                {/* Cards for this date */}
+                <div className="space-y-3 pl-0">
+                  {journals.map(j => {
+                    const c = getSessionColor(j.sessionGroup);
+                    return (
+                      <div key={j.id} className={`group relative bg-[#0F1724] border ${c.border} rounded-xl overflow-hidden transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:-translate-y-0.5`}>
+                        {/* Left accent bar */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${c.bar}`} />
+
+                        <div className="pl-5 pr-4 py-4">
+                          {/* Top row */}
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-white font-bold text-base leading-snug mb-1.5 pr-16">{j.topic}</h3>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${c.bg} ${c.text} border ${c.border}`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
+                                  {j.sessionGroup}
+                                </span>
+                                <span className="text-gray-600 text-xs flex items-center gap-1">
+                                  <User size={10} />
+                                  {j.tutorName}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Action buttons */}
+                            <div className="absolute top-3.5 right-3.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => { setFormData(j); setIsAdding(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                                className="text-blue-400 p-2 hover:bg-blue-500/15 rounded-lg transition-colors"
+                                title="Edit Journal"
+                              ><Edit2 size={15}/></button>
+                              <button
+                                onClick={() => softDelete('journals', j.id, 'Journal')}
+                                className="text-red-400 p-2 hover:bg-red-500/15 rounded-lg transition-colors"
+                                title="Delete Journal"
+                              ><Trash2 size={15}/></button>
+                            </div>
+                          </div>
+
+                          {/* Content */}
+                          <div className="space-y-2">
+                            <div className="bg-[#0B0F19] rounded-lg px-3 py-2.5">
+                              <p className="text-[11px] text-gray-500 uppercase font-semibold tracking-wide mb-1">Activities</p>
+                              <p className="text-sm text-gray-300 leading-relaxed">{j.activities}</p>
+                            </div>
+                            {j.followUp && (
+                              <div className="bg-amber-500/5 border border-amber-500/15 rounded-lg px-3 py-2.5">
+                                <p className="text-[11px] text-amber-500/80 uppercase font-semibold tracking-wide mb-1">Follow Up / Notes</p>
+                                <p className="text-sm text-amber-100/70 leading-relaxed">{j.followUp}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination Footer */}
+      <div className="bg-[#151B26] border border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-400">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">Show</span>
+          <select
+            value={rowsPerPage}
+            onChange={(e) => setRowsPerPage(e.target.value === 'All' ? 'All' : Number(e.target.value))}
+            className="bg-[#0B0F19] border border-gray-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-[#00D4FF] cursor-pointer"
+          >
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value="All">All</option>
+          </select>
+          <span className="text-gray-500">entries {filteredJournals.length > 0 && <span className="text-gray-300 font-medium">· Total: {filteredJournals.length}</span>}</span>
+        </div>
+        {!isAll && totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" className="px-3 py-1.5 h-auto text-xs bg-[#0B0F19] border border-gray-700 hover:bg-gray-800" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>← Prev</Button>
+            <span className="px-3 py-1.5 text-white font-medium text-sm">{currentPage} / {totalPages}</span>
+            <Button variant="ghost" className="px-3 py-1.5 h-auto text-xs bg-[#0B0F19] border border-gray-700 hover:bg-gray-800" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next →</Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -7431,18 +7654,53 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
     setTimeout(() => { document.title = originalTitle; }, 1000);
   };
 
+  const handleSharePayrollWA = () => {
+    if (!selectedPayroll) return;
+    const tutor = db.tutors.find(t => t.id === selectedPayroll.tutorId);
+    const phone = tutor?.phone ? normalizeWhatsapp(tutor.phone) : '';
+    const monthName = MONTHS[Number(selectedPayroll.month) - 1];
+    const msg =
+      `📋 *PAYROLL SLIP — ${monthName} ${selectedPayroll.year}*\n` +
+      `English Club Gresik\n\n` +
+      `👤 *${selectedPayroll.tutorName}*\n` +
+      `📅 Periode: ${monthName} ${selectedPayroll.year}\n\n` +
+      `📊 *Rincian Gaji:*\n` +
+      `• Mengajar: ${selectedPayroll.classesDone} kelas × Rp ${Number(selectedPayroll.baseSalary).toLocaleString('id-ID')} = Rp ${(Number(selectedPayroll.baseSalary) * Number(selectedPayroll.classesDone)).toLocaleString('id-ID')}\n` +
+      (Number(selectedPayroll.transportAllowance) > 0 ? `• Reimbursement: + Rp ${Number(selectedPayroll.transportAllowance).toLocaleString('id-ID')}\n` : '') +
+      (Number(selectedPayroll.additionalBonus) > 0 ? `• Bonus Tambahan: + Rp ${Number(selectedPayroll.additionalBonus).toLocaleString('id-ID')}\n` : '') +
+      (Number(selectedPayroll.deductions) > 0 ? `• Potongan: - Rp ${Number(selectedPayroll.deductions).toLocaleString('id-ID')}\n` : '') +
+      `\n💰 *Take Home Pay: Rp ${Number(selectedPayroll.totalPaid).toLocaleString('id-ID')}*\n\n` +
+      `Status: ${selectedPayroll.status === 'Paid' ? '✅ Sudah Dibayar' : '⏳ Draft'}\n\n` +
+      `_Terima kasih atas dedikasi Anda! — ECG Academic Suite_`;
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    } else {
+      // No phone stored — open WA without pre-filled number
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+      showToast('No phone number saved for this tutor. Opening WhatsApp without a pre-filled contact.', 'warning');
+    }
+  };
+
   if (selectedPayroll) return (
     <div className="fixed inset-0 z-[100] bg-slate-50/95 backdrop-blur-md overflow-y-auto print:bg-white print:static print:block print:z-auto custom-scrollbar font-sans text-slate-900">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-[400px] bg-gradient-to-b from-blue-200/40 to-transparent blur-3xl pointer-events-none print:hidden" />
       <div className="w-full max-w-2xl mx-auto mt-6 mb-4 px-4 flex justify-between items-center relative z-10 print:hidden">
         <button className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm bg-white/50 px-4 py-2 rounded-full border border-slate-200/50 shadow-sm" onClick={() => setSelectedPayroll(null)}>
           <ArrowLeft size={16} /> Back
         </button>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
           <button onClick={localPrintPayroll} className="p-2.5 bg-white rounded-full text-blue-600 shadow-sm border border-slate-200/50 hover:bg-blue-50 transition-colors" title="Print PDF"><Printer size={16}/></button>
           <button onClick={() => {
              const safeName = selectedPayroll.tutorName.replace(/[\s/\\?%*:|"<>-]/g, '_');
              downloadPNG('payroll-print', `${safeName}_payroll`);
           }} className="p-2.5 bg-white rounded-full text-blue-600 shadow-sm border border-slate-200/50 hover:bg-blue-50 transition-colors" title="Download PNG"><Download size={16}/></button>
+          <button onClick={() => {
+             const safeName = selectedPayroll.tutorName.replace(/[\s/\\?%*:|"<>-]/g, '_');
+             handleShareImage('payroll-print', `${safeName}_payroll`, `Payroll Slip ${selectedPayroll.tutorName} — ${MONTHS[Number(selectedPayroll.month)-1]} ${selectedPayroll.year}`);
+          }} className="p-2.5 bg-white rounded-full text-blue-600 shadow-sm border border-slate-200/50 hover:bg-blue-50 transition-colors" title="Share Image"><Share2 size={16}/></button>
+          <button onClick={handleSharePayrollWA} className="flex items-center gap-1.5 px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-full shadow-sm text-xs font-bold transition-colors" title="Share via WhatsApp">
+            <MessageCircle size={14}/> WhatsApp
+          </button>
         </div>
       </div>
 
@@ -7482,20 +7740,24 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
                 <span className="font-medium text-slate-600">Teaching Salary ({selectedPayroll.classesDone} Classes x Rp {Number(selectedPayroll.baseSalary).toLocaleString('id-ID')})</span>
                 <span className="font-semibold text-slate-800">Rp {(Number(selectedPayroll.baseSalary) * Number(selectedPayroll.classesDone)).toLocaleString('id-ID')}</span>
               </div>
-              <div className="flex justify-between items-center border-b border-slate-100 py-3 px-2">
-                <span className="font-medium text-slate-600">Transport Allowance</span>
-                <span className="font-semibold text-green-600">+ Rp {Number(selectedPayroll.transportAllowance).toLocaleString()}</span>
-              </div>
+              {Number(selectedPayroll.transportAllowance) > 0 && (
+                <div className="flex justify-between items-center border-b border-slate-100 py-3 px-2">
+                  <span className="font-medium text-slate-600">Reimbursement</span>
+                  <span className="font-semibold text-green-600">+ Rp {Number(selectedPayroll.transportAllowance).toLocaleString('id-ID')}</span>
+                </div>
+              )}
               {Number(selectedPayroll.additionalBonus) > 0 && (
                  <div className="flex justify-between items-center border-b border-slate-100 py-3 px-2">
                    <span className="font-medium text-slate-600">Additional Bonus</span>
-                   <span className="font-semibold text-green-600">+ Rp {Number(selectedPayroll.additionalBonus).toLocaleString()}</span>
+                   <span className="font-semibold text-green-600">+ Rp {Number(selectedPayroll.additionalBonus).toLocaleString('id-ID')}</span>
                  </div>
               )}
-              <div className="flex justify-between items-center border-b border-slate-100 py-3 px-2">
-                <span className="font-medium text-slate-600">Deductions</span>
-                <span className="font-semibold text-red-600">- Rp {Number(selectedPayroll.deductions).toLocaleString()}</span>
-              </div>
+              {Number(selectedPayroll.deductions) > 0 && (
+                <div className="flex justify-between items-center border-b border-slate-100 py-3 px-2">
+                  <span className="font-medium text-slate-600">Deductions</span>
+                  <span className="font-semibold text-red-600">- Rp {Number(selectedPayroll.deductions).toLocaleString('id-ID')}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center py-4 px-2 bg-slate-50 mt-2">
                 <span className="font-bold text-slate-800">Net Take Home Pay</span>
                 <span className="text-lg font-black text-[#1A56DB]">Rp {Number(selectedPayroll.totalPaid).toLocaleString()}</span>
@@ -7589,15 +7851,41 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
                      <td className="p-4 text-center text-red-400">- Rp {Number(p.deductions).toLocaleString()}</td>
                      <td className="p-4 text-center font-bold text-[#00D4FF]">Rp {Number(p.totalPaid).toLocaleString()}</td>
                      <td className="p-4 text-center"><Badge status={p.status} /></td>
-                     <td className="p-4 text-center flex justify-center gap-2">
-                        {p.status === 'Draft' && (
-                           <>
-                              <button onClick={() => { setEditFormData(p); setIsEditModalOpen(true); }} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Draft"><Edit2 size={18}/></button>
-                              <button onClick={() => markAsPaid(p.id)} className="text-green-400 p-2.5 hover:bg-green-500/10 rounded-lg transition-colors" title="Mark as Paid"><CheckCircle2 size={18}/></button>
-                           </>
-                        )}
-                        {p.status === 'Paid' && <button onClick={() => setSelectedPayroll(p)} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="View Slip"><FileText size={18}/></button>}
-                        <button onClick={() => softDelete('payroll', p.id, `Payroll for ${p.tutorName}`)} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Payroll"><Trash2 size={18}/></button>
+                     <td className="p-4 text-center">
+                        <div className="flex justify-center gap-1 flex-wrap">
+                           {p.status === 'Draft' && (
+                              <>
+                                 <button onClick={() => { setEditFormData(p); setIsEditModalOpen(true); }} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Draft"><Edit2 size={18}/></button>
+                                 <button onClick={() => markAsPaid(p.id)} className="text-green-400 p-2.5 hover:bg-green-500/10 rounded-lg transition-colors" title="Mark as Paid"><CheckCircle2 size={18}/></button>
+                              </>
+                           )}
+                           <button onClick={() => setSelectedPayroll(p)} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="View & Share Slip"><FileText size={18}/></button>
+                           <button onClick={() => {
+                              const tutor = db.tutors.find(t => t.id === p.tutorId);
+                              const phone = tutor?.phone ? normalizeWhatsapp(tutor.phone) : '';
+                              const monthName = MONTHS[Number(p.month) - 1];
+                              const msg =
+                                `📋 *PAYROLL SLIP — ${monthName} ${p.year}*\n` +
+                                `English Club Gresik\n\n` +
+                                `👤 *${p.tutorName}*\n` +
+                                `📅 Periode: ${monthName} ${p.year}\n\n` +
+                                `📊 *Rincian Gaji:*\n` +
+                                `• Mengajar: ${p.classesDone} kelas × Rp ${Number(p.baseSalary).toLocaleString('id-ID')} = Rp ${(Number(p.baseSalary) * Number(p.classesDone)).toLocaleString('id-ID')}\n` +
+                                (Number(p.transportAllowance) > 0 ? `• Reimbursement: + Rp ${Number(p.transportAllowance).toLocaleString('id-ID')}\n` : '') +
+                                (Number(p.additionalBonus) > 0 ? `• Bonus Tambahan: + Rp ${Number(p.additionalBonus).toLocaleString('id-ID')}\n` : '') +
+                                (Number(p.deductions) > 0 ? `• Potongan: - Rp ${Number(p.deductions).toLocaleString('id-ID')}\n` : '') +
+                                `\n💰 *Take Home Pay: Rp ${Number(p.totalPaid).toLocaleString('id-ID')}*\n\n` +
+                                `Status: ${p.status === 'Paid' ? '✅ Sudah Dibayar' : '⏳ Draft'}\n\n` +
+                                `_Terima kasih atas dedikasi Anda! — ECG Academic Suite_`;
+                              if (phone) {
+                                window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+                              } else {
+                                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                                showToast('No phone number saved for this tutor.', 'warning');
+                              }
+                           }} className="text-green-400 p-2.5 hover:bg-green-500/10 rounded-lg transition-colors" title="Send via WhatsApp"><MessageCircle size={18}/></button>
+                           <button onClick={() => softDelete('payroll', p.id, `Payroll for ${p.tutorName}`)} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Payroll"><Trash2 size={18}/></button>
+                        </div>
                      </td>
                   </tr>
                ))}
@@ -8717,7 +9005,7 @@ function StudentReadOnlyJournalsModule({ db, user, language = 'en' }) {
               <span className="text-xs text-gray-400 shrink-0 ml-2">{j.date}</span>
             </div>
             <div className="mt-4 pt-4 border-t border-gray-800">
-              <p className="text-sm text-gray-300"><strong>{language === 'id' ? 'Aktivitas:' : 'Activities:'}</strong> {j.activities}</p>
+              <p className="text-sm text-gray-300"><strong>{language === 'id' ? 'Activities:' : 'Activities:'}</strong> {j.activities}</p>
               {j.followUp && <p className="text-sm text-gray-400 mt-2"><strong>{language === 'id' ? 'Tindak Lanjut:' : 'Follow Up:'}</strong> {j.followUp}</p>}
             </div>
           </div>
