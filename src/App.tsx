@@ -505,6 +505,25 @@ const Card = ({ children, className = '', id, onClick }: any) => (
   </div>
 );
 
+// GlassCard: consistent glassmorphism style used in Journals, Assessments, Announcements
+const GlassCard = ({ children, className = '', accentColor = 'cyan', onClick }: any) => {
+  const accents: Record<string, string> = {
+    cyan:   'border-[#00D4FF]/20 shadow-[0_4px_24px_rgba(0,212,255,0.06)]',
+    yellow: 'border-yellow-400/20 shadow-[0_4px_24px_rgba(234,179,8,0.06)]',
+    purple: 'border-purple-500/20 shadow-[0_4px_24px_rgba(168,85,247,0.06)]',
+    emerald:'border-emerald-500/20 shadow-[0_4px_24px_rgba(16,185,129,0.06)]',
+    amber:  'border-amber-500/20 shadow-[0_4px_24px_rgba(245,158,11,0.06)]',
+  };
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-[#151B26]/90 backdrop-blur-sm border rounded-xl p-4 sm:p-5 ${accents[accentColor] || accents.cyan} ${className}`}
+    >
+      {children}
+    </div>
+  );
+};
+
 const Button = ({
   children,
   onClick,
@@ -593,13 +612,22 @@ const Input = ({
 };
 
 // Standardized empty-state used across all tables/lists (icon + title + description)
-const EmptyState = ({ icon: Icon = Inbox, title, description, className = '' }) => (
+const EmptyState = ({ icon: Icon = Inbox, title, description, className = '', animated = false }) => (
   <div className={`flex flex-col items-center justify-center py-10 px-4 text-center ${className}`}>
-    <Icon size={48} className="mb-4 text-gray-700" />
+    <div className={`relative mb-4 ${animated ? 'animate-pulse' : ''}`}>
+      {/* Decorative glow ring */}
+      <div className="absolute inset-0 rounded-full bg-[#00D4FF]/5 blur-xl scale-150 pointer-events-none" />
+      <div className="relative w-16 h-16 rounded-2xl bg-[#0B0F19] border border-gray-800 flex items-center justify-center shadow-xl">
+        <Icon size={28} className="text-gray-600" />
+      </div>
+    </div>
     <p className="font-bold text-base sm:text-lg text-white mb-1">{title}</p>
-    {description && <p className="text-sm text-gray-500 max-w-sm">{description}</p>}
+    {description && <p className="text-sm text-gray-500 max-w-sm leading-relaxed">{description}</p>}
   </div>
 );
+
+// Alias for consistent status badge usage across all modules
+const StatusBadge = ({ status }: { status: string }) => <Badge status={status} />;
 
 const Badge = ({ status }) => {
   const styles = {
@@ -710,6 +738,23 @@ const generateDummyDatabase = () => {
 };
 
 // CUSTOM HOOK: Debounce untuk performa pencarian (Search)
+// Hook: Persist a value to localStorage so filters survive module navigation
+function useLocalStorage<T>(key: string, defaultValue: T): [T, (v: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored !== null ? JSON.parse(stored) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  });
+  const set = (v: T) => {
+    setValue(v);
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
+  };
+  return [value, set];
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
   useEffect(() => {
@@ -2516,6 +2561,10 @@ function MainApp() {
   // PERBAIKAN KRITIS: Ref untuk menandai jika user sudah menginput data baru (Mencegah Race Condition)
   const isDbDirty = useRef(false);
 
+  // Fix 6: Dirty-state guard — modules call setModuleDirty when user starts filling forms
+  const moduleDirtyRef = useRef(false);
+  const setModuleDirty = (dirty: boolean) => { moduleDirtyRef.current = dirty; };
+
   // FIX (Silent Overwrite Race Condition): Snapshot entitas intel dari db sebelumnya.
   // Digunakan oleh sync useEffect untuk mendeteksi apakah perubahan db nyata (entitas)
   // atau hanya log/field non-kritis. Jika hanya log, sync ke cloud DILANGWANGI.
@@ -3833,7 +3882,7 @@ function MainApp() {
       case 'tutors':
         return <TutorsModule db={db} setDb={setDb} generateId={generateId} showToast={showToast} softDelete={softDelete} />;
       case 'student_attendance':
-        return <StudentAttendanceModule db={db} setDb={setDb} showToast={showToast} softDelete={softDelete} user={currentUser} generateId={generateId} requestConfirm={requestConfirm} />;
+        return <StudentAttendanceModule db={db} setDb={setDb} showToast={showToast} softDelete={softDelete} user={currentUser} generateId={generateId} requestConfirm={requestConfirm} setModuleDirty={setModuleDirty} />;
       case 'tutor_attendance':
         return <TutorAttendanceModule db={db} setDb={setDb} user={currentUser} showToast={showToast} softDelete={softDelete} generateId={generateId} />;
       case 'my_attendance': // STUDENT: Read Only Attendance
@@ -3997,7 +4046,14 @@ function MainApp() {
             return (
               <button
                 key={nav.id}
-                onClick={() => { setActiveTab(nav.id); if (window.innerWidth < 768) setSidebarOpen(false); }}
+                onClick={() => {
+                  if (moduleDirtyRef.current && nav.id !== activeTab) {
+                    if (!window.confirm('You have unsaved attendance data. Leave this page?\n\nUnsaved changes will be lost.')) return;
+                    moduleDirtyRef.current = false;
+                  }
+                  setActiveTab(nav.id);
+                  if (window.innerWidth < 768) setSidebarOpen(false);
+                }}
                 className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
                   activeTab === nav.id ? 'bg-[#151B26] text-[#00D4FF] border-l-2 border-[#00D4FF] shadow-[inset_0_0_15px_rgba(0,212,255,0.05)]' : 'text-gray-400 hover:bg-[#151B26] hover:text-white'
                 }`}
@@ -4357,10 +4413,64 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
             </select>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        {/* ── MOBILE CARD LIST (< sm) ── */}
+        <div className="sm:hidden divide-y divide-gray-800">
+          {paginatedData.length === 0 ? (
+            <EmptyState icon={Users} title="No students found" description="Try adjusting your search or filter criteria." />
+          ) : paginatedData.map((s, index) => {
+            const count = attendanceThisMonth[s.id] || 0;
+            const isPerVisit = s.paymentPlan === 'Per Visit';
+            return (
+              <div key={s.id} className="p-4 space-y-3 hover:bg-[#0B0F19]/60 transition-colors">
+                {/* Row 1: number + name + status */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#00D4FF]/10 border border-[#00D4FF]/20 text-[11px] font-black text-[#00D4FF]">{String(startIndex + index + 1).padStart(2,'0')}</span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1">
+                        <span className="font-bold text-white text-sm truncate">{s.name}</span>
+                        <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} />
+                      </div>
+                      <p className="font-mono text-[11px] text-gray-500">{s.id}</p>
+                    </div>
+                  </div>
+                  <Badge status={s.status} />
+                </div>
+                {/* Row 2: level / class / plan / attendance */}
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="text-[#00D4FF] font-semibold">{s.level}</span>
+                  <span className="text-gray-400">·</span>
+                  <span className="font-bold text-gray-300">{s.class}</span>
+                  <span className={`px-2 py-0.5 rounded font-semibold uppercase tracking-wide border ${s.paymentPlan === 'Per Visit' ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : s.paymentPlan === 'Free' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' : 'bg-blue-500/20 text-blue-300 border-blue-500/50'}`}>{s.paymentPlan}</span>
+                  <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full font-bold ${count === 0 ? 'bg-gray-700/50 text-gray-500' : isPerVisit ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'}`}>{count}x hadir</span>
+                </div>
+                {/* Row 3: WA + actions */}
+                {(!user || user.role === 'admin' || user.role === 'tutor') && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500 text-xs truncate">{s.whatsapp ? String(s.whatsapp).replace(/^'/,'') : <span className="italic text-gray-600">No WA</span>}</span>
+                    <div className="flex gap-1 shrink-0">
+                      {s.whatsapp ? (
+                        <a href={`https://wa.me/${normalizeWhatsapp(s.whatsapp)}`} target="_blank" rel="noopener noreferrer" className="text-green-400 p-2 hover:bg-green-500/10 rounded-lg transition-colors" title="Chat WhatsApp"><MessageCircle size={16}/></a>
+                      ) : (
+                        <span className="text-gray-700 p-2 cursor-not-allowed"><MessageCircle size={16}/></span>
+                      )}
+                      <button onClick={() => { setFormData({...s, whatsapp: String(s.whatsapp || '').replace(/^'/,'')}); setIsAdding(true); const contentEl = document.querySelector('main'); setTimeout(() => { contentEl?.scrollTo({ top: 0, behavior: 'smooth' }); }, 50); }} className="text-blue-400 p-2 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Student"><Edit2 size={16}/></button>
+                      {(!user || user.role === 'admin') && (
+                        <button onClick={() => softDelete('students', s.id, s.name)} className="text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Student"><Trash2 size={16}/></button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── DESKTOP TABLE (≥ sm) ── */}
+        <div className="hidden sm:block overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="bg-[#0B0F19] border-b border-gray-800 text-gray-400 uppercase tracking-wider text-[11px] font-bold">
-            <tr><th className="p-4 text-center w-12 text-gray-400">No.</th><th className="p-4">ID</th><th className="p-4">Name</th><th className="p-4">Level</th><th className="p-4">Class & Plan</th><th className="p-4 text-center">Attended</th><th className="p-4">WhatsApp</th><th className="p-4 text-center">Status</th>{(!user || user.role === 'admin' || user.role === 'tutor') && <th className="p-4 text-center">Actions</th>}</tr>
+            <tr><th className="p-4 text-center w-12 text-gray-400">No.</th><th className="p-4">ID</th><th className="p-4">Name</th><th className="p-4">Level</th><th className="p-4">Class & Plan</th><th className="p-4 text-center">Attended<br/><span className="text-[10px] font-normal text-gray-500 normal-case tracking-normal">This Month</span></th><th className="p-4">WhatsApp</th><th className="p-4 text-center">Status</th>{(!user || user.role === 'admin' || user.role === 'tutor') && <th className="p-4 text-center">Actions</th>}</tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
             {paginatedData.map((s, index) => (
@@ -4369,7 +4479,6 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
                 <td className="p-4 font-mono text-gray-400">{s.id}</td>
                 <td className="p-4 text-white font-medium">
                   <div className="flex items-center">{s.name} <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} /></div>
-
                 </td>
                 <td className="p-4 text-[#00D4FF]">{s.level}</td>
                 <td className="p-4 leading-tight">
@@ -4444,13 +4553,16 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
   );
 }
 
-function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, generateId, requestConfirm }) {
+function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, generateId, requestConfirm, setModuleDirty }) {
   const [selectedScheduleId, setSelectedScheduleId] = useState('');
   const [attendanceData, setAttendanceData] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editStatus, setEditStatus] = useState('');
   const [viewDate, setViewDate] = useState(getTodayDateLocal());
   const [editScheduleIdFilter, setEditScheduleIdFilter] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Fix 10: Search by name in Edit Records
+  const [editSearchName, setEditSearchName] = useState('');
   // Month/year pre-filter for Edit Records dropdown (keeps list short)
   const [editFilterMonth, setEditFilterMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [editFilterYear, setEditFilterYear] = useState<number>(() => new Date().getFullYear());
@@ -4529,10 +4641,12 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
     const initial = {};
     studentsToMark.forEach((s) => (initial[s.id] = 'Present'));
     setAttendanceData(initial);
+    // Fix 6: mark dirty when a schedule is selected and students are loaded
+    if (setModuleDirty) setModuleDirty(studentsToMark.length > 0 && !!selectedScheduleId);
   }, [studentsToMark]);
 
   const handleSave = () => {
-    if (Object.keys(attendanceData).length === 0 || !selectedSchedule) return;
+    if (Object.keys(attendanceData).length === 0 || !selectedSchedule || isSubmitting) return;
     // Fix #7: cegah pengisian absensi retroaktif — hanya izinkan pada hari jadwal berlangsung.
     // Admin dikecualikan agar tetap bisa koreksi data historis.
     const schedDate = selectedSchedule.date;
@@ -4541,6 +4655,7 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
       showToast('Attendance can only be submitted on the scheduled class date', 'warning');
       return;
     }
+    setIsSubmitting(true);
     const sGroup = selectedSchedule.sessionGroup || selectedSchedule.name;
     const newRecords = Object.entries(attendanceData).map(([studentId, status]) => {
       const student = activeStudents.find((s) => s.id === studentId);
@@ -4568,6 +4683,8 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
     });
     showToast('Attendance Saved');
     setAttendanceData({});
+    if (setModuleDirty) setModuleDirty(false);
+    setTimeout(() => setIsSubmitting(false), 2000);
   };
 
   const saveEdit = (id) => {
@@ -4657,8 +4774,13 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
           });
         }
     }
+    // Fix 10: Search by student name in Edit Records
+    if (editSearchName.trim()) {
+      const term = editSearchName.trim().toLowerCase();
+      records = records.filter(a => (a.studentName || '').toLowerCase().includes(term));
+    }
     return records;
-  }, [db.studentAttendance, viewDate, user, editScheduleIdFilter, db.calendar]);
+  }, [db.studentAttendance, viewDate, user, editScheduleIdFilter, db.calendar, editSearchName]);
 
   const statusColors = {
     Present: 'accent-green-500',
@@ -4716,59 +4838,61 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
             No sessions in {MONTHS[pickerMonth - 1]} {pickerYear}. Try a different month.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {schedulesForPicker.map(c => {
-              const isMarkedDone = markedScheduleIds.includes(c.id);
-              const isSelected = selectedScheduleId === c.id;
-              const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-              const [y, mo, d] = (c.date || '').split('-');
-              const dayName = c.date ? dayNames[new Date(Number(y), Number(mo)-1, Number(d)).getDay()] : '';
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => !isMarkedDone && setSelectedScheduleId(isSelected ? '' : c.id)}
-                  disabled={isMarkedDone}
-                  className={`text-left p-4 rounded-xl border-2 transition-all duration-150 relative ${
-                    isMarkedDone
-                      ? 'border-emerald-700/60 bg-emerald-950/40 cursor-default opacity-80'
-                      : isSelected
-                        ? 'border-[#00D4FF] bg-[#00D4FF]/10 shadow-[0_0_20px_rgba(0,212,255,0.2)]'
-                        : 'border-gray-700 bg-[#151B26] hover:border-gray-500 hover:bg-[#1A2234]'
-                  }`}
-                >
-                  {isMarkedDone && (
-                    <span className="absolute top-3 right-3 flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      <CheckCircle2 size={10} />
-                      Done
-                    </span>
-                  )}
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div>
-                      <p className={`text-base font-bold leading-tight ${isMarkedDone ? 'text-emerald-400' : isSelected ? 'text-[#00D4FF]' : 'text-white'}`}>
-                        {dayName}, {parseInt(d, 10)} {MONTHS[parseInt(mo, 10) - 1]} {y}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">{c.date}</p>
-                    </div>
-                    {isSelected && !isMarkedDone && (
-                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#00D4FF] flex items-center justify-center">
-                        <Check size={12} className="text-[#0B0F19]" strokeWidth={3} />
+          <div className="max-h-[420px] overflow-y-auto custom-scrollbar pr-1 -mr-1">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+              {schedulesForPicker.map(c => {
+                const isMarkedDone = markedScheduleIds.includes(c.id);
+                const isSelected = selectedScheduleId === c.id;
+                const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+                const [y, mo, d] = (c.date || '').split('-');
+                const dayName = c.date ? dayNames[new Date(Number(y), Number(mo)-1, Number(d)).getDay()] : '';
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => !isMarkedDone && setSelectedScheduleId(isSelected ? '' : c.id)}
+                    disabled={isMarkedDone}
+                    className={`text-left p-2.5 sm:p-4 rounded-xl border-2 transition-all duration-150 relative ${
+                      isMarkedDone
+                        ? 'border-emerald-700/60 bg-emerald-950/40 cursor-default opacity-80'
+                        : isSelected
+                          ? 'border-[#00D4FF] bg-[#00D4FF]/10 shadow-[0_0_20px_rgba(0,212,255,0.2)]'
+                          : 'border-gray-700 bg-[#151B26] hover:border-gray-500 hover:bg-[#1A2234]'
+                    }`}
+                  >
+                    {isMarkedDone && (
+                      <span className="absolute top-2 right-2 sm:top-3 sm:right-3 flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                        <CheckCircle2 size={9} />
+                        Done
                       </span>
                     )}
-                  </div>
-                  <p className={`text-xs font-semibold px-2 py-0.5 rounded-full inline-block mb-1.5 ${
-                    isMarkedDone
-                      ? 'text-emerald-400/80 bg-emerald-500/10'
-                      : 'text-[#00D4FF]/80 bg-[#00D4FF]/10'
-                  }`}>
-                    {c.sessionGroup || c.name}
-                  </p>
-                  <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
-                    <span className="flex items-center gap-1"><User size={11} />{c.tutor}</span>
-                    {c.startTime && <span className="flex items-center gap-1"><Clock size={11} />{c.startTime}{c.endTime ? ` - ${c.endTime}` : ''}</span>}
-                  </div>
-                </button>
-              );
-            })}
+                    <div className="flex items-start justify-between gap-1 mb-1.5">
+                      <div className="min-w-0">
+                        <p className={`text-xs sm:text-sm font-bold leading-tight ${isMarkedDone ? 'text-emerald-400' : isSelected ? 'text-[#00D4FF]' : 'text-white'}`}>
+                          <span className="hidden sm:inline">{dayName}, </span>{parseInt(d, 10)} {MONTHS[parseInt(mo, 10) - 1]} {y}
+                        </p>
+                        <p className="text-[10px] text-gray-500 mt-0.5 sm:hidden">{dayName}</p>
+                      </div>
+                      {isSelected && !isMarkedDone && (
+                        <span className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#00D4FF] flex items-center justify-center">
+                          <Check size={10} className="text-[#0B0F19]" strokeWidth={3} />
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded-full inline-block mb-1 truncate max-w-full ${
+                      isMarkedDone
+                        ? 'text-emerald-400/80 bg-emerald-500/10'
+                        : 'text-[#00D4FF]/80 bg-[#00D4FF]/10'
+                    }`}>
+                      {c.sessionGroup || c.name}
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 text-[10px] sm:text-xs text-gray-400 mt-0.5">
+                      <span className="flex items-center gap-1 truncate"><User size={10} /><span className="truncate">{c.tutor}</span></span>
+                      {c.startTime && <span className="flex items-center gap-1 flex-shrink-0"><Clock size={10} />{c.startTime}{c.endTime ? ` - ${c.endTime}` : ''}</span>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </Card>
@@ -4810,7 +4934,14 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
           </tbody>
         </table>
         <div className="p-4 bg-[#0A0E17] flex justify-end border-t border-gray-800">
-          <Button onClick={handleSave} disabled={studentsToMark.length === 0 || !selectedSchedule}>Save Attendance</Button>
+          <Button
+            onClick={handleSave}
+            disabled={studentsToMark.length === 0 || !selectedSchedule || isSubmitting}
+            icon={isSubmitting ? RefreshCw : CheckCircle2}
+            className={isSubmitting ? 'opacity-80' : ''}
+          >
+            {isSubmitting ? 'Saving...' : 'Save Attendance'}
+          </Button>
         </div>
       </Card>
       
@@ -4864,7 +4995,7 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
             <select
               className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-[#00D4FF] focus:outline-none flex-1 min-w-[220px]"
               value={editScheduleIdFilter}
-              onChange={e => { setEditScheduleIdFilter(e.target.value); setShowAddStudentPanel(false); setAddStudentId(''); }}
+              onChange={e => { setEditScheduleIdFilter(e.target.value); setShowAddStudentPanel(false); setAddStudentId(''); setEditSearchName(''); }}
               disabled={markedSchedulesFiltered.length === 0}
             >
               <option value="">— Select session —</option>
@@ -4880,6 +5011,27 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
                 <input type="date" className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:border-[#00D4FF] focus:outline-none" value={viewDate} onChange={e => setViewDate(e.target.value)} />
               </>
             )}
+          </div>
+
+          {/* Fix 10: Search by student name in Edit Records */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 font-medium uppercase tracking-wider whitespace-nowrap">Step 3 — Search:</span>
+            <div className="relative flex-1 max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Filter by student name..."
+                value={editSearchName}
+                onChange={e => setEditSearchName(e.target.value)}
+                className="w-full bg-[#151B26] border border-gray-700 rounded-lg pl-8 pr-3 py-1.5 text-white text-sm focus:border-[#00D4FF] focus:outline-none placeholder-gray-600"
+              />
+              {editSearchName && (
+                <button onClick={() => setEditSearchName('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors">
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            {editSearchName && <span className="text-xs text-gray-500">{visibleAttendanceRecords.length} found</span>}
           </div>
         </div>
         {/* Fix 1: Add Student to Session Panel */}
@@ -4951,10 +5103,11 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
 function TutorAttendanceModule({ db, setDb, user, showToast, softDelete, generateId }) {
   const [editingId, setEditingId] = useState(null);
   const [editStatus, setEditStatus] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // NEW: State for Filters & Pagination
-  const [filterMonth, setFilterMonth] = useState<number | string>(new Date().getMonth() + 1);
-  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+  // Fix 8: Persistent month/year filters via localStorage
+  const [filterMonth, setFilterMonth] = useLocalStorage<number | string>('ecg_tutoratt_month', new Date().getMonth() + 1);
+  const [filterYear, setFilterYear] = useLocalStorage<number>('ecg_tutoratt_year', new Date().getFullYear());
   const [rowsPerPage, setRowsPerPage] = useState<number | string>(10);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -4963,6 +5116,7 @@ function TutorAttendanceModule({ db, setDb, user, showToast, softDelete, generat
   }, [filterMonth, filterYear, rowsPerPage]);
 
   const handleCheckIn = () => {
+    if (isSubmitting) return;
     const dateObj = new Date();
     // Gunakan waktu lokal agar tidak terjadi lompatan hari zona waktu (UTC issue)
     const today = getTodayDateLocal();
@@ -4980,6 +5134,7 @@ function TutorAttendanceModule({ db, setDb, user, showToast, softDelete, generat
        return showToast('No scheduled class today — check-in not allowed', 'warning');
     }
     
+    setIsSubmitting(true);
     setDb((prev) => ({ 
       ...prev, 
       tutorAttendance: [
@@ -4988,6 +5143,7 @@ function TutorAttendanceModule({ db, setDb, user, showToast, softDelete, generat
       ] 
     }));
     showToast('Checked in successfully');
+    setTimeout(() => setIsSubmitting(false), 2000);
   };
 
   const saveEdit = (id) => {
@@ -5035,10 +5191,26 @@ function TutorAttendanceModule({ db, setDb, user, showToast, softDelete, generat
 
   return (
     <div className="space-y-6">
-      <Card className="text-center py-12">
-        <Activity size={48} className="mx-auto text-[#00D4FF] mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">Tutor Self Check-In</h2>
-        <Button onClick={handleCheckIn} className="mx-auto py-3 px-8 mt-4 text-lg">Check In Now</Button>
+      {/* Fix 3: Standardized module header */}
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-1">Tutor Attendance</h2>
+        <p className="text-gray-400 text-sm">Record and review tutor check-in history by month.</p>
+      </div>
+
+      <Card className="text-center py-12 border border-[#00D4FF]/15">
+        <div className="w-16 h-16 rounded-2xl bg-[#00D4FF]/10 border border-[#00D4FF]/20 flex items-center justify-center mx-auto mb-4">
+          <Activity size={28} className="text-[#00D4FF]" />
+        </div>
+        <h2 className="text-xl font-bold text-white mb-1">Tutor Self Check-In</h2>
+        <p className="text-gray-500 text-sm mb-5">Tap the button below to record your attendance for today's scheduled class.</p>
+        <Button
+          onClick={handleCheckIn}
+          disabled={isSubmitting}
+          className="mx-auto py-3 px-8 text-lg"
+          icon={isSubmitting ? RefreshCw : CheckCircle2}
+        >
+          {isSubmitting ? 'Recording...' : 'Check In Now'}
+        </Button>
       </Card>
 
       <Card className="p-0 flex flex-col">
@@ -5325,8 +5497,9 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
 }
 
 function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleShareImage, downloadPNG, softDelete, language = 'en', isDbDirty }) {
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [year, setYear] = useState(new Date().getFullYear());
+  // Fix 8: Persistent month/year filter
+  const [month, setMonth] = useLocalStorage<number>('ecg_payments_month', new Date().getMonth() + 1);
+  const [year, setYear] = useLocalStorage<number>('ecg_payments_year', new Date().getFullYear());
   const [sessionGroup, setSessionGroup] = useState('All Sessions');
   
   // NEW: State for Filters & Pagination
@@ -5976,10 +6149,95 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
           </select>
         </div>
         
-        <div className="overflow-x-auto">
+        {/* ── MOBILE CARD LIST (< sm) ── */}
+        <div className="sm:hidden divide-y divide-gray-800">
+          {paginatedData.length === 0 ? (
+            <EmptyState icon={Search} title="No records found" description="Try adjusting your search or filter criteria." />
+          ) : paginatedData.map((s, index) => {
+            const studentPayments = db.payments.filter((p) => String(p.studentId).trim().toLowerCase() === String(s.id).trim().toLowerCase() && Number(p.month) === Number(month) && String(p.year) === String(year) && p.status === 'Paid');
+            const totalPaid = studentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+            const target = getStudentTarget(s);
+            let status: any = 'Unpaid';
+            if (s.paymentPlan === 'Free') status = 'No Target';
+            else if (target === 0 && totalPaid === 0) status = 'No Target';
+            else if (totalPaid >= target && target > 0) status = 'Paid';
+            else if (totalPaid > 0) status = 'Partial';
+            const balance = totalPaid - target;
+            if (s.paymentPlan === 'Per Visit') {
+              if (balance < 0) status = 'Debt';
+              else if (balance > 0) status = 'Deposit';
+              else if (balance === 0 && target > 0) status = 'Paid';
+              else status = 'No Target';
+            }
+            const count = attendanceThisMonth[s.id] || 0;
+            return (
+              <div key={s.id} className="p-4 space-y-3 hover:bg-[#0B0F19]/60 transition-colors">
+                {/* Row 1: name + status badge */}
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="font-bold text-white text-sm">{s.name}</span>
+                      <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} />
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5">{s.class} · <span className={`font-semibold ${s.paymentPlan === 'Per Visit' ? 'text-purple-300' : s.paymentPlan === 'Free' ? 'text-emerald-300' : 'text-blue-300'}`}>{s.paymentPlan}</span> · {count}x hadir</p>
+                  </div>
+                  <Badge status={status} />
+                </div>
+                {/* Row 2: balance info */}
+                <div className="bg-[#0B0F19] rounded-lg px-3 py-2 text-xs flex justify-between items-center">
+                  {s.paymentPlan === 'Free' ? (
+                    <span className="text-emerald-400 font-bold">🎁 Complimentary</span>
+                  ) : s.paymentPlan === 'Per Visit' ? (
+                    <>
+                      <span className="text-gray-400">Balance</span>
+                      <span className={`font-bold ${balance < 0 ? 'text-red-400' : balance > 0 ? 'text-cyan-400' : 'text-gray-500'}`}>Rp {balance.toLocaleString()}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-gray-400">Paid / Target</span>
+                      <span className={`font-bold ${totalPaid >= target && target > 0 ? 'text-green-400' : totalPaid > 0 ? 'text-yellow-400' : 'text-gray-500'}`}>Rp {totalPaid.toLocaleString()} <span className="text-gray-600 font-normal">/ Rp {target.toLocaleString()}</span></span>
+                    </>
+                  )}
+                </div>
+                {/* Row 3: payment input + action buttons */}
+                <div className="flex flex-col gap-2">
+                  {s.paymentPlan !== 'Free' && !(s.paymentPlan === 'Monthly' && status === 'Paid') && (
+                    <div className="flex items-center bg-[#0B0F19] rounded-lg border border-gray-700 overflow-hidden">
+                      <select className="bg-transparent border-none px-2 py-2 text-white text-xs focus:ring-0 focus:outline-none w-[72px] cursor-pointer" value={methods[s.id] || 'Cash'} onChange={(e) => setMethods((p) => ({ ...p, [s.id]: e.target.value }))}>
+                        <option value="Cash">Cash</option>
+                        <option value="Transfer">Transfer</option>
+                      </select>
+                      <div className="w-px h-5 bg-gray-700"/>
+                      <input type="number" className="bg-transparent border-none px-2 py-2 text-white text-xs focus:ring-0 focus:outline-none flex-1 min-w-0 placeholder-gray-600" placeholder="Custom Rp" value={amounts[s.id] || ''} onChange={(e) => setAmounts((p) => ({ ...p, [s.id]: e.target.value }))} />
+                      <div className="w-px h-5 bg-gray-700"/>
+                      <button onClick={() => handleRecordInline(s, undefined)} disabled={!amounts[s.id]} className="bg-[#00D4FF]/10 text-[#00D4FF] hover:bg-[#00D4FF]/20 px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50">Add</button>
+                      <div className="w-px h-5 bg-gray-700"/>
+                      <button onClick={() => handleRecordInline(s, 25000)} className="bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white px-3 py-2 text-xs font-bold transition-all whitespace-nowrap">+25k</button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    {studentPayments.length > 0 && (
+                      <button onClick={() => setViewingStudentId(s.id)} className="flex-1 flex items-center justify-center gap-1.5 bg-[#151B26] border border-gray-700 hover:border-blue-500/50 px-3 py-2 rounded-lg transition-colors text-xs text-gray-300">
+                        <FileText size={13} className="text-blue-400" /><span>Receipts ({studentPayments.length})</span>
+                      </button>
+                    )}
+                    {s.paymentPlan === 'Per Visit' && (
+                      <button onClick={() => { const monthPrefix = `${year}-${String(month).padStart(2, '0')}`; const presentCount = db.studentAttendance.filter(a => a.studentId === s.id && a.date.startsWith(monthPrefix) && a.status === 'Present').length; const balanceText = balance < 0 ? `Remaining: Rp ${Math.abs(balance).toLocaleString()}` : balance > 0 ? `Deposit: Rp ${balance.toLocaleString()}` : 'Paid'; const message = `Hi, payment summary for ${s.name} — ${MONTHS[month - 1]} ${year}:\n\nAttended: ${presentCount}x\nPaid: Rp ${totalPaid.toLocaleString()}\nTarget: Rp ${target.toLocaleString()}\n${balanceText}\n\nThank you.`; window.open(`https://wa.me/${normalizeWhatsapp(s.whatsapp)}?text=${encodeURIComponent(message)}`, '_blank'); }} className="flex-1 flex items-center justify-center gap-1.5 bg-[#151B26] border border-gray-700 hover:border-green-500/50 hover:bg-green-500/10 px-3 py-2 rounded-lg transition-colors text-xs text-gray-300">
+                        <MessageCircle size={13} className="text-green-400" /><span>Bill WA</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* ── DESKTOP TABLE (≥ sm) ── */}
+        <div className="hidden sm:block overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="bg-[#0B0F19] border-b border-gray-800 text-gray-400 uppercase tracking-wider text-[11px] font-bold">
-            <tr><th className="p-4 text-center w-12 text-gray-400">No.</th><th className="p-4 text-center">Student</th><th className="p-4 text-center">Class & Plan</th><th className="p-4 text-center">Attended</th><th className="p-4 text-center">Status</th><th className="p-4 text-center">Balance / Target</th><th className="p-4 text-center">Actions</th></tr>
+            <tr><th className="p-4 text-center w-12 text-gray-400">No.</th><th className="p-4 text-center">Student</th><th className="p-4 text-center">Class & Plan</th><th className="p-4 text-center">Attended<br/><span className="text-[10px] font-normal text-gray-500 normal-case tracking-normal">This Month</span></th><th className="p-4 text-center">Status</th><th className="p-4 text-center">Balance / Target</th><th className="p-4 text-center">Actions</th></tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
             {paginatedData.map((s, index) => {
@@ -6310,14 +6568,41 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
               )}
             </select>
           </div>
-          <div className="overflow-x-auto">
+          {/* ── MOBILE CARD LIST (< sm) ── */}
+          <div className="sm:hidden divide-y divide-gray-800">
+            {paginatedData.length === 0 ? (
+              <EmptyState icon={Search} title="No records found" description="Try adjusting your search or filter criteria." />
+            ) : dirType === 'student' ? paginatedData.map((s: any, index) => (
+              <div key={s.id} className="p-4 flex items-center justify-between gap-3 hover:bg-[#0B0F19]/60 transition-colors">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1 mb-1">
+                    <span className="font-bold text-white text-sm truncate">{s.name}</span>
+                    <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} />
+                  </div>
+                  <p className="font-mono text-[11px] text-gray-500">{s.id} · {s.class} · <Badge status={s.status} /></p>
+                </div>
+                <Button className="shrink-0 bg-yellow-500 text-yellow-900 hover:bg-yellow-400 font-bold text-xs px-3 py-1.5 h-auto" icon={Eye} onClick={() => openProfile(s.id, 'student')}>View</Button>
+              </div>
+            )) : paginatedData.map((t: any, index) => (
+              <div key={t.id} className="p-4 flex items-center justify-between gap-3 hover:bg-[#0B0F19]/60 transition-colors">
+                <div className="min-w-0">
+                  <p className="font-bold text-white text-sm mb-1">{t.name}</p>
+                  <p className="font-mono text-[11px] text-gray-500">{t.id} · <Badge status={t.status} /></p>
+                </div>
+                <Button className="shrink-0 bg-yellow-500 text-yellow-900 hover:bg-yellow-400 font-bold text-xs px-3 py-1.5 h-auto" icon={Eye} onClick={() => openProfile(t.id, 'tutor')}>View</Button>
+              </div>
+            ))}
+          </div>
+
+          {/* ── DESKTOP TABLE (≥ sm) ── */}
+          <div className="hidden sm:block overflow-x-auto">
             {dirType === 'student' ? (
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#0B0F19] border-b border-gray-800 text-gray-400 uppercase tracking-wider text-[11px] font-bold">
                   <tr><th className="p-4 text-center w-12 text-gray-400">No.</th><th className="p-4 text-center">Student ID</th><th className="p-4 text-center">Name</th><th className="p-4 text-center">Class</th><th className="p-4 text-center">Status</th><th className="p-4 text-center">Actions</th></tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
-                  {paginatedData.map((s, index) => (
+                  {paginatedData.map((s: any, index) => (
                     <tr key={s.id} className="hover:bg-[#0B0F19]">
                       <td className="p-4 text-center text-gray-500 font-medium">{startIndex + index + 1}</td>
                       <td className="p-4 text-center font-mono text-gray-400">{s.id}</td>
@@ -6336,7 +6621,7 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                   <tr><th className="p-4 text-center w-12 text-gray-400">No.</th><th className="p-4 text-center">Tutor ID</th><th className="p-4 text-center">Name</th><th className="p-4 text-center">Session</th><th className="p-4 text-center">Status</th><th className="p-4 text-center">Actions</th></tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
-                  {paginatedData.map((t, index) => (
+                  {paginatedData.map((t: any, index) => (
                     <tr key={t.id} className="hover:bg-[#0B0F19]">
                       <td className="p-4 text-center text-gray-500 font-medium">{startIndex + index + 1}</td>
                       <td className="p-4 text-center font-mono text-gray-400">{t.id}</td>
@@ -7156,8 +7441,9 @@ function TutorsModule({ db, setDb, generateId, showToast, softDelete }) {
 function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) {
   const [formData, setFormData] = useState({ id: '', scheduleId: '', date: getTodayDateLocal(), sessionGroup: SESSIONS[0], topic: '', activities: '', followUp: '' });
   const [isAdding, setIsAdding] = useState(false);
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
-  const [year, setYear] = useState(new Date().getFullYear());
+  // Fix 8: Persistent month/year filter
+  const [month, setMonth] = useLocalStorage<number>('ecg_journals_month', new Date().getMonth() + 1);
+  const [year, setYear] = useLocalStorage<number>('ecg_journals_year', new Date().getFullYear());
   
   // State for schedule picker filter (separate from list filter)
   const [pickerMonth, setPickerMonth] = useState(new Date().getMonth() + 1);
@@ -7171,6 +7457,15 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
   useEffect(() => {
     setCurrentPage(1);
   }, [month, year, filterSession, rowsPerPage]);
+
+  // Schedules that already have a journal entry (by this tutor or any tutor, keyed by scheduleId)
+  const filledScheduleIds = useMemo(() => {
+    const ids = new Set<string>();
+    db.journals.forEach(j => {
+      if (j.scheduleId) ids.add(String(j.scheduleId));
+    });
+    return ids;
+  }, [db.journals]);
 
   // NEW: Filter available schedules from Calendar
   const availableSchedules = useMemo(() => {
@@ -7211,6 +7506,11 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
 
   const handleSave = (e) => {
     e.preventDefault();
+    // Guard: prevent creating a NEW journal for a schedule that already has one
+    if (!formData.id && formData.scheduleId && filledScheduleIds.has(String(formData.scheduleId))) {
+      showToast('Journal for this schedule already exists. Please edit the existing one instead.', 'error');
+      return;
+    }
     // FIX BUG #4: tambah timestamp untuk LWW yang benar di mergeByIds
     const rec = { ...formData, id: formData.id || generateId('JRN', 'journals'), tutorName: user.name, timestamp: getLocalTimestamp() };
     setDb(p => ({ ...p, journals: formData.id ? p.journals.map(j => j.id === formData.id ? rec : j) : [...p.journals, rec] }));
@@ -7250,8 +7550,8 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-0.5">Learning Journals</h2>
-          <p className="text-gray-500 text-sm">Log topics and activities covered in each session.</p>
+          <h2 className="text-2xl font-bold text-white mb-1">Learning Journals</h2>
+          <p className="text-gray-400 text-sm">Log topics and activities covered in each session.</p>
         </div>
         <Button
           onClick={() => { setFormData({ id: '', scheduleId: '', date: '', sessionGroup: '', topic: '', activities: '', followUp: '' }); setIsAdding(!isAdding); }}
@@ -7306,6 +7606,7 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                       {monthScheds.map(c => {
                         const isSelected = formData.scheduleId === c.id;
+                        const isFilled = filledScheduleIds.has(String(c.id));
                         const col = (() => {
                           const sg = c.sessionGroup || c.name || '';
                           if (sg.includes('PAUD') || sg.includes('TK')) return { border: 'border-pink-500/40', bg: 'bg-pink-500/10', text: 'text-pink-400', sel: 'border-pink-400 bg-pink-500/20' };
@@ -7321,20 +7622,28 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
                           <button
                             key={c.id}
                             type="button"
-                            onClick={() => handleScheduleChange(c.id)}
-                            className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${isSelected ? col.sel + ' border-2' : 'border-gray-700 bg-[#0B0F19] hover:' + col.bg + ' hover:' + col.border}`}
+                            disabled={isFilled}
+                            onClick={() => !isFilled && handleScheduleChange(c.id)}
+                            className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${
+                              isFilled
+                                ? 'border-emerald-700/40 bg-emerald-900/10 opacity-60 cursor-not-allowed'
+                                : isSelected
+                                  ? col.sel + ' border-2'
+                                  : 'border-gray-700 bg-[#0B0F19] hover:' + col.bg + ' hover:' + col.border
+                            }`}
                           >
                             {/* Date badge */}
-                            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center ${isSelected ? col.bg : 'bg-[#151B26]'}`}>
-                              <span className={`text-[10px] font-bold uppercase ${col.text}`}>{dayShort}</span>
+                            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex flex-col items-center justify-center ${isFilled ? 'bg-emerald-900/30' : isSelected ? col.bg : 'bg-[#151B26]'}`}>
+                              <span className={`text-[10px] font-bold uppercase ${isFilled ? 'text-emerald-500' : col.text}`}>{dayShort}</span>
                               <span className="text-white text-sm font-bold leading-none">{dayNum}</span>
                             </div>
                             {/* Info */}
                             <div className="flex-1 min-w-0">
-                              <p className={`text-xs font-semibold truncate ${col.text}`}>{c.sessionGroup || c.name}</p>
+                              <p className={`text-xs font-semibold truncate ${isFilled ? 'text-emerald-500' : col.text}`}>{c.sessionGroup || c.name}</p>
                               <p className="text-gray-400 text-[11px] mt-0.5">{c.startTime}{c.tutor ? ` · ${c.tutor}` : ''}</p>
+                              {isFilled && <p className="text-emerald-500 text-[10px] font-bold mt-0.5">✓ Journal filled — edit from the list</p>}
                             </div>
-                            {isSelected && <CheckCircle2 size={16} className={col.text} />}
+                            {isFilled ? <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" /> : isSelected ? <CheckCircle2 size={16} className={col.text} /> : null}
                           </button>
                         );
                       })}
@@ -8077,61 +8386,58 @@ function CalendarModule({ db, setDb, generateId, user, showToast, softDelete }) 
                )}
            </div>
            
-           <div className="p-4 space-y-4 bg-[#151B26] flex-1">
-              {paginatedData.map((c, idx) => (
-                 <div key={c.id} className="bg-[#0B0F19] rounded-xl border border-gray-800 p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-l-4 border-l-[#00D4FF] hover:border-gray-700 transition-colors">
-                    <div className="flex items-start gap-4 flex-1 min-w-0">
-                       {/* Aesthetic number badge */}
-                       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#00D4FF]/10 border border-[#00D4FF]/20 flex items-center justify-center mt-0.5">
-                          <span className="text-[11px] font-black text-[#00D4FF]">{String((currentPage - 1) * (isAll ? 0 : Number(rowsPerPage)) + idx + 1).padStart(2, '0')}</span>
+           <div className="p-3 sm:p-4 bg-[#151B26] flex-1">
+              <div className="max-h-[480px] overflow-y-auto custom-scrollbar pr-1 -mr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
+              {filteredEvents.map((c, idx) => {
+                 const isDone = Array.from(new Set((db.studentAttendance||[]).map((a:any) => a.scheduleId))).includes(c.id);
+                 const today = getTodayDateLocal();
+                 const isPast = c.date < today;
+                 const isToday = c.date === today;
+                 const typeColors = {
+                   'Holiday':  { bg: 'bg-red-500/10',    border: 'border-red-500/30',    accent: 'border-l-red-500',    text: 'text-red-400',    badge: 'bg-red-500/20 text-red-400' },
+                   'Exam':     { bg: 'bg-purple-500/10', border: 'border-purple-500/30', accent: 'border-l-purple-500', text: 'text-purple-400', badge: 'bg-purple-500/20 text-purple-400' },
+                   'Meeting':  { bg: 'bg-amber-500/10',  border: 'border-amber-500/30',  accent: 'border-l-amber-500',  text: 'text-amber-400',  badge: 'bg-amber-500/20 text-amber-400' },
+                 };
+                 const tc = typeColors[c.type] || { bg: isDone ? 'bg-emerald-950/30' : isToday ? 'bg-[#00D4FF]/5' : 'bg-[#0B0F19]', border: isDone ? 'border-emerald-700/40' : isToday ? 'border-[#00D4FF]/30' : 'border-gray-800', accent: isDone ? 'border-l-emerald-500' : isToday ? 'border-l-[#00D4FF]' : 'border-l-gray-700', text: isDone ? 'text-emerald-400' : isToday ? 'text-[#00D4FF]' : 'text-white', badge: isDone ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400' };
+                 const numColor = isDone ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : isToday ? 'bg-[#00D4FF]/15 border-[#00D4FF]/30 text-[#00D4FF]' : 'bg-white/5 border-white/10 text-gray-400';
+                 return (
+                   <div key={c.id} className={`relative rounded-xl border border-l-4 ${tc.bg} ${tc.border} ${tc.accent} p-3 flex flex-col gap-2 transition-all hover:brightness-110 ${isPast && !isDone && c.type === 'Regular Class' ? 'opacity-60' : ''}`}
+                     style={{backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)'}}>
+                     {/* Top row: number + session name + badges */}
+                     <div className="flex items-start gap-2">
+                       <div className={`flex-shrink-0 w-7 h-7 rounded-full border flex items-center justify-center ${numColor}`}>
+                         <span className="text-[10px] font-black">{String(idx + 1).padStart(2, '0')}</span>
                        </div>
                        <div className="flex-1 min-w-0">
-                          <div className="flex gap-3 items-center mb-1 flex-wrap">
-                             <span className="font-bold text-lg text-white">{c.sessionGroup || c.name}</span>
-                             <span className={`px-2 py-0.5 text-[11px] uppercase font-bold rounded ${c.type === 'Holiday' ? 'bg-red-500/20 text-red-400' : c.type === 'Exam' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>{c.type}</span>
-                          </div>
-                          <p className="text-gray-400 text-sm flex flex-wrap gap-3">
-                             <span className="whitespace-nowrap"><CalendarIcon size={14} className="inline mr-1"/> {safeDateDisplay(c.date, 'en-GB', {weekday: 'short', day: 'numeric', month: 'short'})}</span>
-                             <span className="whitespace-nowrap"><Clock size={14} className="inline mr-1"/> {c.startTime} - {c.endTime}</span>
-                             <span className="whitespace-nowrap"><User size={14} className="inline mr-1"/> {c.tutor}</span>
-                          </p>
-                          {c.notes && <p className="text-gray-500 text-xs mt-2 italic">{c.notes}</p>}
+                         <p className={`text-sm font-bold leading-tight truncate ${tc.text}`}>{c.sessionGroup || c.name}</p>
+                         <div className="flex flex-wrap gap-1 mt-1">
+                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${tc.badge}`}>{c.type}</span>
+                           {isToday && !isDone && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase bg-[#00D4FF]/20 text-[#00D4FF] tracking-wide">Today</span>}
+                           {isDone && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase bg-emerald-500/20 text-emerald-400 tracking-wide flex items-center gap-0.5"><CheckCircle2 size={9}/>Done</span>}
+                         </div>
                        </div>
-                    </div>
-                    {user.role === 'admin' && (
-                       <div className="flex gap-2 flex-shrink-0">
-                          <button onClick={() => { setFormData(c); setIsAdding(true); }} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Event"><Edit2 size={18}/></button>
-                          <button onClick={() => softDelete('calendar', c.id, 'Calendar Event')} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Event"><Trash2 size={18}/></button>
-                       </div>
-                    )}
-                 </div>
-              ))}
-              {paginatedData.length === 0 && <p className="text-center text-gray-500 py-8">No events scheduled matching your filters.</p>}
+                       {user.role === 'admin' && (
+                         <div className="flex gap-1 flex-shrink-0">
+                           <button onClick={() => { setFormData(c); setIsAdding(true); }} className="text-gray-500 hover:text-blue-400 p-1.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit"><Edit2 size={14}/></button>
+                           <button onClick={() => softDelete('calendar', c.id, 'Calendar Event')} className="text-gray-500 hover:text-red-400 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete"><Trash2 size={14}/></button>
+                         </div>
+                       )}
+                     </div>
+                     {/* Bottom row: date, time, tutor */}
+                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-gray-400 pl-9">
+                       <span className="flex items-center gap-1"><CalendarIcon size={10}/>{safeDateDisplay(c.date, 'en-GB', {weekday:'short', day:'numeric', month:'short', year:'numeric'})}</span>
+                       {c.startTime && <span className="flex items-center gap-1"><Clock size={10}/>{c.startTime}{c.endTime ? ` - ${c.endTime}` : ''}</span>}
+                       {c.tutor && <span className="flex items-center gap-1 truncate max-w-full"><User size={10}/><span className="truncate">{c.tutor}</span></span>}
+                       {c.notes && <span className="italic text-gray-600 truncate max-w-full">{c.notes}</span>}
+                     </div>
+                   </div>
+                 );
+              })}
+              {filteredEvents.length === 0 && <div className="col-span-full text-center text-gray-500 py-8">No events scheduled matching your filters.</div>}
+              </div>
+              </div>
            </div>
-
-           {/* Pagination Footer - hidden for student role */}
-           {user.role !== 'student' && (
-           <div className="p-4 bg-[#0A0E17] border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-400">
-               <div className="flex items-center gap-2">
-                 <span>Show</span>
-                 <select value={rowsPerPage} onChange={(e) => setRowsPerPage(e.target.value === 'All' ? 'All' : Number(e.target.value))} className="bg-[#151B26] border border-gray-700 rounded px-2 py-1 text-white focus:outline-none focus:border-[#00D4FF] cursor-pointer">
-                   <option value={10}>10</option>
-                   <option value={20}>20</option>
-                   <option value={50}>50</option>
-                   <option value="All">All</option>
-                 </select>
-                 <span>entries {filteredEvents.length > 0 && `(Total: ${filteredEvents.length})`}</span>
-               </div>
-               
-               {!isAll && totalPages > 1 && (
-                 <div className="flex items-center gap-2">
-                   <Button variant="ghost" className="px-3 py-1.5 h-auto text-xs bg-[#151B26] border border-gray-700 hover:bg-gray-800" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>Prev</Button>
-                   <span className="px-3 py-1.5 text-white font-medium">{currentPage} / {totalPages}</span>
-                   <Button variant="ghost" className="px-3 py-1.5 h-auto text-xs bg-[#151B26] border border-gray-700 hover:bg-gray-800" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next</Button>
-                 </div>
-               )}
-           </div>
-           )}
         </Card>
      </div>
   );
@@ -8189,7 +8495,7 @@ function AnnouncementsModule({ db, setDb, generateId, user, showToast, softDelet
         )}
         <div className="space-y-4">
            {paginatedData.map((a, idx) => (
-              <Card key={a.id} className="border-l-4 border-l-yellow-400 p-5">
+              <GlassCard key={a.id} accentColor="yellow" className="border-l-4 border-l-yellow-400">
                  <div className="flex justify-between items-start mb-3">
                     <div className="flex items-start gap-3">
                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-yellow-400/10 border border-yellow-400/30 text-[11px] font-black text-yellow-400 shrink-0 mt-0.5">{String(idx + 1).padStart(2, '0')}</span>
@@ -8206,7 +8512,7 @@ function AnnouncementsModule({ db, setDb, generateId, user, showToast, softDelet
                     )}
                  </div>
                  <p className="text-gray-300 whitespace-pre-wrap leading-relaxed text-sm">{a.content}</p>
-              </Card>
+              </GlassCard>
            ))}
            {paginatedData.length === 0 && <p className="text-center text-gray-500 bg-[#151B26] p-8 rounded-xl border border-gray-800">No announcements yet.</p>}
         </div>
