@@ -132,23 +132,252 @@ const MERGE_ALL_COLS = [
   'journals', 'assessments', 'payments', 'payroll', 'calendar',
   'announcements', 'recycleBin', 'materials'
 ];
-const mergeCloudData = (prevDb: any, normalizedCloud: any): any => {
+
+// Koleksi yang benar-benar disinkronkan. Logs TIDAK pernah ikut delta sync utama.
+const SYNC_COLLECTIONS = [...MERGE_ALL_COLS];
+
+// Timestamp untuk konflik antar-device harus timezone-neutral.
+// getLocalTimestamp() tetap dipakai untuk UI/log audit, sedangkan updatedAt memakai UTC.
+const getSyncTimestamp = () => new Date().toISOString();
+
+const getSyncSnapshot = (sourceDb: any): any => {
+  const snapshot: any = {};
+  SYNC_COLLECTIONS.forEach(col => {
+    snapshot[col] = Array.isArray(sourceDb?.[col]) ? sourceDb[col] : [];
+  });
+  return snapshot;
+};
+
+const getRecordId = (item: any): string => {
+  if (!item || item.id === undefined || item.id === null || item.id === '') return '';
+  return String(item.id);
+};
+
+// Perbandingan record harus bebas dari urutan key object. Urutan kolom di Google
+// Sheets dapat berbeda dari urutan object localStorage, tetapi datanya tetap sama.
+const canonicalizeForSync = (value: any): any => {
+  if (Array.isArray(value)) return value.map(canonicalizeForSync);
+  if (value && typeof value === 'object') {
+    const out: any = {};
+    Object.keys(value).sort().forEach(key => { out[key] = canonicalizeForSync(value[key]); });
+    return out;
+  }
+  return value;
+};
+
+const syncRecordsEqual = (a: any, b: any): boolean => {
+  try {
+    return JSON.stringify(canonicalizeForSync(a)) === JSON.stringify(canonicalizeForSync(b));
+  } catch (e) {
+    return false;
+  }
+};
+
+const getPendingChangesRelativeToCloud = (localDb: any, cloudDb: any, options: { includeDeletions?: boolean } = {}) => {
+  const localPriorityByCollection: Record<string, Set<string>> = {};
+  const deletedIdsByCollection: Record<string, Set<string>> = {};
+  let hasChanges = false;
+  const includeDeletions = options.includeDeletions === true;
+
+  SYNC_COLLECTIONS.forEach(col => {
+    const localArr = Array.isArray(localDb?.[col]) ? localDb[col] : [];
+    const cloudArr = Array.isArray(cloudDb?.[col]) ? cloudDb[col] : [];
+    const localById = new Map<string, any>();
+    const cloudById = new Map<string, any>();
+
+    localArr.forEach(item => {
+      const id = getRecordId(item);
+      if (id) localById.set(id, item);
+    });
+    cloudArr.forEach(item => {
+      const id = getRecordId(item);
+      if (id) cloudById.set(id, item);
+    });
+
+    const localPriority = new Set<string>();
+    const localDeleted = new Set<string>();
+
+    localArr.forEach(item => {
+      const id = getRecordId(item);
+      if (!id) return;
+      const cloudItem = cloudById.get(id);
+      if (!cloudItem) {
+        // Saat pull awal, record lokal yang tidak ada di cloud dianggap
+        // kandidat perubahan lokal, bukan deletion terhadap cloud.
+        localPriority.add(id);
+        return;
+      }
+      if (!syncRecordsEqual(item, cloudItem)) {
+        const localTime = parseComparableTime(item);
+        const cloudTime = parseComparableTime(cloudItem);
+        if (localTime > cloudTime && localTime > 0) localPriority.add(id);
+      }
+    });
+
+    if (includeDeletions) {
+      cloudArr.forEach(item => {
+        const id = getRecordId(item);
+        if (id && !localById.has(id)) localDeleted.add(id);
+      });
+    }
+
+    if (localPriority.size) {
+      localPriorityByCollection[col] = localPriority;
+      hasChanges = true;
+    }
+    if (localDeleted.size) {
+      deletedIdsByCollection[col] = localDeleted;
+      hasChanges = true;
+    }
+  });
+
+  return { localPriorityByCollection, deletedIdsByCollection, hasChanges };
+};
+
+const getPendingSyncOptionsFromBaseline = (localDb: any, baselineSnapshot: string | null) => {
+  if (!baselineSnapshot) {
+    return { localPriorityByCollection: {}, deletedIdsByCollection: {}, hasChanges: false };
+  }
+  try {
+    const baseline = JSON.parse(baselineSnapshot);
+    const diff = buildSyncDelta(localDb, baseline);
+    const localPriorityByCollection: Record<string, Set<string>> = {};
+    const deletedIdsByCollection: Record<string, Set<string>> = {};
+
+    Object.keys(diff.deltaPayload).forEach(col => {
+      const ids = new Set<string>();
+      (diff.deltaPayload[col] || []).forEach(item => {
+        const id = getRecordId(item);
+        if (id) ids.add(id);
+      });
+      if (ids.size) localPriorityByCollection[col] = ids;
+    });
+
+    diff.deletions.forEach(d => {
+      if (!deletedIdsByCollection[d.collection]) deletedIdsByCollection[d.collection] = new Set<string>();
+      deletedIdsByCollection[d.collection].add(String(d.id));
+    });
+
+    return {
+      localPriorityByCollection,
+      deletedIdsByCollection,
+      hasChanges: diff.hasChanges
+    };
+  } catch (e) {
+    return { localPriorityByCollection: {}, deletedIdsByCollection: {}, hasChanges: false };
+  }
+};
+
+const mergeCloudData = (
+  prevDb: any,
+  normalizedCloud: any,
+  options: {
+    localPriorityByCollection?: Record<string, Set<string>>;
+    deletedIdsByCollection?: Record<string, Set<string>>;
+  } = {}
+): any => {
   const localBin = Array.isArray(prevDb.recycleBin) ? prevDb.recycleBin : [];
-  const cloudBin = Array.isArray(normalizedCloud.recycleBin) ? normalizedCloud.recycleBin : [];
-  const combinedBin = mergeByIds(localBin, cloudBin, []);
+  const cloudBinIdsToDelete = options.deletedIdsByCollection?.recycleBin || new Set<string>();
+  const cloudBin = (Array.isArray(normalizedCloud.recycleBin) ? normalizedCloud.recycleBin : [])
+    .filter((b: any) => !cloudBinIdsToDelete.has(String(b?.id || b?.binId || '')));
+
+  const combinedBin = mergeByIds(
+    localBin,
+    cloudBin,
+    [],
+    options.localPriorityByCollection?.recycleBin || new Set<string>()
+  );
+
   const merged: any = { ...normalizedCloud, recycleBin: combinedBin };
   MERGE_ALL_COLS.filter(col => col !== 'recycleBin').forEach(col => {
     const local = Array.isArray(prevDb[col]) ? prevDb[col] : [];
     const cloud = Array.isArray(normalizedCloud[col]) ? normalizedCloud[col] : [];
-    merged[col] = mergeByIds(local, cloud, combinedBin);
+    merged[col] = mergeByIds(
+      local,
+      cloud,
+      combinedBin,
+      options.localPriorityByCollection?.[col] || new Set<string>(),
+      options.deletedIdsByCollection?.[col] || new Set<string>()
+    );
   });
   return merged;
+};
+
+const parseComparableTime = (item: any): number => {
+  if (!item) return 0;
+  const t = item.updatedAt || item.timestamp || item.lastEditedAt || item.date;
+  if (!t) return 0;
+  const ms = new Date(String(t).replace(' ', 'T')).getTime();
+  return isNaN(ms) ? 0 : ms;
+};
+
+const buildSyncDelta = (latestDb: any, lastSynced: any | null) => {
+  const deltaPayload: Record<string, any[]> = {};
+  const deletions: Array<{ collection: string; id: string }> = [];
+  const dbSnapshotAtRequest = getSyncSnapshot(latestDb);
+
+  if (!lastSynced) {
+    SYNC_COLLECTIONS.forEach(col => {
+      const rows = Array.isArray(latestDb?.[col]) ? latestDb[col] : [];
+      if (rows.length) deltaPayload[col] = rows;
+    });
+    return { deltaPayload, deletions, dbSnapshotAtRequest, hasChanges: Object.keys(deltaPayload).length > 0 };
+  }
+
+  SYNC_COLLECTIONS.forEach(col => {
+    const localArr = Array.isArray(latestDb?.[col]) ? latestDb[col] : [];
+    const baseArr = Array.isArray(lastSynced?.[col]) ? lastSynced[col] : [];
+    const baseById = new Map<string, any>();
+    const localIds = new Set<string>();
+
+    baseArr.forEach(item => {
+      const id = getRecordId(item);
+      if (id) baseById.set(id, item);
+    });
+    localArr.forEach(item => {
+      const id = getRecordId(item);
+      if (id) localIds.add(id);
+    });
+
+    const changedRows: any[] = [];
+    localArr.forEach(item => {
+      const id = getRecordId(item);
+      // Semua record yang tidak mempunyai ID tetap dikirim agar data legacy tidak hilang.
+      if (!id) {
+        changedRows.push(item);
+        return;
+      }
+      const baseItem = baseById.get(id);
+      if (!baseItem || !syncRecordsEqual(baseItem, item)) {
+        changedRows.push(item);
+      }
+    });
+
+    if (changedRows.length) deltaPayload[col] = changedRows;
+
+    baseById.forEach((_baseItem, id) => {
+      if (!localIds.has(id)) deletions.push({ collection: col, id });
+    });
+  });
+
+  return {
+    deltaPayload,
+    deletions,
+    dbSnapshotAtRequest,
+    hasChanges: Object.keys(deltaPayload).length > 0 || deletions.length > 0
+  };
 };
 
 // BUGFIX LWW, ORPHAN & PURGE: Merge dua array berdasarkan field 'id' unik dengan Last Write Wins.
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] => {
+const mergeByIds = (
+  local: any[],
+  cloud: any[],
+  recycleBin: any[] = [],
+  localPriorityIds: Set<string> = new Set<string>(),
+  deletedIds: Set<string> = new Set<string>()
+): any[] => {
   const localArr = Array.isArray(local) ? local : [];
   const cloudArr = Array.isArray(cloud) ? cloud : [];
   
@@ -187,7 +416,9 @@ const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] =
   };
 
   cloudArr.forEach(item => { 
-    if (!isInvalid(item)) merged.set(String(item.id), item); 
+    const id = getRecordId(item);
+    if (!id || deletedIds.has(id)) return;
+    if (!isInvalid(item)) merged.set(id, item); 
   });
 
   localArr.forEach(item => { 
@@ -231,6 +462,14 @@ const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] =
          }
 
          // Jika data Cloud lebih mutakhir/baru dari Lokal, Cloud dipertahankan (Tidak ditimpa)
+         // Saat conflict, frontend mengirim hanya record yang benar-benar berubah.
+         // Record tersebut dipertahankan dari sisi lokal sampai berhasil dipush ulang
+         // menggunakan baseVersion server terbaru.
+         if (localPriorityIds.has(String(item.id))) {
+             merged.set(String(item.id), item);
+             return;
+         }
+
          if (timeCloud > timeLocal && timeCloud > 0) {
              // Pastikan hasil deep merge (tugas siswa) tetap selamat masuk ke versi Cloud
              if (item.submissions) existing.submissions = item.submissions;
@@ -1858,7 +2097,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                                         onKeyDown={(e) => {
                                            if (e.key === 'Enter') {
                                               const val = Number(e.currentTarget.value) || 0;
-                                              setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getLocalTimestamp() } : stu) }));
+                                              setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getSyncTimestamp() } : stu) }));
                                               showToast(language === 'id' ? `Berhasil menyesuaikan ${val} EXP untuk ${expModalStudent.name}` : `Successfully adjusted ${val} EXP for ${expModalStudent.name}`);
                                               setExpModalStudent(null);
                                               setExpInput('');
@@ -1870,7 +2109,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                                      />
                                      <button type="button" onClick={() => {
                                         const val = Number(expInput) || 0;
-                                        setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getLocalTimestamp() } : stu) }));
+                                        setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getSyncTimestamp() } : stu) }));
                                         showToast(language === 'id' ? `Berhasil menyesuaikan ${val} EXP untuk ${expModalStudent.name}` : `Successfully adjusted ${val} EXP for ${expModalStudent.name}`);
                                         setExpModalStudent(null);
                                         setExpInput('');
@@ -2131,7 +2370,7 @@ const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                                         onKeyDown={(e) => {
                                            if (e.key === 'Enter') {
                                               const val = Number(e.currentTarget.value) || 0;
-                                              setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getLocalTimestamp() } : stu) }));
+                                              setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getSyncTimestamp() } : stu) }));
                                               showToast(language === 'id' ? `Berhasil menyesuaikan ${val} EXP untuk ${expModalStudent.name}` : `Successfully adjusted ${val} EXP for ${expModalStudent.name}`);
                                               setExpModalStudent(null);
                                               setExpInput('');
@@ -2143,7 +2382,7 @@ const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                                      />
                                      <button type="button" onClick={() => {
                                         const val = Number(expInput) || 0;
-                                        setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getLocalTimestamp() } : stu) }));
+                                        setDb(prev => ({ ...prev, students: prev.students.map(stu => stu.id === expModalStudent.id ? { ...stu, bonusExp: (Number(stu.bonusExp) || 0) + val, updatedAt: getSyncTimestamp() } : stu) }));
                                         showToast(language === 'id' ? `Berhasil menyesuaikan ${val} EXP untuk ${expModalStudent.name}` : `Successfully adjusted ${val} EXP for ${expModalStudent.name}`);
                                         setExpModalStudent(null);
                                         setExpInput('');
@@ -2453,7 +2692,40 @@ const CloudAutoSaveIndicator = ({ status, language }: { status: string, language
 };
 
 function MainApp() {
-  const [db, setDb] = useState(defaultDbStructure);
+  const [db, setDbState] = useState(defaultDbStructure);
+
+  // Semua mutation dari module menggunakan wrapper ini. Jika sebuah record berubah
+  // tetapi caller lupa memberi updatedAt, wrapper otomatis menambahkan timestamp UTC.
+  // Jalur cloud/load memakai setDbState langsung agar pull dari server tidak dianggap edit lokal.
+  const setDb = (updater: any) => {
+    setDbState((prevDb: any) => {
+      const nextDb = typeof updater === 'function' ? updater(prevDb) : updater;
+      if (!nextDb || typeof nextDb !== 'object') return nextDb;
+
+      const now = getSyncTimestamp();
+      const stamped: any = { ...nextDb };
+      SYNC_COLLECTIONS.forEach(col => {
+        const previous = Array.isArray(prevDb?.[col]) ? prevDb[col] : [];
+        const next = Array.isArray(nextDb?.[col]) ? nextDb[col] : [];
+        const previousById = new Map<string, any>();
+        previous.forEach(item => {
+          const id = getRecordId(item);
+          if (id) previousById.set(id, item);
+        });
+        stamped[col] = next.map(item => {
+          const id = getRecordId(item);
+          if (!id || col === 'recycleBin') return item;
+          const oldItem = previousById.get(id);
+          const changed = !oldItem || !syncRecordsEqual(oldItem, item);
+          if (!changed) return item;
+          // Setiap mutation lokal harus mendapatkan timestamp baru, termasuk saat
+          // caller me-spread record lama yang sudah memiliki updatedAt.
+          return { ...item, updatedAt: now };
+        });
+      });
+      return stamped;
+    });
+  };
   
   const latestDbRef = useRef(db);
   useEffect(() => { latestDbRef.current = db; }, [db]);
@@ -2586,20 +2858,20 @@ function MainApp() {
   // BUGFIX #6: Ganti window._syncBusyAttempt (global, race condition multi-tab)
   // dengan useRef yang scoped ke instance komponen ini saja.
   const syncBusyAttempt = useRef(0);
+  // Satu requestId dipertahankan selama retry payload YANG SAMA agar retry setelah
+  // timeout tidak menulis dua kali. Bila user mengubah data sebelum retry, requestId
+  // harus diganti supaya cache idempotency server tidak mengembalikan hasil request lama.
+  const activeSyncRequestIdRef = useRef(null);
+  const activeSyncFingerprintRef = useRef(null);
+  const syncRequestCounterRef = useRef(0);
   // FIX DELTA PAYLOAD: Snapshot db terakhir yang BERHASIL tersinkron ke cloud.
   // Digunakan untuk menghitung delta (koleksi mana yang berubah) sebelum kirim ke server.
   // Dengan ini, kita TIDAK mengirim seluruh db — hanya koleksi yang benar-benar berubah,
   // sehingga data koleksi lain yang mungkin diubah user lain tidak akan tertimpa.
-  // BUGFIX KRITIS: Inisialisasi dari localStorage agar delta pertama dihitung
-  // dari kondisi lokal terkini, bukan dari null (yang menyebabkan seluruh DB dikirim
-  // sebagai delta dan bisa menimpa data koleksi lain yang lebih baru di server).
-  // FIX BUG #3 & #4: Inisialisasi null (bukan dari localStorage).
-  // Masalah lama: jika sync sesi sebelumnya gagal, data sudah ada di localStorage
-  // tapi TIDAK di cloud. Karena lastSyncedSnapshotRef diinit dari localStorage,
-  // delta computation menganggap data "sudah tersinkron" padahal belum — sehingga
-  // payment/jurnal/absensi tidak pernah dikirim ulang ke cloud di sesi berikutnya.
-  // Dengan null: sesi baru SELALU kirim full payload pertama kali → data lama yang
-  // gagal sync dari sesi sebelumnya dijamin masuk ke cloud.
+  // Baseline sync dipersist ke localStorage setelah pull/sync berhasil.
+  // Bila baseline tersedia, delta dihitung record-per-record terhadap baseline tersebut.
+  // Bila belum tersedia (misalnya perangkat baru), pull tidak pernah menganggap
+  // record cloud yang tidak ada di cache sebagai deletion.
   const lastSyncedSnapshotRef = useRef<string | null>(null);
   // NEW: Ref untuk mencegah infinite loop saat proses exit browser
   const isExiting = useRef(false);
@@ -2618,6 +2890,29 @@ function MainApp() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [syncStatus]);
 
+  const getSyncIdentity = () => {
+    try {
+      const active = sessionStorage.getItem('ecg_active_session');
+      if (active) {
+        const parsed = JSON.parse(active);
+        const identity = parsed?.id || parsed?.username || parsed?.name;
+        if (identity) return String(identity).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_');
+      }
+    } catch (e) {}
+    const identity = currentUser?.id || currentUser?.username || currentUser?.name;
+    return identity ? String(identity).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_') : 'anonymous';
+  };
+
+  const persistSyncBaseline = () => {
+    try {
+      const identity = getSyncIdentity();
+      if (lastSyncedSnapshotRef.current) localStorage.setItem(`ecg_sync_snapshot:${identity}`, lastSyncedSnapshotRef.current);
+      if (dbVersion.current !== null && dbVersion.current !== undefined) {
+        localStorage.setItem(`ecg_db_version:${identity}`, String(dbVersion.current));
+      }
+    } catch (e) {}
+  };
+
   const getAuthToken = () => sessionStorage.getItem('ecg_session_token');
 
   const handleUnauthorized = () => {
@@ -2632,44 +2927,55 @@ function MainApp() {
     const token = getAuthToken();
     if (!token) return handleUnauthorized();
 
-    setSyncStatus('syncing'); // Manual refresh = langsung fetch, tidak perlu fase 'saving'
+    setSyncStatus('syncing');
     showToast(language === 'id' ? 'Menyinkronkan data terbaru dari server...' : 'Syncing latest data from server...', 'success');
     try {
-      const res = await fetch(`${APPSCRIPT_URL}?token=${token}`);
+      const clientVersion = dbVersion.current ?? '';
+      const res = await fetch(`${APPSCRIPT_URL}?token=${encodeURIComponent(token)}&clientVersion=${encodeURIComponent(clientVersion)}`);
       const data = await res.json();
-      
-      if (data.status === 'unauthorized') return handleUnauthorized();
 
-      if (data && data._dbVersion) {
-         dbVersion.current = data._dbVersion;
+      if (data.status === 'unauthorized') return handleUnauthorized();
+      if (data.status === 'error') throw new Error(data.message || 'Server sync error');
+
+      if (data.message === 'no_change') {
+        setIsCloudConnected(true);
+        setSyncStatus('saved');
+        showToast(language === 'id' ? 'Data sudah terbaru.' : 'Data is already up to date.', 'success');
+        return;
+      }
+
+      if (data && data._dbVersion !== undefined && data._dbVersion !== null) {
+        dbVersion.current = data._dbVersion;
       }
 
       const cloudDb = data.payload || data.state_data || data;
       if (cloudDb && Array.isArray(cloudDb.users)) {
-        // FIX BUG #2: refreshBeforeEdit HARUS merge, bukan replace.
-        // Masalah lama: setDb(normalizeData(cloudDb)) menimpa state lokal sepenuhnya —
-        // perubahan lokal yang belum tersinkron (nama yang baru diubah, payment baru diinput)
-        // HILANG jika user klik tombol Sync/Refresh.
         const freshNormalized = normalizeData(cloudDb);
-        // BUG FIX #9: Use shared mergeCloudData helper instead of inline copy-paste
-        setDb(prevDb => {
-          const merged: any = mergeCloudData(prevDb, freshNormalized);
-          skipCloudSave.current = true;
-          localStorage.setItem('ecg_db', JSON.stringify(merged));
-          return merged;
-        });
-        // BUGFIX (BUG 4): Jangan paksa isDbDirty = false di sini.
-        // Jika user sudah input data (payment, absensi, dll) sebelum klik Refresh,
-        // mematikan flag ini akan membuat sync debounce yang pending dibatalkan
-        // oleh guard di useEffect → data lokal tidak pernah dikirim ke cloud.
-        // Flag isDbDirty akan dimatikan otomatis oleh useEffect setelah sync berhasil.
+        const localBeforePull = latestDbRef.current;
+        const pending = lastSyncedSnapshotRef.current
+          ? getPendingSyncOptionsFromBaseline(localBeforePull, lastSyncedSnapshotRef.current)
+          : getPendingChangesRelativeToCloud(localBeforePull, freshNormalized);
+        const merged = mergeCloudData(localBeforePull, freshNormalized, pending);
+
+        lastSyncedSnapshotRef.current = JSON.stringify(getSyncSnapshot(freshNormalized));
+        persistSyncBaseline();
+        isDbDirty.current = pending.hasChanges;
+        prevEntitiesRef.current = null;
+        skipCloudSave.current = !pending.hasChanges;
+        setDbState(merged);
+        try { localStorage.setItem('ecg_db', JSON.stringify(merged)); } catch (e) {}
         setLogs({
           auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [],
           debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : []
         });
         setIsCloudConnected(true);
-        setSyncStatus('saved');
-        showToast(language === 'id' ? 'Data berhasil disinkronkan!' : 'Data synced successfully!', 'success');
+        setSyncStatus(pending.hasChanges ? 'saving' : 'saved');
+        showToast(
+          pending.hasChanges
+            ? (language === 'id' ? 'Data terbaru digabung. Perubahan lokal sedang dikirim...' : 'Latest data merged. Local changes are being uploaded...')
+            : (language === 'id' ? 'Data berhasil disinkronkan!' : 'Data synced successfully!'),
+          pending.hasChanges ? 'warning' : 'success'
+        );
       }
     } catch (error) {
       console.error('Manual refresh failed', error);
@@ -2914,6 +3220,22 @@ function MainApp() {
 
   useEffect(() => {
     const loadData = async () => {
+      // Pulihkan baseline sync dan versi server per-account. Baseline ini diperlukan
+      // agar deletion offline dapat dibedakan dari cache baru/parsial yang belum pernah tersinkron.
+      try {
+        let identity = 'anonymous';
+        const active = sessionStorage.getItem('ecg_active_session');
+        if (active) {
+          const parsed = JSON.parse(active);
+          const rawIdentity = parsed?.id || parsed?.username || parsed?.name;
+          if (rawIdentity) identity = String(rawIdentity).trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_');
+        }
+        const persistedSnapshot = localStorage.getItem(`ecg_sync_snapshot:${identity}`);
+        if (persistedSnapshot) lastSyncedSnapshotRef.current = persistedSnapshot;
+        const persistedVersion = Number(localStorage.getItem(`ecg_db_version:${identity}`));
+        if (Number.isFinite(persistedVersion) && persistedVersion >= 0) dbVersion.current = persistedVersion;
+      } catch (e) {}
+
       // 1. MUAT DATA LOKAL LEBIH DULU AGAR INSTAN
       const saved = localStorage.getItem('ecg_db');
       if (saved) {
@@ -2921,11 +3243,11 @@ function MainApp() {
           const parsed = JSON.parse(saved);
           if (!parsed.users || !Array.isArray(parsed.users)) {
             skipCloudSave.current = true;
-            setDb(generateDummyDatabase());
+            setDbState(generateDummyDatabase());
           } else {
             skipCloudSave.current = true;
             const normLocal = normalizeData(parsed);
-            setDb(normLocal);
+            setDbState(normLocal);
             // FIX: Muat logs dari localStorage ke state terpisah
             setLogs({
               auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
@@ -2934,11 +3256,11 @@ function MainApp() {
           }
         } catch (e) {
           skipCloudSave.current = true;
-          setDb(generateDummyDatabase());
+          setDbState(generateDummyDatabase());
         }
       } else {
         skipCloudSave.current = true;
-        setDb(generateDummyDatabase());
+        setDbState(generateDummyDatabase());
       }
       
       // 2. LANGSUNG AKTIFKAN APLIKASI & TOMBOL LOGIN (Tanpa Menunggu Cloud)
@@ -2957,7 +3279,7 @@ function MainApp() {
       try {
         const startupController = new AbortController();
         const startupTimeout = setTimeout(() => startupController.abort(), 12000);
-        const res = await fetch(`${APPSCRIPT_URL}?token=${token}`, { signal: startupController.signal });
+        const res = await fetch(`${APPSCRIPT_URL}?token=${encodeURIComponent(token)}&clientVersion=${encodeURIComponent(dbVersion.current ?? '')}`, { signal: startupController.signal });
         clearTimeout(startupTimeout);
         if (!res.ok) throw new Error('Failed to load from AppScript');
         
@@ -2974,72 +3296,40 @@ function MainApp() {
            dbVersion.current = data._dbVersion;
         }
 
-        const cloudDb = data.payload || data.state_data || data; 
-          
+        const cloudDb = data.payload || data.state_data || data;
+
+        if (data.message === 'no_change') {
+          setIsCloudConnected(true);
+          setSyncStatus('saved');
+          return;
+        }
+
         if (cloudDb && Array.isArray(cloudDb.users)) {
-          setDb(prevDb => {
-             // BUG FIX #2: Removed unused localCount/cloudCount dead variables.
-             // Guard is purely based on isDbDirty + per-collection merge.
-             const userIsLoggedIn = !!getAuthToken();
+          const normalizedCloudStartup = normalizeData(cloudDb);
+          const localBeforePull = latestDbRef.current;
+          const pending = lastSyncedSnapshotRef.current
+            ? getPendingSyncOptionsFromBaseline(localBeforePull, lastSyncedSnapshotRef.current)
+            : getPendingChangesRelativeToCloud(localBeforePull, normalizedCloudStartup);
+          const mergedStartup = mergeCloudData(localBeforePull, normalizedCloudStartup, pending);
 
-             // BUGFIX KRITIS (DATA HILANG): Jangan reject/accept seluruh data berdasarkan
-             // total count — ini menyebabkan data jurnal/absensi hilang jika cloud unggul
-             // di payments tapi lokal unggul di journals.
-             // Solusi: jika user sudah login & dirty → prioritaskan lokal sepenuhnya.
-             // Jika belum login/dirty → merge per-koleksi (ambil yang lebih panjang).
-             if (userIsLoggedIn && isDbDirty.current) {
-                console.warn('Local data is dirty (user edited). Overwrite prevented.');
-                return prevDb;
-             }
-
-             const normalizedCloudStartup = normalizeData(cloudDb);
-             // BUG FIX #9: Use shared mergeCloudData helper instead of inline copy-paste
-             const mergedStartup: any = userIsLoggedIn
-               ? mergeCloudData(prevDb, normalizedCloudStartup)
-               : { ...normalizedCloudStartup };
-             
-             // BUG FIX #3: Set skipCloudSave BEFORE returning from setDb callback
-             // to guarantee the flag is set before the db useEffect can fire on next render.
-             skipCloudSave.current = true;
-             const mergedData = mergedStartup;
-             localStorage.setItem('ecg_db', JSON.stringify(mergedData));
-
-             // BUGFIX SYNC GAGAL (BUG 2): Jika lokal punya data lebih banyak dari cloud
-             // di koleksi manapun (misal payment tersimpan lokal tapi sync gagal sebelumnya),
-             // paksa isDbDirty = true agar sync ulang terjadi di sesi ini.
-             // Tanpa ini, payment lokal tidak pernah di-push ke cloud setelah reload.
-             if (userIsLoggedIn) {
-               // FIX #9a (localHasExtra FALSE POSITIVE): Cek apakah ada ID lokal yang TIDAK ADA
-               // di cloud — bukan sekadar membandingkan panjang array. Perbandingan panjang
-               // salah: jika cloud +1 (dari device lain) tapi lokal +1 (offline), panjang sama
-               // padahal keduanya punya data berbeda yang perlu disinkronkan.
-               const MERGE_COLS_CHECK = [
-                 'users', 'students', 'tutors', 'studentAttendance', 'tutorAttendance',
-                 'journals', 'assessments', 'payments', 'payroll', 'calendar',
-                 'announcements', 'materials', 'recycleBin'
-               ];
-               const localHasExtra = MERGE_COLS_CHECK.some(col => {
-                 const localArr = Array.isArray(prevDb[col]) ? prevDb[col] : [];
-                 const cloudIds = new Set((Array.isArray(normalizedCloudStartup[col]) ? normalizedCloudStartup[col] : []).map(i => String(i.id)));
-                 return localArr.some(item => item?.id && !cloudIds.has(String(item.id)));
-               });
-               if (localHasExtra) {
-                 console.warn('Local has IDs not in cloud — forcing sync (Bug 9 fix)');
-                 isDbDirty.current = true;
-               }
-             }
-
-             // FIX: Muat logs dari cloud ke state terpisah (bukan ke db)
-             setLogs({
-               auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [],
-               debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : []
-             });
-             return mergedData;
+          // Cloud snapshot menjadi baseline; hanya delta lokal yang benar-benar berbeda
+          // dari cloud yang akan dilanjutkan ke proses sync.
+          lastSyncedSnapshotRef.current = JSON.stringify(getSyncSnapshot(normalizedCloudStartup));
+          persistSyncBaseline();
+          isDbDirty.current = pending.hasChanges;
+          prevEntitiesRef.current = null;
+          skipCloudSave.current = !pending.hasChanges;
+          setDbState(mergedStartup);
+          try { localStorage.setItem('ecg_db', JSON.stringify(mergedStartup)); } catch (e) {}
+          setLogs({
+            auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [],
+            debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : []
           });
           setIsCloudConnected(true);
+          setSyncStatus(pending.hasChanges ? 'saving' : 'saved');
         } else {
-           console.warn('Empty or invalid data format from AppScript', data);
-           setIsCloudConnected(false);
+          console.warn('Empty or invalid data format from AppScript', data);
+          setIsCloudConnected(false);
         }
       } catch (e) {
         console.warn('AppScript connection failed, using Local Storage', e);
@@ -3051,223 +3341,197 @@ function MainApp() {
 
   useEffect(() => {
     if (isDbLoaded && db && Array.isArray(db.users)) {
-      // Selalu simpan ke local storage
-      localStorage.setItem('ecg_db', JSON.stringify(db));
-      
-      // Jika ini adalah proses muat data awal, JANGAN tembak ke Cloud agar tidak menimpa data server
-      if (skipCloudSave.current) {
-         skipCloudSave.current = false;
-         // Inisialisasi snapshot entitas pada load awal agar guard clause di bawah punya baseline
-         prevEntitiesRef.current = JSON.stringify({
-           users: db.users, students: db.students, tutors: db.tutors,
-           studentAttendance: db.studentAttendance, tutorAttendance: db.tutorAttendance,
-           journals: db.journals, assessments: db.assessments, payments: db.payments,
-           payroll: db.payroll, calendar: db.calendar, announcements: db.announcements,
-           recycleBin: db.recycleBin, materials: db.materials
-         });
-         return;
-      }
+      // Selalu simpan cache lokal terlebih dahulu.
+      try { localStorage.setItem('ecg_db', JSON.stringify(db)); } catch (e) {}
 
-      // FIX (Silent Overwrite Race Condition): Guard clause — bandingkan hanya entitas
-      // intuh (BUKAN logs). Jika tidak ada perubahan entitas, maka perubahan ini hanyalah
-      // log/field non-kritis dan TIDAK boleh memicu full-state push yang bisa menimpa
-      // data cloud dengan state lokal yang belum ter-update.
-      const currentEntities = JSON.stringify({
-        users: db.users, students: db.students, tutors: db.tutors,
-        studentAttendance: db.studentAttendance, tutorAttendance: db.tutorAttendance,
-        journals: db.journals, assessments: db.assessments, payments: db.payments,
-        payroll: db.payroll, calendar: db.calendar, announcements: db.announcements,
-        recycleBin: db.recycleBin, materials: db.materials
-      });
-      if (prevEntitiesRef.current === currentEntities) {
-        // Hanya log/field non-kritis yang berubah — skip sync ke cloud
+      // Pull awal dari local/cloud tidak boleh dianggap mutation user.
+      if (skipCloudSave.current) {
+        skipCloudSave.current = false;
+        prevEntitiesRef.current = JSON.stringify(getSyncSnapshot(db));
         return;
       }
+
+      const currentEntities = JSON.stringify(getSyncSnapshot(db));
+      if (prevEntitiesRef.current === currentEntities) return;
       prevEntitiesRef.current = currentEntities;
 
-      // TANDAI BAHWA DATABASE LOKAL SUDAH DIMODIFIKASI OLEH USER DI SESI INI
-      // (Ini mengunci data lokal agar tidak ditimpa oleh delay response dari Cloud)
       isDbDirty.current = true;
-      // FIX: Show 'saving' dulu (data sudah aman di localStorage),
-      // bukan langsung 'syncing' yang menyesatkan user seolah sedang kirim network.
       setSyncStatus('saving');
 
-      // HAPUS ANTREAN SEBELUMNYA JIKA USER MENGINPUT DATA LAGI DENGAN CEPAT
-      if (syncDebounceTimer.current) {
-        clearTimeout(syncDebounceTimer.current);
-      }
+      if (syncDebounceTimer.current) clearTimeout(syncDebounceTimer.current);
 
-      // SINKRONISASI KE CLOUD MENGGUNAKAN DEBOUNCE (Jeda 2 Detik)
       syncDebounceTimer.current = setTimeout(() => {
         const token = getAuthToken();
         if (!token) return handleUnauthorized();
-        // FIX: Baru set 'syncing' di sini — request benar-benar dikirim sekarang
+
+        const latestDb = latestDbRef.current;
+        const lastSnap = (() => {
+          if (!lastSyncedSnapshotRef.current) return null;
+          try { return JSON.parse(lastSyncedSnapshotRef.current); } catch (e) { return null; }
+        })();
+        const diff = buildSyncDelta(latestDb, lastSnap);
+
+        // Tidak ada delta nyata = tidak perlu menaikkan versi server.
+        if (!diff.hasChanges) {
+          isDbDirty.current = false;
+          activeSyncRequestIdRef.current = null;
+          activeSyncFingerprintRef.current = null;
+          setSyncStatus('saved');
+          return;
+        }
+
+        const syncFingerprint = JSON.stringify({
+          baseVersion: dbVersion.current,
+          deltaPayload: diff.deltaPayload,
+          deletions: diff.deletions
+        });
+        let requestId = activeSyncRequestIdRef.current;
+        if (!requestId || activeSyncFingerprintRef.current !== syncFingerprint) {
+          requestId = `sync-${Date.now().toString(36)}-${(++syncRequestCounterRef.current).toString(36)}-${Math.random().toString(36).slice(2,10)}`;
+          activeSyncRequestIdRef.current = requestId;
+          activeSyncFingerprintRef.current = syncFingerprint;
+        }
         setSyncStatus('syncing');
 
-        // ── DELTA PAYLOAD ────────────────────────────────────────────────────────
-        // Hanya kirim koleksi yang BENAR-BENAR berubah sejak sync terakhir berhasil.
-        const DELTA_COLS = [
-          'users', 'students', 'tutors', 'studentAttendance', 'tutorAttendance',
-          'journals', 'assessments', 'payments', 'payroll', 'calendar',
-          'announcements', 'recycleBin', 'materials'
-        ];
-        const lastSnap = (() => {
-          if (!lastSyncedSnapshotRef.current) return {};
-          try { return JSON.parse(lastSyncedSnapshotRef.current); } catch(e) { return {}; }
-        })();
-        const deltaPayload: Record<string, unknown> = {};
-        const dbSnapshotAtRequest: Record<string, unknown> = {};
+        const controller = new AbortController();
+        const requestTimeout = setTimeout(() => controller.abort(), 20000);
 
-        // FIX #1 (STALE CLOSURE): Gunakan latestDbRef.current, BUKAN `db` dari closure,
-        // agar data yang dikirim ke cloud adalah versi TERBARU saat timer meletus —
-        // bukan versi 2 detik lalu saat useEffect pertama kali berjalan.
-        const latestDb = latestDbRef.current;
-        DELTA_COLS.forEach(col => {
-          dbSnapshotAtRequest[col] = latestDb[col];
-          if (JSON.stringify(latestDb[col]) !== JSON.stringify(lastSnap[col])) {
-            deltaPayload[col] = latestDb[col];
-          }
-        });
-        // Log selalu disertakan (tidak mempengaruhi data utama)
-        deltaPayload.auditLogs = logsRef.current.auditLogs;
-        deltaPayload.debugLogs = logsRef.current.debugLogs;
-        // ─────────────────────────────────────────────────────────────────────────
-
-        // Sinkronisasi ke Google App Script (Dilengkapi Token & DB Version)
         fetch(APPSCRIPT_URL, {
           method: 'POST',
-          // WAJIB 1: Gunakan text/plain untuk menghindari pemblokiran CORS Preflight (OPTIONS)
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8',
-          },
-          // WAJIB 2: Google Apps Script melakukan 302 Redirect setelah POST. Browser harus mengikutinya.
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           redirect: 'follow',
-          // Kirim hanya delta — bukan seluruh db
-          body: JSON.stringify({ 
-            action: 'sync', 
-            token: token,
-            baseVersion: dbVersion.current, // Kirim versi DB yang kita ketahui → backend tolak kalau konflik
-            user: currentUser ? currentUser.name : 'SYSTEM', // Mengirimkan identitas untuk Audit Log
-            payload: deltaPayload  // ← DELTA, bukan { ...db }
+          signal: controller.signal,
+          body: JSON.stringify({
+            action: 'sync',
+            token,
+            requestId,
+            baseVersion: dbVersion.current,
+            user: currentUser ? currentUser.name : 'SYSTEM',
+            payload: diff.deltaPayload,
+            deletions: diff.deletions
           })
         })
         .then(res => {
-           if (!res.ok) throw new Error('Response AppScript gagal');
-           return res.json().catch(() => ({})); 
+          clearTimeout(requestTimeout);
+          if (!res.ok) throw new Error(`Response AppScript gagal (${res.status})`);
+          return res.json().catch(() => ({}));
         })
-        .then((data) => {
-           if (data.status === 'unauthorized') {
-               return handleUnauthorized();
-           }
-           if (data.status === 'success') {
-               // Perbarui versi lokal dengan versi terbaru dari server jika ada
-               if (data.newVersion) dbVersion.current = data.newVersion;
-               
-               syncBusyAttempt.current = 0;
-               // FIX DELTA: Simpan snapshot yang DIKIRIM ke cloud, BUKAN state terbaru yang 
-               // mungkin sudah ditimpa perubahan baru selama proses fetch berlangsung.
-               lastSyncedSnapshotRef.current = JSON.stringify(dbSnapshotAtRequest);
-               setIsCloudConnected(true);
-               setSyncStatus('saved'); // SET INDIKATOR BERHASIL
-               
-               // FIX #2 (isDbDirty TIDAK PERNAH RESET): Bandingkan latestDb (state terkini)
-               // dengan dbSnapshotAtRequest (data yang baru saja berhasil dikirim).
-               // Jika sama → tidak ada perubahan baru selama fetch berlangsung → aman di-reset.
-               // Jika berbeda → ada input baru dari user → biarkan dirty agar sync ulang terjadi.
-               const currentEntitiesStr = JSON.stringify({
-                   users: latestDbRef.current.users, students: latestDbRef.current.students, tutors: latestDbRef.current.tutors,
-                   studentAttendance: latestDbRef.current.studentAttendance, tutorAttendance: latestDbRef.current.tutorAttendance,
-                   journals: latestDbRef.current.journals, assessments: latestDbRef.current.assessments, payments: latestDbRef.current.payments,
-                   payroll: latestDbRef.current.payroll, calendar: latestDbRef.current.calendar, announcements: latestDbRef.current.announcements,
-                   recycleBin: latestDbRef.current.recycleBin, materials: latestDbRef.current.materials
-               });
-               const snapshotStr = JSON.stringify(dbSnapshotAtRequest);
-               if (currentEntitiesStr === snapshotStr) {
-                   isDbDirty.current = false;
-               }
-               // Jika masih dirty (ada perubahan baru), trigger sync ulang secara eksplisit
-               // dengan cara yang andal (bukan setDb shallow copy)
-               if (isDbDirty.current) {
-                   prevEntitiesRef.current = null;
-               }
-           } else if (data.status === 'conflict') {
-               // FIX CONFLICT: Server mengirim data.payload (full db terbaru) langsung dalam
-               // response conflict — kita PAKAI LANGSUNG tanpa request GET kedua yang redundan.
-               // Ini lebih cepat dan mencegah race condition akibat 2 request paralel.
-               console.warn('DATABASE CONFLICT — resolving with payload from conflict response');
-               showToast(
-                 language === 'id'
-                   ? 'Data diperbarui pengguna lain. Menyelaraskan data...'
-                   : 'Data updated by another user. Syncing latest...',
-                 'warning'
-               );
-               // data.payload SUDAH tersedia dari response conflict (lihat processSync di code.gs)
-               const freshPayload = data.payload;
-               const freshVersion  = data.newVersion ?? data._dbVersion ?? null;
-               if (freshPayload) {
-                 const freshNormalized = normalizeData(freshPayload);
-                 if (freshVersion) dbVersion.current = freshVersion;
+        .then(data => {
+          if (data.status === 'unauthorized') {
+            activeSyncRequestIdRef.current = null;
+            activeSyncFingerprintRef.current = null;
+            return handleUnauthorized();
+          }
 
-                 // BUGFIX PAYMENT HILANG (CONFLICT): Selalu merge lokal+cloud berdasarkan ID,
-                 // JANGAN pernah setDb(merged) murni dari cloud — payment/data lokal yang
-                 // belum tersinkron akan hilang. Baik dirty maupun tidak, gunakan mergeByIds
-                 // agar data dari kedua sisi tetap ada. Lokal diutamakan untuk item yang sama.
-                 // BUG FIX #9: Use shared mergeCloudData helper instead of inline copy-paste
-                 setDb(prevDb => {
-                   const conflictMerged: any = mergeCloudData(prevDb, freshNormalized);
-                   skipCloudSave.current = true;
-                   lastSyncedSnapshotRef.current = null; // paksa delta penuh di sync berikutnya
-                   localStorage.setItem('ecg_db', JSON.stringify(conflictMerged));
-                   return conflictMerged;
-                 });
-                 // FIX #3 (CONFLICT RETRY): Paksa re-sync dengan cara yang andal.
-                 // setDb({...prev}) tidak cukup karena guard prevEntitiesRef bisa memblokir.
-                 // Solusi: null-kan prevEntitiesRef DAN tandai dirty, lalu tunggu React
-                 // re-render alami dari setDb merge di atas — tidak perlu setTimeout trigger.
-                 isDbDirty.current = true;
-                 prevEntitiesRef.current = null;
-                 // skipCloudSave sudah true dari dalam setDb di atas; reset agar useEffect
-                 // sync bisa jalan di render berikutnya setelah state settle.
-                 setTimeout(() => { skipCloudSave.current = false; }, 100);
-                 setSyncStatus('saved');
-                 setIsCloudConnected(true);
-               } else {
-                 setSyncStatus('error');
-               }
-           } else if (data.status === 'busy') {
-               // FIX #8 (BUSY BACKOFF COUNTER SELALU RESET): Increment DULU, SIMPAN nilai,
-               // baru buat setTimeout. Jangan reset di dalam setTimeout karena itu
-               // membuat attempt selalu 1 dan delay selalu 2s.
-               syncBusyAttempt.current = syncBusyAttempt.current + 1;
-               const attempt = syncBusyAttempt.current;
-               const delay = Math.min(2000 * Math.pow(2, attempt - 1), 16000); // 2s, 4s, 8s, max 16s
-               console.warn(`AppScript busy — retry #${attempt} dalam ${delay/1000}s`);
-               // FIX: Saat server busy, kembali ke 'saving' (data lokal aman) — bukan terus 'syncing'
-               setSyncStatus('saving');
-               setTimeout(() => {
-                 // Reset counter HANYA setelah backoff selesai (bukan sebelum delay dihitung)
-                 if (syncBusyAttempt.current >= attempt) syncBusyAttempt.current = 0;
-                 isDbDirty.current = true;
-                 // Null-kan prevEntitiesRef agar guard equality check tidak memblokir sync
-                 prevEntitiesRef.current = null;
-                 // Tidak perlu setDb({...prev}) — prevEntitiesRef=null sudah cukup memicu
-                 // sync di render berikutnya ketika ada perubahan db apapun.
-               }, delay);
-           } else {
-               throw new Error(data.message || 'Sync error');
-           }
+          if (data.status === 'success') {
+            if (data.newVersion !== undefined && data.newVersion !== null) {
+              dbVersion.current = data.newVersion;
+            }
+
+            // Snapshot server = state client yang baru saja dikirim. Dengan strict baseVersion,
+            // tidak ada device lain yang dapat menyisipkan write di antara read dan commit ini.
+            lastSyncedSnapshotRef.current = JSON.stringify(diff.dbSnapshotAtRequest);
+            activeSyncRequestIdRef.current = null;
+            activeSyncFingerprintRef.current = null;
+            syncBusyAttempt.current = 0;
+            setIsCloudConnected(true);
+            setSyncStatus('saved');
+
+            const latestAfterResponse = latestDbRef.current;
+            const stillChanged = JSON.stringify(getSyncSnapshot(latestAfterResponse)) !== JSON.stringify(diff.dbSnapshotAtRequest);
+            if (stillChanged) {
+              isDbDirty.current = true;
+              prevEntitiesRef.current = null;
+            } else {
+              isDbDirty.current = false;
+            }
+            return;
+          }
+
+          if (data.status === 'conflict') {
+            console.warn('DATABASE CONFLICT — merging server state and retrying only local delta');
+            showToast(
+              language === 'id'
+                ? 'Data diperbarui pengguna lain. Menggabungkan perubahan Anda...'
+                : 'Data was updated by another device. Merging your changes...',
+              'warning'
+            );
+
+            const freshPayload = data.payload;
+            const freshVersion = data.newVersion ?? data._dbVersion ?? null;
+            if (!freshPayload) throw new Error('Conflict response tidak membawa payload server.');
+
+            const freshNormalized = normalizeData(freshPayload);
+            const localPriorityByCollection: Record<string, Set<string>> = {};
+            const deletedIdsByCollection: Record<string, Set<string>> = {};
+            Object.keys(diff.deltaPayload).forEach(col => {
+              const ids = new Set<string>();
+              (diff.deltaPayload[col] || []).forEach(item => {
+                const id = getRecordId(item);
+                if (id) ids.add(id);
+              });
+              if (ids.size) localPriorityByCollection[col] = ids;
+            });
+            diff.deletions.forEach(d => {
+              if (!deletedIdsByCollection[d.collection]) deletedIdsByCollection[d.collection] = new Set<string>();
+              deletedIdsByCollection[d.collection].add(String(d.id));
+            });
+
+            const conflictMerged = mergeCloudData(
+              latestDbRef.current,
+              freshNormalized,
+              { localPriorityByCollection, deletedIdsByCollection }
+            );
+
+            if (freshVersion !== null && freshVersion !== undefined) dbVersion.current = freshVersion;
+            // Server snapshot menjadi baseline baru; local delta akan dihitung ulang dari sini.
+            lastSyncedSnapshotRef.current = JSON.stringify(getSyncSnapshot(freshNormalized));
+            persistSyncBaseline();
+            const retryDiff = buildSyncDelta(conflictMerged, freshNormalized);
+
+            activeSyncRequestIdRef.current = null;
+            activeSyncFingerprintRef.current = null;
+            syncBusyAttempt.current = 0;
+            isDbDirty.current = retryDiff.hasChanges;
+            prevEntitiesRef.current = null;
+            // Perubahan cloud tidak boleh dikirim ulang jika tidak ada local delta.
+            skipCloudSave.current = !retryDiff.hasChanges;
+            setDbState(conflictMerged);
+            setIsCloudConnected(true);
+            setSyncStatus(retryDiff.hasChanges ? 'saving' : 'saved');
+            return;
+          }
+
+          if (data.status === 'busy') {
+            syncBusyAttempt.current += 1;
+            const attempt = syncBusyAttempt.current;
+            const delay = Math.min(2000 * Math.pow(2, attempt - 1), 16000);
+            console.warn(`AppScript busy — retry #${attempt} dalam ${delay/1000}s`);
+            setSyncStatus('saving');
+            setTimeout(() => {
+              if (syncBusyAttempt.current >= attempt) syncBusyAttempt.current = 0;
+              isDbDirty.current = true;
+              prevEntitiesRef.current = null;
+              // Ref saja tidak memicu React render; shallow-copy raw state untuk memicu retry.
+              setDbState(prev => ({ ...prev }));
+            }, delay);
+            return;
+          }
+
+          throw new Error(data.message || 'Sync error');
         })
-        .catch((e) => {
-           console.warn('AppScript Sync failed', e);
-           setIsCloudConnected(false);
-           setSyncStatus('error'); // SET INDIKATOR GAGAL
-           
-           // PENAMBALAN FINAL: Lepaskan pengunci retry jika putus koneksi di tengah jalan
-           syncBusyAttempt.current = 0;
-           // prevEntitiesRef dikosongkan agar ketikan selanjutnya bisa memicu trigger fetch ulang
-           prevEntitiesRef.current = null;
+        .catch(e => {
+          clearTimeout(requestTimeout);
+          console.warn('AppScript Sync failed', e);
+          // JANGAN hapus requestId. Bila server sebenarnya sudah commit tetapi respons hilang,
+          // retry dengan requestId yang sama akan diambil dari cache idempotency di GAS.
+          setIsCloudConnected(false);
+          setSyncStatus('error');
+          syncBusyAttempt.current = 0;
+          isDbDirty.current = true;
+          prevEntitiesRef.current = null;
         });
-      }, 2000); // Tunggu 2 detik setelah user berhenti mengubah data sebelum mem-fetch
+      }, 2000);
     }
   }, [db, isDbLoaded]);
 
@@ -3298,7 +3562,7 @@ function MainApp() {
           isDbDirty.current = true;
           prevEntitiesRef.current = null;
           // Trigger useEffect sync dengan shallow copy db
-          setDb(prev => ({ ...prev }));
+          setDbState(prev => ({ ...prev }));
         }
       }, 30000);
     } else {
@@ -3322,7 +3586,7 @@ function MainApp() {
         if (!token) return;
         isDbDirty.current = true;
         prevEntitiesRef.current = null;
-        setDb(prev => ({ ...prev }));
+        setDbState(prev => ({ ...prev }));
       }
     };
     window.addEventListener('online', handleOnline);
@@ -3353,7 +3617,7 @@ function MainApp() {
           id: binId,          // ← primary key untuk mergeByIds
           binId: binId,       // dipertahankan untuk kompatibilitas UI (restore/delete Recycle Bin)
           originalCollection: collection,
-          deletedAt: getLocalTimestamp(),
+          deletedAt: getSyncTimestamp(),
           data: item,
         };
         setDb((prev) => ({
@@ -3507,29 +3771,32 @@ function MainApp() {
             setIsCloudConnected(true);
             const syncController = new AbortController();
             const syncTimeout = setTimeout(() => syncController.abort(), 15000);
-            fetch(`${APPSCRIPT_URL}?token=${result.token}`, { signal: syncController.signal })
+            fetch(`${APPSCRIPT_URL}?token=${encodeURIComponent(result.token)}&clientVersion=${encodeURIComponent(dbVersion.current ?? '')}`, { signal: syncController.signal })
               .then(r => { clearTimeout(syncTimeout); return r.json(); })
               .then(data => {
                 const cloudDb = data.payload || data.state_data || data;
-                if (cloudDb && Array.isArray(cloudDb.users)) {
-                  if (data._dbVersion) dbVersion.current = data._dbVersion;
-                  setDb(prevDb => {
-                    if (isDbDirty.current) return prevDb;
-                    const normalizedCloud = normalizeData(cloudDb);
-                    const merged: any = mergeCloudData(prevDb, normalizedCloud);
-                    skipCloudSave.current = true;
-                    localStorage.setItem('ecg_db', JSON.stringify(merged));
-                    const MERGE_COLS_CHECK2 = ['users','students','tutors','studentAttendance','tutorAttendance','journals','assessments','payments','payroll','calendar','announcements','materials','recycleBin'];
-                    const localHasExtra = MERGE_COLS_CHECK2.some(col => {
-                      const localArr = Array.isArray(prevDb[col]) ? prevDb[col] : [];
-                      const cloudIds = new Set((Array.isArray(normalizedCloud[col]) ? normalizedCloud[col] : []).map(i => String(i.id)));
-                      return localArr.some(item => item?.id && !cloudIds.has(String(item.id)));
-                    });
-                    if (localHasExtra) isDbDirty.current = true;
-                    setLogs({ auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [], debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [] });
-                    return merged;
-                  });
+                if (data.message === 'no_change') {
+                  setIsCloudConnected(true);
                   setSyncStatus('saved');
+                  return;
+                }
+                if (cloudDb && Array.isArray(cloudDb.users)) {
+                  if (data._dbVersion !== undefined && data._dbVersion !== null) dbVersion.current = data._dbVersion;
+                  const normalizedCloud = normalizeData(cloudDb);
+                  const localBeforePull = latestDbRef.current;
+                  const pending = lastSyncedSnapshotRef.current
+                    ? getPendingSyncOptionsFromBaseline(localBeforePull, lastSyncedSnapshotRef.current)
+                    : getPendingChangesRelativeToCloud(localBeforePull, normalizedCloud);
+                  const merged = mergeCloudData(localBeforePull, normalizedCloud, pending);
+                  lastSyncedSnapshotRef.current = JSON.stringify(getSyncSnapshot(normalizedCloud));
+                  persistSyncBaseline();
+                  isDbDirty.current = pending.hasChanges;
+                  prevEntitiesRef.current = null;
+                  skipCloudSave.current = !pending.hasChanges;
+                  setDbState(merged);
+                  try { localStorage.setItem('ecg_db', JSON.stringify(merged)); } catch (e) {}
+                  setLogs({ auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [], debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [] });
+                  setSyncStatus(pending.hasChanges ? 'saving' : 'saved');
                 }
               })
               .catch(() => { clearTimeout(syncTimeout); setSyncStatus('error'); });
@@ -3582,21 +3849,30 @@ function MainApp() {
         setSyncStatus('syncing');
         const syncController = new AbortController();
         const syncTimeout = setTimeout(() => syncController.abort(), 15000);
-        fetch(`${APPSCRIPT_URL}?token=${result.token}`, { signal: syncController.signal })
+        fetch(`${APPSCRIPT_URL}?token=${encodeURIComponent(result.token)}&clientVersion=${encodeURIComponent(dbVersion.current ?? '')}`, { signal: syncController.signal })
           .then(r => { clearTimeout(syncTimeout); return r.json(); })
           .then(data => {
             const cloudDb = data.payload || data.state_data || data;
-            if (cloudDb && Array.isArray(cloudDb.users)) {
-              if (data._dbVersion) dbVersion.current = data._dbVersion;
-              setDb(prevDb => {
-                if (isDbDirty.current) return prevDb;
-                const merged: any = mergeCloudData(prevDb, normalizeData(cloudDb));
-                skipCloudSave.current = true;
-                localStorage.setItem('ecg_db', JSON.stringify(merged));
-                setLogs({ auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [], debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [] });
-                return merged;
-              });
+            if (data.message === 'no_change') {
+              setIsCloudConnected(true);
               setSyncStatus('saved');
+            } else if (cloudDb && Array.isArray(cloudDb.users)) {
+              if (data._dbVersion !== undefined && data._dbVersion !== null) dbVersion.current = data._dbVersion;
+              const normalizedCloud = normalizeData(cloudDb);
+              const localBeforePull = latestDbRef.current;
+              const pending = lastSyncedSnapshotRef.current
+              ? getPendingSyncOptionsFromBaseline(localBeforePull, lastSyncedSnapshotRef.current)
+              : getPendingChangesRelativeToCloud(localBeforePull, normalizedCloud);
+              const merged = mergeCloudData(localBeforePull, normalizedCloud, pending);
+              lastSyncedSnapshotRef.current = JSON.stringify(getSyncSnapshot(normalizedCloud));
+              persistSyncBaseline();
+              isDbDirty.current = pending.hasChanges;
+              prevEntitiesRef.current = null;
+              skipCloudSave.current = !pending.hasChanges;
+              setDbState(merged);
+              try { localStorage.setItem('ecg_db', JSON.stringify(merged)); } catch (e) {}
+              setLogs({ auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [], debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [] });
+              setSyncStatus(pending.hasChanges ? 'saving' : 'saved');
             }
           })
           .catch(() => { clearTimeout(syncTimeout); setSyncStatus('error'); });
@@ -4261,7 +4537,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
     // Format ini tidak diawali angka 0, jadi otomatis aman dari masalah auto-konversi angka di Google Sheets.
     const finalWa = normalizeWhatsapp(formData.whatsapp);
     // FIX BUG #2: tambah updatedAt agar LWW di mergeByIds tahu versi lokal lebih baru dari cloud
-    const rec = { ...formData, whatsapp: finalWa, id: formData.id || generateId('STU', 'students'), updatedAt: getLocalTimestamp() };
+    const rec = { ...formData, whatsapp: finalWa, id: formData.id || generateId('STU', 'students'), updatedAt: getSyncTimestamp() };
     setDb((prev) => ({ 
       ...prev, 
       students: formData.id 
@@ -5381,7 +5657,7 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
       const assessmentRecord = {
         id: existingIdx >= 0 ? newAssessments[existingIdx].id : generateId('ASS', 'assessments'),
         studentId: student.id, studentName: student.name, level: student.level, class: student.class, month: String(month), year: String(year), sessionGroup: sessionGroup, scores: cleanedScores, average, grade,
-        updatedAt: getLocalTimestamp(), // FIX BUG 3: LWW butuh timestamp agar mergeByIds bisa memilih versi terbaru
+        updatedAt: getSyncTimestamp(), // FIX BUG 3: LWW butuh timestamp agar mergeByIds bisa memilih versi terbaru
       };
 
       if (existingIdx >= 0) newAssessments[existingIdx] = assessmentRecord;
@@ -5649,7 +5925,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
       method: method,
       status: 'Paid',
       timestamp: getLocalTimestamp(), // FIX BUG #3: diperlukan untuk LWW yang benar di mergeByIds
-      updatedAt: getLocalTimestamp(), // BUGFIX (BUG PAYMENT REVERT): Wajib ada agar LWW selalu
+      updatedAt: getSyncTimestamp(), // BUGFIX (BUG PAYMENT REVERT): Wajib ada agar LWW selalu
       // memprioritaskan lokal atas versi cloud yang mungkin datang dengan timestamp berbeda
       // akibat konversi format Date oleh GAS/Sheets. Tanpa updatedAt, parseTime jatuh ke
       // `timestamp` yang bisa di-misparse → timeCloud > timeLocal → cloud menang → payment hilang.
@@ -6741,7 +7017,7 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
       setDb(p => ({
         ...p,
         // BUGFIX (BUG 8): updatedAt wajib agar LWW tidak menimpa comment guru dengan versi cloud lama
-        students: p.students.map(s => s.id === student.id ? {...s, teacherComment: currentTeacherComment, updatedAt: getLocalTimestamp()} : s)
+        students: p.students.map(s => s.id === student.id ? {...s, teacherComment: currentTeacherComment, updatedAt: getSyncTimestamp()} : s)
       }));
       showToast('Teacher comment saved to profile');
     };
@@ -7283,7 +7559,7 @@ function TutorsModule({ db, setDb, generateId, showToast, softDelete }) {
     }
     // Simpan langsung dalam format internasional (628...) agar siap dipakai untuk link wa.me tanpa konversi lagi.
     const finalPhone = normalizeWhatsapp(formData.phone);
-    const rec = { ...formData, phone: finalPhone, id: formData.id || generateId('TUT', 'tutors'), updatedAt: getLocalTimestamp() }; // FIX BUG 3: timestamp untuk LWW
+    const rec = { ...formData, phone: finalPhone, id: formData.id || generateId('TUT', 'tutors'), updatedAt: getSyncTimestamp() }; // FIX BUG 3: timestamp untuk LWW
     setDb(p => ({ ...p, tutors: formData.id ? p.tutors.map(t => t.id === formData.id ? rec : t) : [...p.tutors, rec] }));
     showToast('Tutor saved');
     setIsAdding(false);
@@ -7892,7 +8168,7 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
            totalPaid: total,
            status: 'Draft',
            date: getTodayDateLocal(),
-           updatedAt: getLocalTimestamp(), // FIX BUG 3: timestamp untuk LWW
+           updatedAt: getSyncTimestamp(), // FIX BUG 3: timestamp untuk LWW
         });
      });
      
@@ -7925,7 +8201,7 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
                  additionalBonus: Number(editFormData.additionalBonus || 0),
                  deductions: Number(editFormData.deductions),
                  totalPaid: total,
-                 updatedAt: getLocalTimestamp(), // BUGFIX (BUG 7): LWW wajib tahu versi ini lebih baru
+                 updatedAt: getSyncTimestamp(), // BUGFIX (BUG 7): LWW wajib tahu versi ini lebih baru
               };
            }
            return pay;
@@ -7940,7 +8216,7 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
      requestConfirm('Mark as Paid', 'Are you sure you want to finalize this payroll? It will be marked as Paid.', () => {
         setDb(p => ({
            ...p,
-           payroll: p.payroll.map(pay => pay.id === id ? { ...pay, status: 'Paid', date: getTodayDateLocal(), updatedAt: getLocalTimestamp() } : pay) // BUGFIX (BUG 7)
+           payroll: p.payroll.map(pay => pay.id === id ? { ...pay, status: 'Paid', date: getTodayDateLocal(), updatedAt: getSyncTimestamp() } : pay) // BUGFIX (BUG 7)
         }));
         showToast('Payroll marked as Paid!');
      });
@@ -8265,7 +8541,7 @@ function CalendarModule({ db, setDb, generateId, user, showToast, softDelete }) 
         showToast('Please select at least one tutor', 'warning');
         return;
      }
-     const rec = { ...formData, id: formData.id || generateId('CAL', 'calendar'), updatedAt: getLocalTimestamp() }; // FIX BUG 3: timestamp untuk LWW
+     const rec = { ...formData, id: formData.id || generateId('CAL', 'calendar'), updatedAt: getSyncTimestamp() }; // FIX BUG 3: timestamp untuk LWW
      setDb(p => ({ ...p, calendar: formData.id ? p.calendar.map(c => c.id === formData.id ? rec : c) : [...p.calendar, rec] }));
      showToast(formData.id ? 'Event updated' : 'Event created');
      setIsAdding(false);
@@ -8457,7 +8733,7 @@ function AnnouncementsModule({ db, setDb, generateId, user, showToast, softDelet
 
   const handleSave = (e) => {
      e.preventDefault();
-     const rec = { ...formData, id: formData.id || generateId('ANN', 'announcements'), date: getTodayDateLocal(), author: user.name, updatedAt: getLocalTimestamp() }; // FIX BUG 3: timestamp untuk LWW
+     const rec = { ...formData, id: formData.id || generateId('ANN', 'announcements'), date: getTodayDateLocal(), author: user.name, updatedAt: getSyncTimestamp() }; // FIX BUG 3: timestamp untuk LWW
      setDb(p => ({ ...p, announcements: formData.id ? p.announcements.map(a => a.id === formData.id ? rec : a) : [...p.announcements, rec] }));
      showToast('Announcement published');
      setIsAdding(false);
@@ -8635,7 +8911,7 @@ function SettingsModule({ db, setDb, generateId, user, showToast, requestConfirm
           password: savedTutorPassword,
           status: formData.active || t.status || 'Active',
           mustChangePassword: !isEditingId ? true : t.mustChangePassword,
-          updatedAt: getLocalTimestamp() // BUGFIX: Tambahkan updatedAt agar LWW tidak kalah ke cloud lama
+          updatedAt: getSyncTimestamp() // BUGFIX: Tambahkan updatedAt agar LWW tidak kalah ke cloud lama
         } : t)) 
       }));
       if (!isEditingId) {
@@ -8662,7 +8938,7 @@ function SettingsModule({ db, setDb, generateId, user, showToast, requestConfirm
         showToast(`Password tidak diisi. Akun dibuat dengan password sementara: ${finalPassword} — Catat & berikan ke siswa!`, 'warning');
       }
       // BUGFIX: Tambahkan updatedAt agar LWW tidak kalah ke cloud lama
-      const rec = { ...formData, name: linkedStudent.name, password: finalPassword, id: isEditingId || generateId('USR', 'users'), mustChangePassword: !isEditingId, updatedAt: getLocalTimestamp() };
+      const rec = { ...formData, name: linkedStudent.name, password: finalPassword, id: isEditingId || generateId('USR', 'users'), mustChangePassword: !isEditingId, updatedAt: getSyncTimestamp() };
       setDb((p) => ({ ...p, users: isEditingId ? p.users.map((u) => (u.id === isEditingId ? rec : u)) : [...p.users, rec] }));
       if (!isEditingId) {
         setCredentialCard({ name: linkedStudent.name, username: String(formData.username).trim(), password: finalPassword, role: 'Student' });
@@ -8674,7 +8950,7 @@ function SettingsModule({ db, setDb, generateId, user, showToast, requestConfirm
       // BUGFIX: Tambahkan updatedAt agar LWW di mergeByIds selalu memenangkan versi lokal
       // yang baru diedit. Tanpa updatedAt, parseTime() = 0 → cloud selalu menang → nama/data
       // yang baru diubah (termasuk nama super admin) akan kembali ke versi lama dari cloud.
-      const rec = { ...formData, password: finalPassword, id: isEditingId || generateId('ADM', 'users'), mustChangePassword: !isEditingId, updatedAt: getLocalTimestamp() };
+      const rec = { ...formData, password: finalPassword, id: isEditingId || generateId('ADM', 'users'), mustChangePassword: !isEditingId, updatedAt: getSyncTimestamp() };
       setDb((p) => ({ ...p, users: isEditingId ? p.users.map((u) => (u.id === isEditingId ? rec : u)) : [...p.users, rec] }));
     }
     showToast('User Saved');
@@ -8703,40 +8979,8 @@ function SettingsModule({ db, setDb, generateId, user, showToast, requestConfirm
       });
     }
 
-    // Force-push langsung ke cloud tanpa tunggu debounce
-    // agar password baru langsung tercatat di relational sheet
-    setTimeout(() => {
-      const token = getAuthToken();
-      if (token) {
-        fetch(APPSCRIPT_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          redirect: 'follow',
-          body: JSON.stringify({
-            action: 'sync',
-            token,
-            baseVersion: dbVersion.current,
-            user: currentUser ? currentUser.name : 'SYSTEM',
-            payload: { ...db,
-              users: resetDialog.role !== 'tutor'
-                ? db.users.map(u => u.id === resetDialog.id ? {...u, password: newPassword, mustChangePassword: true} : u)
-                : db.users,
-              tutors: resetDialog.role === 'tutor'
-                ? db.tutors.map(t => t.id === resetDialog.id ? {...t, password: newPassword, mustChangePassword: true} : t)
-                : db.tutors,
-            }
-          })
-        })
-        .then(r => r.json())
-        .then(data => {
-          if (data.status === 'success') {
-            if (data.newVersion) dbVersion.current = data.newVersion;
-            setSyncStatus('saved');
-          }
-        })
-        .catch(() => {});
-      }
-    }, 300);
+    // Tidak ada force-push manual di sini. Auto-sync menggunakan latestDbRef + delta
+    // sehingga reset sandi tidak pernah mengirim snapshot db lama dari closure.
 
     showToast(`Password reset for ${resetDialog.name} was successful.`);
     setCredentialCard({ name: resetDialog.name, username: resetDialog.username || '', password: newPassword, role: resetDialog.role === 'tutor' ? 'Tutor' : resetDialog.role === 'student' ? 'Student' : 'Admin' });
@@ -9094,12 +9338,12 @@ function AccountSettingsModule({ db, setDb, user, setCurrentUser, showToast, lan
     if (user.role === 'tutor') {
       setDb(p => ({
         ...p,
-        tutors: p.tutors.map(t => t.username === user.username ? { ...t, password: newPwd } : t)
+        tutors: p.tutors.map(t => t.username === user.username ? { ...t, password: newPwd, updatedAt: getSyncTimestamp() } : t)
       }));
     } else {
       setDb(p => ({
         ...p,
-        users: p.users.map(u => u.username === user.username ? { ...u, password: newPwd } : u)
+        users: p.users.map(u => u.username === user.username ? { ...u, password: newPwd, updatedAt: getSyncTimestamp() } : u)
       }));
     }
 
@@ -10474,7 +10718,7 @@ function StudentSpeakingChallengeModule({ db, setDb, user, showToast, language =
                           ...s, 
                           lastSpeakingChallengeDate: todayStr,
                           speakingChallengeCompletedCount: (s.speakingChallengeCompletedCount || 0) + 1,
-                          updatedAt: getLocalTimestamp(), // BUGFIX (BUG 6): LWW wajib tahu versi ini lebih baru
+                          updatedAt: getSyncTimestamp(), // BUGFIX (BUG 6): LWW wajib tahu versi ini lebih baru
                        };
                     }
                     return s;
@@ -11541,7 +11785,7 @@ function MaterialsModule({ db, setDb, generateId, showToast, softDelete, user })
        setDb(p => ({
           ...p,
           // BUGFIX: Tambahkan updatedAt agar LWW tidak kalah ke cloud lama saat edit material
-          materials: p.materials.map(m => m.id === isEditingId ? { ...m, ...formData, updatedAt: getLocalTimestamp() } : m)
+          materials: p.materials.map(m => m.id === isEditingId ? { ...m, ...formData, updatedAt: getSyncTimestamp() } : m)
        }));
        showToast('Material updated successfully');
     } else {
@@ -11552,7 +11796,7 @@ function MaterialsModule({ db, setDb, generateId, showToast, softDelete, user })
          tutorName: user.name,
          date: getTodayDateLocal(),
          submissions: [],
-         updatedAt: getLocalTimestamp(), // FIX BUG 3: timestamp untuk LWW
+         updatedAt: getSyncTimestamp(), // FIX BUG 3: timestamp untuk LWW
        };
        setDb(p => ({ ...p, materials: [...(p.materials || []), newMat] }));
        showToast('Material posted successfully');
