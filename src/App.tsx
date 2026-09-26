@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import { Toaster, toast as sonnerToast } from 'sonner';
 import { Users, UserCheck, BookOpen, Calendar as CalendarIcon, DollarSign, FileText, Settings, LogOut, LayoutDashboard, Activity, ChartBar as BarChart3, Plus, Search, ListFilter as Filter, Download, Printer, Share2, Pencil as Edit2, UserCog, Trash2, CircleCheck as CheckCircle2, Circle as XCircle, ChevronDown, Menu, X, SquareCheck as CheckSquare, Briefcase, Bell, CircleAlert as AlertCircle, Eye, RefreshCw, Trash, ArchiveRestore, ArrowLeft, KeyRound, ShieldCheck, Shield, MessageSquare, GraduationCap, Clock, Hash, User, Award, QrCode, Quote, Cloud, CloudOff, Sun, CloudRain, CloudLightning, Droplets, Wind, Thermometer, Link as LinkIcon, MessageCircle, Check, Trophy, Target, Zap, Star, Medal, Mic, Terminal, Copy, Inbox, Database } from 'lucide-react';
 
@@ -52,6 +53,7 @@ const SESSIONS = [
   'Grade 3 - 4 Session',
   'Grade 5 - 6 Session',
   'JHS - SHS - UNI - PRO Session',
+  'Private Session',
 ];
 
 const getSessionGroup = (className) => {
@@ -83,6 +85,24 @@ const isAttendanceValidForStudent = (attRecord, student) => {
   }
   // Older records may not have sessionGroup — fall back to accepting them
   return true;
+};
+
+// Helper: Get day name (e.g. "Saturday") from a "YYYY-MM-DD" date string (local-safe).
+const getDayName = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[new Date(y, m - 1, d).getDay()];
+};
+
+// Helper: Returns true if the student is scheduled to attend on the day of dateStr.
+// If scheduledDays is empty/unset → no restriction (attends every day = true).
+// If scheduledDays is set (e.g. ['Saturday']), only that day returns true.
+// Used to auto-mark students as 'Not in Package' on days they didn't purchase.
+const isStudentScheduledForDay = (student: any, dateStr: string): boolean => {
+  const days = Array.isArray(student?.scheduledDays) ? student.scheduledDays : [];
+  if (days.length === 0) return true;           // no restriction → attends all days
+  return days.includes(getDayName(dateStr));
 };
 
 // Global helper: Normalisasi No. WhatsApp ke format internasional (628xxxxxxxxx)
@@ -132,6 +152,31 @@ const MERGE_ALL_COLS = [
   'journals', 'assessments', 'payments', 'payroll', 'calendar',
   'announcements', 'recycleBin', 'materials'
 ];
+// BUGFIX DOUBLE ABSENSI: Deduplikasi studentAttendance berdasarkan pasangan
+// (studentId + scheduleId) - bukan hanya by 'id'.
+// Ini mencegah double-entry ketika dua perangkat (misal admin + tutor) submit
+// absensi sesi yang sama secara bersamaan. Keduanya mendapat id unik sehingga
+// lolos mergeByIds, tapi fungsi ini menyisakan hanya record TERBARU per siswa per sesi.
+const dedupeAttendance = (records: any[]): any[] => {
+  const map = new Map<string, any>();
+  (records || []).forEach(r => {
+    if (!r) return;
+    const key = `${r.studentId}||${r.scheduleId}`;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, r);
+    } else {
+      const parseT = (item: any) => {
+        const t = item.timestamp || item.updatedAt || item.date || '';
+        const ms = new Date(String(t).replace(' ', 'T')).getTime();
+        return isNaN(ms) ? 0 : ms;
+      };
+      if (parseT(r) > parseT(existing)) map.set(key, r);
+    }
+  });
+  return Array.from(map.values());
+};
+
 const mergeCloudData = (prevDb: any, normalizedCloud: any): any => {
   const localBin = Array.isArray(prevDb.recycleBin) ? prevDb.recycleBin : [];
   const cloudBin = Array.isArray(normalizedCloud.recycleBin) ? normalizedCloud.recycleBin : [];
@@ -142,6 +187,8 @@ const mergeCloudData = (prevDb: any, normalizedCloud: any): any => {
     const cloud = Array.isArray(normalizedCloud[col]) ? normalizedCloud[col] : [];
     merged[col] = mergeByIds(local, cloud, combinedBin);
   });
+  // Terapkan dedup attendance setelah semua kolom di-merge
+  merged.studentAttendance = dedupeAttendance(merged.studentAttendance);
   return merged;
 };
 
@@ -242,7 +289,7 @@ const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] =
              // terlalu ketat. Cloud bisa punya 'Default' atau 0 (falsy) yang berarti
              // field itu belum pernah diset secara meaningful — lokal yang sudah diset
              // valid harus menang. Periksa juga nilai 'Default' dan 0 sebagai "not set".
-             const PRESERVE_LOCAL_FIELDS = ['sessionOverride', 'bonusExp', 'speakingChallengeCompletedCount', 'lastSpeakingChallengeDate', 'teacherComment'];
+             const PRESERVE_LOCAL_FIELDS = ['sessionOverride', 'bonusExp', 'speakingChallengeCompletedCount', 'lastSpeakingChallengeDate', 'teacherComment', 'scheduledDays'];
              PRESERVE_LOCAL_FIELDS.forEach(field => {
                const localVal = item[field];
                const cloudVal = existing[field];
@@ -637,6 +684,7 @@ const Badge = ({ status }) => {
     Sick: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
     Excused: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
     Absent: 'bg-red-500/10 text-red-400 border-red-500/20',
+    'Not in Package': 'bg-slate-500/10 text-slate-400 border-slate-500/20',
     Paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.4)]',
     Unpaid: 'bg-rose-500/20 text-rose-400 border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.4)]',
     Partial: 'bg-amber-500/20 text-amber-400 border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.4)]',
@@ -663,12 +711,12 @@ const NewBadge = ({ isNew, billingStartMonth = null }: { isNew?: string, billing
   // Helper: cek apakah billing belum dimulai di bulan berjalan
   const isBillingPending = (() => {
     if (!billingStartMonth) return false;
-    const [bYear, bMonth] = billingStartMonth.split('-').map(Number);
+    const parts = billingStartMonth.split('-');
+    const [bYear, bMonth] = [Number(parts[0]), Number(parts[1])];
     if (!bYear || !bMonth) return false;
     const now = new Date();
     const nowYear = now.getFullYear();
     const nowMonth = now.getMonth() + 1;
-    // Pending jika bulan berjalan masih sebelum billingStartMonth
     return (nowYear < bYear) || (nowYear === bYear && nowMonth < bMonth);
   })();
 
@@ -1396,7 +1444,20 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
 
   const studentPlan = studentRecord.paymentPlan || 'Monthly';
   let paymentTarget = 0;
-  if (studentPlan === 'Monthly') {
+  // BILLING START GUARD: Jika bulan yang sedang dilihat masih sebelum billingStartMonth,
+  // target tagihan = 0 (siswa belum mulai ditagih).
+  const _bsCheck = (() => {
+    if (!studentRecord.billingStartMonth) return true; // tidak diset → selalu tagih
+    const _bParts = studentRecord.billingStartMonth.split('-');
+    const [bY, bM] = [Number(_bParts[0]), Number(_bParts[1])];
+    if (!bY || !bM) return true;
+    const viewY = Number(currentYearStr);
+    const viewM = Number(currentMonthStr);
+    return !(viewY < bY || (viewY === bY && viewM < bM));
+  })();
+  if (!_bsCheck) {
+    paymentTarget = 0;
+  } else if (studentPlan === 'Monthly') {
       // BUG FIX #5: Use fuzzy session match (consistent with other session comparisons in StudentDashboard)
       // to avoid paymentTarget being 0 when session strings have minor format differences.
       const _sessionMatchPayment = (cGroup, sGroup) => {
@@ -1405,7 +1466,15 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
         const a = cGroup.toLowerCase(), b = sGroup.toLowerCase();
         return a.includes(b) || b.includes(a);
       };
-      paymentTarget = db.calendar.filter(c => c.date.startsWith(currentMonthPrefix) && _sessionMatchPayment(c.sessionGroup || c.name, mySessionGroup)).length * 25000;
+      // Jika billingStartMonth berformat YYYY-MM-DD dan jatuh di bulan yang sama,
+      // hanya hitung sesi kalender pada atau setelah tanggal mulai tersebut.
+      const _bsdDash = (studentRecord.billingStartMonth && studentRecord.billingStartMonth.length === 10) ? studentRecord.billingStartMonth : null;
+      const _sameMonthDash = _bsdDash && _bsdDash.startsWith(currentMonthPrefix);
+      paymentTarget = db.calendar.filter(c =>
+        c.date.startsWith(currentMonthPrefix) &&
+        _sessionMatchPayment(c.sessionGroup || c.name, mySessionGroup) &&
+        (!_sameMonthDash || c.date >= _bsdDash)
+      ).length * 25000;
   } else {
       paymentTarget = db.studentAttendance.filter(a => a.studentId === user.studentId && a.date.startsWith(currentMonthPrefix) && a.status === 'Present').length * 25000;
   }
@@ -1647,9 +1716,22 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
   activeStudents.forEach(s => {
      // FREE plan: tidak masuk hitungan expected revenue sama sekali
      if (s.paymentPlan === 'Free') return;
+     // BILLING START GUARD: Jika bulan ini masih sebelum billingStartMonth, skip siswa ini
+     if (s.billingStartMonth) {
+       const _p = s.billingStartMonth.split('-');
+       const [bY, bM] = [Number(_p[0]), Number(_p[1])];
+       if (bY && bM && (Number(currentYear) < bY || (Number(currentYear) === bY && Number(currentMonth) < bM))) return;
+     }
      const sGroup = getStudentSession(s);
+     // Jika billingStartMonth YYYY-MM-DD jatuh di bulan ini, hitung hanya sesi pada/setelah tanggal itu
+     const _bsdAdmin = (s.billingStartMonth && s.billingStartMonth.length === 10) ? s.billingStartMonth : null;
+     const _sameMonthAdmin = _bsdAdmin && _bsdAdmin.startsWith(currentMonthPrefix);
      // Semua siswa (Monthly maupun Per Visit) dihitung berdasarkan jumlah jadwal bulan ini
-     const scheduledCount = db.calendar.filter(c => c.date.startsWith(currentMonthPrefix) && (c.sessionGroup || c.name) === sGroup).length;
+     const scheduledCount = db.calendar.filter(c =>
+       c.date.startsWith(currentMonthPrefix) &&
+       (c.sessionGroup || c.name) === sGroup &&
+       (!_sameMonthAdmin || c.date >= _bsdAdmin)
+     ).length;
      const studentTarget = scheduledCount * 25000;
      expectedRevenueAmount += studentTarget;
 
@@ -2226,6 +2308,17 @@ const defaultDbStructure = {
 
 // Fungsi untuk menormalisasi data lama/eksternal yang menggunakan key bahasa Indonesia
 const normalizeData = (data) => {
+
+   // FIX: Normalize users.isSuperAdmin to strict boolean.
+   // GAS validation requires boolean values, not string values from Sheets/local data.
+   if (data.users && Array.isArray(data.users)) {
+      data.users = data.users.map((user: any) => ({
+         ...user,
+         isSuperAdmin:
+            user.isSuperAdmin === true ||
+            String(user.isSuperAdmin).toLowerCase() === 'true'
+      }));
+   }
    // FIX (Silent Overwrite Race Condition): Pisahkan logs dari db utama agar
    // perubahan log tidak memicu sync useEffect. Logs disimpan ke state terpisah.
    const { auditLogs: _a, debugLogs: _d, ...dataWithoutLogs } = data || {};
@@ -2583,6 +2676,9 @@ function MainApp() {
   const toastTimeoutRef = useRef(null);
   // NEW: Ref untuk debounce sync ke cloud (mencegah race condition saat input beruntun)
   const syncDebounceTimer = useRef(null);
+  // PATCH: daftar operasi delete yang harus dikomit ke Spreadsheet.
+  // Array payload saja tidak cukup untuk menghapus row lama di Google Sheet.
+  const pendingDeletionsRef = useRef<any[]>([]);
   // BUGFIX #6: Ganti window._syncBusyAttempt (global, race condition multi-tab)
   // dengan useRef yang scoped ke instance komponen ini saja.
   const syncBusyAttempt = useRef(0);
@@ -2633,7 +2729,8 @@ function MainApp() {
     if (!token) return handleUnauthorized();
 
     setSyncStatus('syncing'); // Manual refresh = langsung fetch, tidak perlu fase 'saving'
-    showToast(language === 'id' ? 'Menyinkronkan data terbaru dari server...' : 'Syncing latest data from server...', 'success');
+    // Tidak perlu showToast di sini — CloudAutoSaveIndicator sudah menampilkan status 'Sending to Cloud...'
+    // Menampilkan toast sekaligus indikator menyebabkan UI tampak error (dua notifikasi bersamaan).
     try {
       const res = await fetch(`${APPSCRIPT_URL}?token=${token}`);
       const data = await res.json();
@@ -2692,6 +2789,7 @@ function MainApp() {
        fetch(APPSCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          redirect: 'follow',
           body: JSON.stringify({ action: 'log_only', token, user: userName, logAction: actionName, logDetails: details, isError })
        })
        .then(res => res.json())
@@ -3145,10 +3243,13 @@ function MainApp() {
           // Kirim hanya delta — bukan seluruh db
           body: JSON.stringify({ 
             action: 'sync', 
+            requestId: `${Date.now()}-${Math.random().toString(36).slice(2,10)}`,
             token: token,
-            baseVersion: dbVersion.current, // Kirim versi DB yang kita ketahui → backend tolak kalau konflik
-            user: currentUser ? currentUser.name : 'SYSTEM', // Mengirimkan identitas untuk Audit Log
-            payload: deltaPayload  // ← DELTA, bukan { ...db }
+            baseVersion: dbVersion.current,
+            user: currentUser ? currentUser.name : 'SYSTEM',
+            payload: deltaPayload,
+            // PATCH DELETE: dikirim terpisah agar GAS benar-benar menghapus row.
+            deletions: pendingDeletionsRef.current.slice()
           })
         })
         .then(res => {
@@ -3160,8 +3261,15 @@ function MainApp() {
                return handleUnauthorized();
            }
            if (data.status === 'success') {
+               // GAS mengembalikan updatedRows, insertedRows, deletedRows, dan changed.
+               // data.changed === false berarti tidak ada baris baru/berubah (sudah identik).
+               // Verifikasi berbasis field standar GAS — writtenCollections tidak dikirim GAS.
+               const hasDelete = Number(data.deletedRows || 0) > 0;
+
                // Perbarui versi lokal dengan versi terbaru dari server jika ada
                if (data.newVersion) dbVersion.current = data.newVersion;
+               // PATCH DELETE: hanya hapus queue jika request delete ini sukses.
+               pendingDeletionsRef.current = [];
                
                syncBusyAttempt.current = 0;
                // FIX DELTA: Simpan snapshot yang DIKIRIM ke cloud, BUKAN state terbaru yang 
@@ -3201,7 +3309,9 @@ function MainApp() {
                    : 'Data updated by another user. Syncing latest...',
                  'warning'
                );
-               // data.payload SUDAH tersedia dari response conflict (lihat processSync di code.gs)
+               // Selalu ambil newVersion dari conflict response untuk update dbVersion.current.
+               // Ini mencegah dbVersion null permanen saat startup pertama berhasil konflik.
+               if (data.newVersion) dbVersion.current = data.newVersion;
                const freshPayload = data.payload;
                const freshVersion  = data.newVersion ?? data._dbVersion ?? null;
                if (freshPayload) {
@@ -3267,7 +3377,7 @@ function MainApp() {
            // prevEntitiesRef dikosongkan agar ketikan selanjutnya bisa memicu trigger fetch ulang
            prevEntitiesRef.current = null;
         });
-      }, 2000); // Tunggu 2 detik setelah user berhenti mengubah data sebelum mem-fetch
+      }, 1000); // Tunggu 1 detik setelah user berhenti mengubah data sebelum mem-fetch
     }
   }, [db, isDbLoaded]);
 
@@ -3346,6 +3456,11 @@ function MainApp() {
       `Are you sure you want to delete ${itemName || 'this record'}? It will be moved to the Recycle Bin.`,
       () => {
         const item = db[collection].find((x) => x.id === id);
+        // PATCH DELETE: simpan event penghapusan agar Spreadsheet ikut berubah.
+        pendingDeletionsRef.current.push({
+          collection,
+          id
+        });
         // FIX BUG #1: binItem HARUS punya field 'id' agar mergeByIds tidak memfilternya
         // (isInvalid() mengembalikan true jika !item.id — binItem lama hanya pakai 'binId')
         const binId = `BIN-${Date.now()}`;
@@ -3473,7 +3588,7 @@ function MainApp() {
       setCurrentUser(sessionUser);
       // Optimistic: assume online until background verify proves otherwise
       setIsCloudConnected(true);
-      setSyncStatus('syncing');
+      setSyncStatus('saved'); // Tampilkan 'saved' dulu — 'syncing' akan muncul saat background fetch benar-benar dimulai
       setSavedAccounts(prev => {
         const existing = prev.filter(acc => String(acc.username || '').toLowerCase() !== cleanUser);
         return [...existing, { username: cleanUser, name: sessionUser.name, role: sessionUser.role, lastToken: '' }];
@@ -3489,6 +3604,7 @@ function MainApp() {
         setSyncStatus('error');
       }, 12000);
 
+      setSyncStatus('syncing'); // Set syncing tepat sebelum request dikirim
       fetch(APPSCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -3787,10 +3903,25 @@ function MainApp() {
       const plan = studentRec?.paymentPlan || 'Monthly';
       const monthPrefix = `${currentYear}-${currentMonth.padStart(2, '0')}`;
       let target = 0;
-      if (plan === 'Free') {
-          target = 0; // FREE: tidak pernah ada tagihan
+      // BILLING START GUARD: bulan sebelum billingStartMonth tidak pernah ada tagihan
+      const _bsNotifCheck = (() => {
+        if (!studentRec?.billingStartMonth) return true;
+        const _p = studentRec.billingStartMonth.split('-');
+        const [bY, bM] = [Number(_p[0]), Number(_p[1])];
+        if (!bY || !bM) return true;
+        return !(Number(currentYear) < bY || (Number(currentYear) === bY && Number(currentMonth) < bM));
+      })();
+      if (plan === 'Free' || !_bsNotifCheck) {
+          target = 0; // FREE atau belum mulai tagih: tidak ada tagihan
       } else if (plan === 'Monthly') {
-          target = db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === mySession).length * 25000;
+          // Jika billingStartMonth YYYY-MM-DD jatuh di bulan ini, hitung sesi mulai tanggal tersebut saja
+          const _bsdNotif = (studentRec?.billingStartMonth && studentRec.billingStartMonth.length === 10) ? studentRec.billingStartMonth : null;
+          const _sameMonthNotif = _bsdNotif && _bsdNotif.startsWith(monthPrefix);
+          target = db.calendar.filter(c =>
+            c.date.startsWith(monthPrefix) &&
+            (c.sessionGroup || c.name) === mySession &&
+            (!_sameMonthNotif || c.date >= _bsdNotif)
+          ).length * 25000;
       } else {
           target = db.studentAttendance.filter(a => a.studentId === currentUser.studentId && a.date.startsWith(monthPrefix) && a.status === 'Present').length * 25000;
       }
@@ -3855,6 +3986,7 @@ function MainApp() {
     { id: 'assessments', label: 'Monthly Assessment', icon: CheckSquare, roles: ['admin', 'tutor'] },
     { id: 'my_assessments', label: 'My Assessment', icon: Award, roles: ['student'] }, // Khusus Student
     { id: 'payments', label: 'Payments', icon: DollarSign, roles: ['admin'] },
+    { id: 'billing_recap', label: 'Billing Recap', icon: Inbox, roles: ['admin'] },
     { id: 'my_payments', label: 'My Payment Status', icon: DollarSign, roles: ['student'] }, // Khusus Student
     { id: 'payroll', label: 'Payroll', icon: FileText, roles: ['admin'] },
     { id: 'history', label: 'History & Reports', icon: BarChart3, roles: ['admin', 'tutor'] },
@@ -3920,6 +4052,8 @@ function MainApp() {
             isDbDirty={isDbDirty}
         />
       );
+      case 'billing_recap':
+        return <BillingRecapModule db={db} setDb={setDb} showToast={showToast} language={language} />;
       case 'my_payments': // STUDENT: Read Only Payments
         return <StudentReadOnlyPaymentModule db={db} user={currentUser} downloadPNG={downloadPNG} handleShareImage={handleShareImage} language={language} showToast={showToast} />;
       case 'payroll':
@@ -3949,7 +4083,7 @@ function MainApp() {
       case 'system_logs':
         return <SystemLogsModule logs={logs} setLogs={setLogs} showToast={showToast} requestConfirm={requestConfirm} />;
       case 'recycle_bin':
-        return <RecycleBinModule db={db} setDb={setDb} showToast={showToast} requestConfirm={requestConfirm} />;
+        return <RecycleBinModule db={db} setDb={setDb} showToast={showToast} requestConfirm={requestConfirm} onQueueDeletion={(item) => pendingDeletionsRef.current.push(item)} />;
       case 'export':
         return <DataExportModule db={db} />;
       default:
@@ -3971,7 +4105,7 @@ function MainApp() {
       />
 
       {toast && (
-        <div key={toast.id} className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-2xl flex items-center gap-2 animate-bounce print:hidden ${
+        <div key={toast.id} className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-2xl flex items-center gap-2 animation-fade-in print:hidden ${
             toast.type === 'error' ? 'bg-red-500' : toast.type === 'warning' ? 'bg-yellow-500 text-[#0B0F19]' : 'bg-[#00D4FF] text-[#0B0F19] font-semibold'
         }`}>
           {toast.type === 'error' ? <XCircle size={20} /> : toast.type === 'warning' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
@@ -4212,7 +4346,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
   const defaultLevel = validLevelsForTutor.length > 0 ? validLevelsForTutor[0] : LEVELS[0];
   const defaultClass = CLASS_MAPPING[defaultLevel].find(cls => user?.role === 'tutor' ? parseSessions(user.teachingSession).includes(getSessionGroup(cls)) : true) || CLASS_MAPPING[defaultLevel][0];
   
-  const [formData, setFormData] = useState({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '' });
+  const [formData, setFormData] = useState({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '', scheduledDays: [] as string[] });
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -4301,7 +4435,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
       <div className="flex justify-between items-center">
         <div><h2 className="text-2xl font-bold text-white mb-1">Students Directory</h2><p className="text-gray-400 text-sm">Manage student records, enrollment, and class placement.</p></div>
         {(!user || user.role === 'admin' || user.role === 'tutor') && (
-          <Button onClick={() => { setFormData({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '' }); setIsAdding(!isAdding); }} icon={Plus}>Add Student</Button>
+          <Button onClick={() => { setFormData({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '', scheduledDays: [] }); setIsAdding(!isAdding); }} icon={Plus}>Add Student</Button>
         )}
       </div>
       {isAdding && (
@@ -4330,16 +4464,16 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
             {/* BILLING START MONTH — hanya tampil jika siswa baru atau admin mengatur */}
             <div className="mb-4 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
               <label className="block text-sm text-amber-400 font-semibold mb-1 flex items-center gap-2">
-                <CalendarIcon size={14} /> Billing Start Month <span className="text-gray-500 font-normal">(Opsional)</span>
+                <CalendarIcon size={14} /> Tanggal Mulai Tagih <span className="text-gray-500 font-normal">(Opsional)</span>
               </label>
               <input
-                type="month"
+                type="date"
                 className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 transition-all"
                 value={formData.billingStartMonth || ''}
                 onChange={(e) => setFormData({ ...formData, billingStartMonth: e.target.value })}
               />
               <p className="text-[11px] text-gray-500 mt-1.5 leading-tight">
-                Kosongkan jika tagihan mulai bulan ini. Isi jika siswa baru akan mulai membayar bulan depan atau seterusnya — bulan sebelum tanggal ini <strong className="text-amber-400">tidak akan dihitung</strong> dalam expected collected.
+                Isi tanggal pertama masuk kursus. Sesi sebelum tanggal ini <strong className="text-amber-400">tidak dihitung</strong> dalam tagihan, termasuk sesi di bulan yang sama.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -4354,6 +4488,56 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
               <Input label="Session Override (Optional)" type="select" options={['Default', ...SESSIONS]} value={formData.sessionOverride || 'Default'} onChange={(v) => setFormData({ ...formData, sessionOverride: v })} />
               <p className="text-[11px] text-gray-500 mt-1 mb-2 px-1 leading-tight">Leave "Default" to follow the class session, or pick another if this student joins a different time slot.</p>
             </div>
+
+            {/* ── SCHEDULED ATTENDANCE DAYS (Paket Hari Hadir) ─────────────────── */}
+            <div className="mb-6 p-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5">
+              <label className="flex items-center gap-2 text-sm text-indigo-400 font-semibold mb-3">
+                <CalendarIcon size={14} />
+                Hari Hadir / Scheduled Days
+                <span className="text-gray-500 font-normal text-xs">(Opsional)</span>
+              </label>
+              <div className="grid grid-cols-7 gap-1.5">
+                {[
+                  { key: 'Monday',    id: 'Sen' },
+                  { key: 'Tuesday',   id: 'Sel' },
+                  { key: 'Wednesday', id: 'Rab' },
+                  { key: 'Thursday',  id: 'Kam' },
+                  { key: 'Friday',    id: 'Jum' },
+                  { key: 'Saturday',  id: 'Sab' },
+                  { key: 'Sunday',    id: 'Min' },
+                ].map(({ key, id }) => {
+                  const checked = (formData.scheduledDays || []).includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        const current = Array.isArray(formData.scheduledDays) ? formData.scheduledDays : [];
+                        const newDays = checked ? current.filter(d => d !== key) : [...current, key];
+                        setFormData({ ...formData, scheduledDays: newDays });
+                      }}
+                      className={`flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-lg border transition-all select-none ${
+                        checked
+                          ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-300 shadow-[0_0_8px_rgba(99,102,241,0.25)]'
+                          : 'border-gray-700 bg-[#0B0F19] text-gray-500 hover:border-gray-600 hover:text-gray-400'
+                      }`}
+                    >
+                      <span className="text-[11px] font-bold">{id}</span>
+                      <div className={`w-3 h-3 rounded border-2 flex items-center justify-center transition-all ${checked ? 'bg-indigo-500 border-indigo-400' : 'border-gray-600'}`}>
+                        {checked && <Check size={8} className="text-white" strokeWidth={3} />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2.5 leading-relaxed">
+                <strong className="text-gray-400">Biarkan kosong</strong> = siswa hadir semua hari kursus (default).
+                Jika kursus 2× seminggu (mis. <strong className="text-indigo-300">Rabu &amp; Sabtu</strong>) tapi siswa hanya beli paket <strong className="text-indigo-300">Sabtu</strong>, centang <strong className="text-indigo-300">Sab</strong> saja.
+                Sistem akan otomatis mencatat <strong className="text-slate-300">"Tidak Ambil Paket"</strong> setiap Rabu tanpa menghitung absen/izin/sakit.
+              </p>
+            </div>
+            {/* ── END SCHEDULED DAYS ───────────────────────────────────────────── */}
+
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
               <Button variant="secondary" onClick={() => setIsAdding(false)}>Cancel</Button>
               <Button type="submit" icon={formData.id ? Edit2 : Plus}>{formData.id ? 'Update Student' : 'Save Student'}</Button>
@@ -4500,8 +4684,8 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
                     );
                   })()}
                 </td>
-                <td className="p-4 text-center"><Badge status={s.status} /></td>
                 <td className="p-4 text-gray-400 text-sm">{s.whatsapp ? String(s.whatsapp).replace(/^'/, '') : <span className="text-gray-600 italic text-xs">No WA</span>}</td>
+                <td className="p-4 text-center"><Badge status={s.status} /></td>
                 {(!user || user.role === 'admin' || user.role === 'tutor') && (
                   <td className="p-4 text-center flex justify-center gap-2">
                     {s.whatsapp ? (
@@ -4638,8 +4822,17 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
   const studentsToMark = useMemo(() => targetStudents.filter((s) => !alreadyMarkedIds.includes(s.id)), [targetStudents, alreadyMarkedIds]);
 
   useEffect(() => {
-    const initial = {};
-    studentsToMark.forEach((s) => (initial[s.id] = 'Present'));
+    const initial: Record<string, string> = {};
+    const schedDate = selectedSchedule?.date;
+    studentsToMark.forEach((s) => {
+      // If the student has scheduledDays set and today's day is NOT in the list,
+      // auto-mark as 'Not in Package' (not absent — they just didn't buy this day's slot).
+      if (schedDate && !isStudentScheduledForDay(s, schedDate)) {
+        initial[s.id] = 'Not in Package';
+      } else {
+        initial[s.id] = 'Present';
+      }
+    });
     setAttendanceData(initial);
     // Fix 6: mark dirty when a schedule is selected and students are loaded
     if (setModuleDirty) setModuleDirty(studentsToMark.length > 0 && !!selectedScheduleId);
@@ -4910,17 +5103,52 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-800">
-            {studentsToMark.length > 0 ? studentsToMark.map((s, index) => (
-              <tr key={s.id} className="hover:bg-[#0B0F19]">
-                <td className="p-4 text-center"><span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#00D4FF]/10 border border-[#00D4FF]/20 text-[11px] font-black text-[#00D4FF]">{String(index + 1).padStart(2, '0')}</span></td>
-                <td className="p-4 text-white font-medium"><div className="flex items-center">{s.name} <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} /> <span className="text-xs text-gray-500 ml-1.5">({s.class})</span>{checkHasDebt(s.id, selectedSchedule?.date) && <span title="Memiliki tunggakan pembayaran"><AlertCircle size={14} className="text-amber-500 ml-2" /></span>}</div></td>
-                {['Present', 'Sick', 'Excused', 'Absent'].map((status) => (
-                  <td key={status} className="p-4 text-center">
-                    <input type="radio" checked={attendanceData[s.id] === status} onChange={() => setAttendanceData((p) => ({ ...p, [s.id]: status }))} className={`w-5 h-5 cursor-pointer ${statusColors[status]}`} />
+            {studentsToMark.length > 0 ? studentsToMark.map((s, index) => {
+              const isNotInPkg = attendanceData[s.id] === 'Not in Package';
+              return (
+                <tr key={s.id} className={`hover:bg-[#0B0F19] ${isNotInPkg ? 'opacity-60' : ''}`}>
+                  <td className="p-4 text-center">
+                    <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-[11px] font-black ${isNotInPkg ? 'bg-slate-500/10 border border-slate-500/20 text-slate-500' : 'bg-[#00D4FF]/10 border border-[#00D4FF]/20 text-[#00D4FF]'}`}>
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
                   </td>
-                ))}
-              </tr>
-            )) : (
+                  <td className="p-4 font-medium">
+                    <div className="flex items-center flex-wrap gap-1">
+                      <span className={isNotInPkg ? 'text-gray-500' : 'text-white'}>{s.name}</span>
+                      <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} />
+                      <span className="text-xs text-gray-500">({s.class})</span>
+                      {checkHasDebt(s.id, selectedSchedule?.date) && !isNotInPkg && (
+                        <span title="Memiliki tunggakan pembayaran"><AlertCircle size={14} className="text-amber-500" /></span>
+                      )}
+                      {isNotInPkg && (
+                        <span className="text-[10px] bg-slate-500/20 text-slate-400 border border-slate-500/30 px-1.5 py-0.5 rounded-full font-semibold">
+                          Tidak Ambil Paket
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  {isNotInPkg ? (
+                    <td colSpan={4} className="p-4 text-center">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 italic bg-slate-500/10 border border-slate-500/20 px-3 py-1.5 rounded-full">
+                        <XCircle size={12} />
+                        Tidak mengambil paket hari ini — otomatis tercatat, tidak dihitung absen
+                      </span>
+                    </td>
+                  ) : (
+                    ['Present', 'Sick', 'Excused', 'Absent'].map((status) => (
+                      <td key={status} className="p-4 text-center">
+                        <input
+                          type="radio"
+                          checked={attendanceData[s.id] === status}
+                          onChange={() => setAttendanceData((p) => ({ ...p, [s.id]: status }))}
+                          className={`w-5 h-5 cursor-pointer ${statusColors[status]}`}
+                        />
+                      </td>
+                    ))
+                  )}
+                </tr>
+              );
+            }) : (
               <tr>
                 <td colSpan={6}>
                   <EmptyState
@@ -4933,12 +5161,19 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
             )}
           </tbody>
         </table>
-        <div className="p-4 bg-[#0A0E17] flex justify-end border-t border-gray-800">
+        <div className="p-4 bg-[#0A0E17] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-gray-800">
+          {/* Legend info for 'Not in Package' */}
+          {studentsToMark.some(s => attendanceData[s.id] === 'Not in Package') && (
+            <div className="flex items-center gap-2 text-[11px] text-slate-400 bg-slate-500/10 border border-slate-500/20 px-3 py-2 rounded-lg">
+              <XCircle size={13} className="text-slate-500 shrink-0" />
+              <span><strong className="text-slate-300">Tidak Ambil Paket</strong> = siswa tidak membeli sesi hari ini. Tidak dihitung absen/izin/sakit. Otomatis terisi sesuai pengaturan hari hadir siswa.</span>
+            </div>
+          )}
           <Button
             onClick={handleSave}
             disabled={studentsToMark.length === 0 || !selectedSchedule || isSubmitting}
             icon={isSubmitting ? RefreshCw : CheckCircle2}
-            className={isSubmitting ? 'opacity-80' : ''}
+            className={`${isSubmitting ? 'opacity-80' : ''} ml-auto`}
           >
             {isSubmitting ? 'Saving...' : 'Save Attendance'}
           </Button>
@@ -5057,7 +5292,7 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
                 value={addStudentStatus}
                 onChange={e => setAddStudentStatus(e.target.value)}
               >
-                <option>Present</option><option>Sick</option><option>Excused</option><option>Absent</option>
+                <option>Present</option><option>Sick</option><option>Excused</option><option>Absent</option><option>Not in Package</option>
               </select>
             </div>
             <div className="flex gap-2">
@@ -5077,7 +5312,7 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
                 {editingId === r.id ? (
                   <>
                     <select className="bg-[#151B26] border border-gray-700 rounded text-sm text-white p-1" value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                      <option>Present</option><option>Sick</option><option>Excused</option><option>Absent</option>
+                      <option>Present</option><option>Sick</option><option>Excused</option><option>Absent</option><option>Not in Package</option>
                     </select>
                     <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => saveEdit(r.id)}>Save</Button>
                   </>
@@ -5576,13 +5811,16 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
       const target = (() => {
         if (s.paymentPlan === 'Free') return 0;
         if (s.billingStartMonth) {
-          const [bY, bM] = s.billingStartMonth.split('-').map(Number);
+          const _bParts = s.billingStartMonth.split('-');
+          const [bY, bM] = [Number(_bParts[0]), Number(_bParts[1])];
           if (bY && bM && (Number(year) < bY || (Number(year) === bY && Number(month) < bM))) return 0;
         }
         const sGroup = getStudentSession(s);
         const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+        const _bsdRev = (s.billingStartMonth && s.billingStartMonth.length === 10) ? s.billingStartMonth : null;
+        const _sameMonthRev = _bsdRev && _bsdRev.startsWith(monthPrefix);
         if ((s.paymentPlan || 'Monthly') === 'Monthly') {
-          return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup).length * 25000;
+          return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonthRev || c.date >= _bsdRev)).length * 25000;
         }
         return db.studentAttendance.filter(a => a.studentId === s.id && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, s)).length * 25000;
       })();
@@ -5605,7 +5843,8 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
     // BILLING START CHECK: Jika billingStartMonth diset dan bulan/tahun yang sedang dilihat
     // masih SEBELUM billingStartMonth, siswa ini belum dihitung dalam expected collected.
     if (student.billingStartMonth) {
-      const [bYear, bMonth] = student.billingStartMonth.split('-').map(Number);
+      const _bParts = student.billingStartMonth.split('-');
+      const [bYear, bMonth] = [Number(_bParts[0]), Number(_bParts[1])];
       if (bYear && bMonth) {
         const viewYear = Number(year);
         const viewMonth = Number(month);
@@ -5615,14 +5854,16 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
       }
     }
     const plan = student.paymentPlan || 'Monthly';
-    // FREE plan: target selalu 0, tidak pernah ditagih
     if (plan === 'Free') return 0;
     const sGroup = getStudentSession(student);
     const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+    // Jika tanggal mulai (YYYY-MM-DD) ada dan jatuh di bulan yang sama,
+    // hanya hitung sesi kalender pada atau setelah tanggal tersebut.
+    const _bsd = (student.billingStartMonth && student.billingStartMonth.length === 10) ? student.billingStartMonth : null;
+    const _sameMonth = _bsd && _bsd.startsWith(monthPrefix);
     if (plan === 'Monthly') {
-        return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup).length * 25000;
+        return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonth || c.date >= _bsd)).length * 25000;
     } else {
-        // Fix 4: Only count attendance that belongs to student's current (effective) session
         return db.studentAttendance.filter(a => a.studentId === student.id && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, student)).length * 25000;
     }
   };
@@ -6418,6 +6659,540 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
   );
 }
 
+
+function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  const [expandedId, setExpandedId] = React.useState(null);
+  const [expandedMonth, setExpandedMonth] = React.useState(null);
+  const [searchTerm, setSearchTerm] = React.useState('');
+  const [filterSession, setFilterSession] = React.useState('');
+  const [filterStatus, setFilterStatus] = React.useState('');
+
+  // ── Plan Override Edit Modal ──────────────────────────────────────────────
+  const [planEditStudent, setPlanEditStudent] = React.useState(null); // student object
+  const [planEditDraft, setPlanEditDraft] = React.useState({}); // { "YYYY-MM": "Monthly"|"Per Visit" }
+
+  const openPlanEdit = (e, student) => {
+    e.stopPropagation();
+    // Build draft: start from existing overrides, fill in defaults for months with no override
+    const overrides = student.paymentPlanOverrides || {};
+    const months = getMonthRangeForStudent(student);
+    const draft = {};
+    months.forEach(({ yr, mo }) => {
+      const key = `${yr}-${String(mo).padStart(2, '0')}`;
+      draft[key] = overrides[key] || student.paymentPlan || 'Monthly';
+    });
+    setPlanEditDraft(draft);
+    setPlanEditStudent(student);
+  };
+
+  const savePlanEdit = () => {
+    if (!planEditStudent) return;
+    // Only store months that differ from the student's base paymentPlan
+    const base = planEditStudent.paymentPlan || 'Monthly';
+    const overrides = {};
+    Object.entries(planEditDraft).forEach(([k, v]) => {
+      if (v !== base) overrides[k] = v;
+    });
+    setDb(prev => ({
+      ...prev,
+      students: prev.students.map(s =>
+        s.id === planEditStudent.id
+          ? { ...s, paymentPlanOverrides: overrides, updatedAt: getLocalTimestamp() }
+          : s
+      )
+    }));
+    showToast('Plan per bulan disimpan ✓');
+    setPlanEditStudent(null);
+  };
+
+  // Helper: same as getMonthRange but doesn't depend on useCallback closures
+  const getMonthRangeForStudent = (student) => {
+    if (student.billingStartMonth) {
+      const _p = student.billingStartMonth.split('-');
+      const [bY, bM] = [Number(_p[0]), Number(_p[1])];
+      if (bY && bM) {
+        const months = [];
+        let y = bY, m = bM;
+        while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+          months.push({ yr: y, mo: m });
+          m++; if (m > 12) { m = 1; y++; }
+        }
+        return months;
+      }
+    }
+    const allDates = [
+      ...(db.studentAttendance || []).filter(a => a.studentId === student.id).map(a => a.date),
+      ...(db.payments || []).filter(p => String(p.studentId) === String(student.id)).map(p =>
+        p.date || (p.year && p.month ? `${p.year}-${String(p.month).padStart(2,'0')}-01` : null)
+      ).filter(Boolean),
+    ].filter(Boolean).sort();
+    let startY = currentYear, startM = currentMonth;
+    if (allDates.length > 0) {
+      const parts = allDates[0].split('-');
+      if (parts.length >= 2) { startY = Number(parts[0]); startM = Number(parts[1]); }
+    }
+    const months = [];
+    let y = startY, m = startM;
+    while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+      months.push({ yr: y, mo: m });
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return months;
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const activeStudents = React.useMemo(
+    () => sortStudentsLogically(db.students.filter(s => s.status === 'Active' && s.paymentPlan !== 'Free')),
+    [db.students]
+  );
+
+  const getTarget = React.useCallback((student, yr, mo) => {
+    if (!student || student.paymentPlan === 'Free') return 0;
+    if (student.billingStartMonth) {
+      const _p = student.billingStartMonth.split('-');
+      const [bY, bM] = [Number(_p[0]), Number(_p[1])];
+      if (yr < bY || (yr === bY && mo < bM)) return 0;
+    }
+    const prefix = `${yr}-${String(mo).padStart(2, '0')}`;
+    const sGroup = getStudentSession(student);
+    const _bsd = (student.billingStartMonth && student.billingStartMonth.length === 10) ? student.billingStartMonth : null;
+    const _sameMonth = _bsd && _bsd.startsWith(prefix);
+
+    // ── Per-month plan override ───────────────────────────────────────────
+    const monthKey = prefix;
+    const overrides = student.paymentPlanOverrides || {};
+    const effectivePlan = overrides[monthKey] || student.paymentPlan || 'Monthly';
+    // ─────────────────────────────────────────────────────────────────────
+
+    if (effectivePlan === 'Monthly') {
+      return (db.calendar || []).filter(c => c.date.startsWith(prefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonth || c.date >= _bsd)).length * 25000;
+    }
+    return (db.studentAttendance || []).filter(a =>
+      a.studentId === student.id && a.date.startsWith(prefix) && a.status === 'Present' && isAttendanceValidForStudent(a, student)
+    ).length * 25000;
+  }, [db.calendar, db.studentAttendance]);
+
+  const getPaid = React.useCallback((studentId, yr, mo) => {
+    return (db.payments || [])
+      .filter(p => String(p.studentId) === String(studentId) && Number(p.month) === mo && Number(p.year) === yr && p.status === 'Paid')
+      .reduce((s, p) => s + Number(p.amount), 0);
+  }, [db.payments]);
+
+  const getMonthRange = (student) => {
+    // Prioritas 1: billingStartMonth yang diisi admin di form siswa (YYYY-MM atau YYYY-MM-DD)
+    if (student.billingStartMonth) {
+      const _bParts = student.billingStartMonth.split('-');
+      const [bY, bM] = [Number(_bParts[0]), Number(_bParts[1])];
+      if (bY && bM) {
+        const months = [];
+        let y = bY, m = bM;
+        while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+          months.push({ yr: y, mo: m });
+          m++; if (m > 12) { m = 1; y++; }
+        }
+        return months;
+      }
+    }
+    // Prioritas 2: bulan paling awal dari attendance atau payment siswa
+    // Ini mencegah tagihan hantu untuk siswa baru yang belum diisi billingStartMonth-nya.
+    const allDates = [
+      ...(db.studentAttendance || []).filter(a => a.studentId === student.id).map(a => a.date),
+      ...(db.payments || []).filter(p => String(p.studentId) === String(student.id)).map(p =>
+        p.date || (p.year && p.month ? `${p.year}-${String(p.month).padStart(2,'0')}-01` : null)
+      ).filter(Boolean),
+    ].filter(Boolean).sort();
+    let startY = currentYear, startM = currentMonth;
+    if (allDates.length > 0) {
+      const earliest = allDates[0];
+      const parts = earliest.split('-');
+      if (parts.length >= 2) { startY = Number(parts[0]); startM = Number(parts[1]); }
+    }
+    const months = [];
+    let y = startY, m = startM;
+    while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+      months.push({ yr: y, mo: m });
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return months;
+  };
+
+  const studentData = React.useMemo(() => {
+    return activeStudents.map(s => {
+      const months = getMonthRange(s);
+      let totalTarget = 0, totalPaid = 0;
+      const monthDetails = months.map(({ yr, mo }) => {
+        const target = getTarget(s, yr, mo);
+        const paid = getPaid(s.id, yr, mo);
+        const outstanding = Math.max(0, target - paid);
+        totalTarget += target;
+        totalPaid += paid;
+        const prefix = `${yr}-${String(mo).padStart(2, '0')}`;
+        const attRecords = (db.studentAttendance || []).filter(a =>
+          a.studentId === s.id && a.date.startsWith(prefix) && isAttendanceValidForStudent(a, s)
+        ).sort((a, b) => a.date.localeCompare(b.date));
+        return { yr, mo, target, paid, outstanding, attRecords };
+      }).filter(m => m.target > 0);
+      const totalOutstanding = Math.max(0, totalTarget - totalPaid);
+      const status = totalOutstanding === 0 && totalTarget > 0 ? 'Lunas'
+        : totalPaid > 0 && totalOutstanding > 0 ? 'Parsial'
+        : totalTarget === 0 ? 'Belum Tagih'
+        : 'Belum Bayar';
+      return { student: s, monthDetails, totalTarget, totalPaid, totalOutstanding, status };
+    });
+  }, [activeStudents, getTarget, getPaid, db.studentAttendance, db.students]);
+
+  const filtered = React.useMemo(() => {
+    let list = studentData;
+    if (searchTerm) list = list.filter(d => d.student.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    if (filterSession) list = list.filter(d => getStudentSession(d.student) === filterSession);
+    if (filterStatus) list = list.filter(d => d.status === filterStatus);
+    return [...list].sort((a, b) => b.totalOutstanding - a.totalOutstanding);
+  }, [studentData, searchTerm, filterSession, filterStatus]);
+
+  const totalOutstandingAll = filtered.reduce((s, d) => s + d.totalOutstanding, 0);
+  const debtCount = filtered.filter(d => d.totalOutstanding > 0).length;
+  const paidCount = filtered.filter(d => d.status === 'Lunas').length;
+
+  const statusColor = (st) => {
+    if (st === 'Lunas') return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+    if (st === 'Parsial') return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+    if (st === 'Belum Bayar') return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+    return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+  };
+
+  return (
+    <div className="p-4 sm:p-6 space-y-5 animation-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+            <Inbox size={22} className="text-[#00D4FF]" />
+            Rekapitulasi Tagihan Siswa
+          </h2>
+          <p className="text-gray-400 text-sm mt-1">Tunggakan per siswa lintas bulan — klik siswa untuk detail kehadiran dan pembayaran.</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 text-center">
+          <p className="text-[11px] text-rose-400 font-semibold uppercase tracking-wide mb-1">Total Tunggakan</p>
+          <p className="text-base sm:text-2xl font-black text-rose-400">Rp {totalOutstandingAll.toLocaleString('id-ID')}</p>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
+          <p className="text-[11px] text-amber-400 font-semibold uppercase tracking-wide mb-1">Siswa Menunggak</p>
+          <p className="text-base sm:text-2xl font-black text-amber-400">{debtCount}</p>
+        </div>
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
+          <p className="text-[11px] text-emerald-400 font-semibold uppercase tracking-wide mb-1">Siswa Lunas</p>
+          <p className="text-base sm:text-2xl font-black text-emerald-400">{paidCount}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" placeholder="Cari nama siswa..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+            className="w-full bg-[#151B26] border border-gray-700 rounded-lg pl-9 pr-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#00D4FF]" />
+        </div>
+        <select value={filterSession} onChange={e => setFilterSession(e.target.value)}
+          className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#00D4FF]">
+          <option value="">Semua Sesi</option>
+          {SESSIONS.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+          className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#00D4FF]">
+          <option value="">Semua Status</option>
+          <option value="Belum Bayar">Belum Bayar</option>
+          <option value="Parsial">Parsial</option>
+          <option value="Lunas">Lunas</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        {filtered.length === 0 && (
+          <div className="text-center py-16 text-gray-500">
+            <Inbox size={40} className="mx-auto mb-3 opacity-30" />
+            <p>Tidak ada data yang cocok dengan filter.</p>
+          </div>
+        )}
+        {filtered.map(({ student: s, monthDetails, totalTarget, totalPaid, totalOutstanding, status }) => {
+          const isExpanded = expandedId === s.id;
+          const session = getStudentSession(s);
+          const hasOverrides = s.paymentPlanOverrides && Object.keys(s.paymentPlanOverrides).length > 0;
+          return (
+            <div key={s.id} className={`rounded-xl border transition-all ${isExpanded ? 'border-[#00D4FF]/40 bg-[#0D1520]' : 'border-gray-800 bg-[#151B26] hover:border-gray-600'}`}>
+              <div className="w-full p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                {/* Clickable left section — div to avoid nested button issues */}
+                <div className="flex-1 min-w-0 cursor-pointer"
+                  onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-white">{s.name}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${statusColor(status)}`}>{status}</span>
+                    {totalOutstanding > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold">
+                        Tunggak Rp {totalOutstanding.toLocaleString('id-ID')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    <p className="text-xs text-gray-400">{s.class} &bull; {session}</p>
+                    {/* Plan badge — shows base plan; if overrides exist, show indicator */}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide ${
+                      (s.paymentPlan || 'Monthly') === 'Per Visit'
+                        ? 'bg-purple-500/15 text-purple-300 border-purple-500/40'
+                        : 'bg-blue-500/15 text-blue-300 border-blue-500/40'
+                    }`}>
+                      {(s.paymentPlan || 'Monthly') === 'Per Visit' ? 'Per Visit' : 'Monthly'}
+                    </span>
+                    {hasOverrides && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 font-semibold">
+                        ✦ ada override bulanan
+                      </span>
+                    )}
+                  </div>
+                  {!s.billingStartMonth && (
+                    <p className="text-[10px] text-amber-400 mt-0.5 flex items-center gap-1">
+                      <AlertCircle size={10} />
+                      Tanggal mulai tagih belum diisi &mdash; data dihitung dari kehadiran/pembayaran pertama.
+                    </p>
+                  )}
+                </div>
+                {/* Right: amounts + edit plan button + chevron */}
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                    <p className="text-[10px] text-gray-500">Tagihan</p>
+                    <p className="text-sm font-semibold text-white">Rp {totalTarget.toLocaleString('id-ID')}</p>
+                  </div>
+                  <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                    <p className="text-[10px] text-gray-500">Dibayar</p>
+                    <p className="text-sm font-semibold text-emerald-400">Rp {totalPaid.toLocaleString('id-ID')}</p>
+                  </div>
+                  <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                    <p className="text-[10px] text-gray-500">Sisa</p>
+                    <p className={`text-sm font-bold ${totalOutstanding > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Rp {totalOutstanding.toLocaleString('id-ID')}</p>
+                  </div>
+                  {/* ── Shortcut: Edit Plan per Bulan ── */}
+                  <button
+                    type="button"
+                    title="Edit tipe bayar per bulan"
+                    onClick={(e) => { e.stopPropagation(); openPlanEdit(e, s); }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#00D4FF]/10 hover:bg-[#00D4FF]/20 border border-[#00D4FF]/30 text-[#00D4FF] text-[11px] font-semibold transition-colors shrink-0"
+                  >
+                    <Edit2 size={12} />
+                    <span className="hidden sm:inline">Plan</span>
+                  </button>
+                  <div className="cursor-pointer p-1" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                    <ChevronDown size={16} className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
+              </div>
+
+              {isExpanded && (
+                <div className="border-t border-gray-800 px-4 pb-4 pt-3 space-y-2">
+                  {monthDetails.length === 0 && <p className="text-gray-500 text-sm text-center py-4">Belum ada tagihan tercatat.</p>}
+                  {monthDetails.map(({ yr, mo, target, paid, outstanding, attRecords }) => {
+                    const monthKey = `${s.id}-${yr}-${mo}`;
+                    const isMonthOpen = expandedMonth === monthKey;
+                    const presentDates = attRecords.filter(a => a.status === 'Present');
+                    const isCurrent = yr === currentYear && mo === currentMonth;
+                    const mPrefix = `${yr}-${String(mo).padStart(2,'0')}`;
+                    const overrides = s.paymentPlanOverrides || {};
+                    const effectivePlanThisMonth = overrides[mPrefix] || s.paymentPlan || 'Monthly';
+                    const isOverridden = !!overrides[mPrefix];
+                    return (
+                      <div key={monthKey} className={`rounded-lg border ${outstanding > 0 ? 'border-rose-500/20 bg-rose-500/5' : 'border-gray-700/50 bg-[#0B0F19]'}`}>
+                        <button className="w-full text-left px-4 py-3 flex items-center gap-3"
+                          onClick={() => setExpandedMonth(isMonthOpen ? null : monthKey)}>
+                          <div className="flex-1 flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-white">{MONTHS[mo - 1]} {yr}</span>
+                            {isCurrent && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#00D4FF]/20 text-[#00D4FF] border border-[#00D4FF]/30 font-semibold">Bulan Ini</span>}
+                            {/* Effective plan badge for this month */}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide border ${
+                              effectivePlanThisMonth === 'Per Visit'
+                                ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                                : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                            } ${isOverridden ? 'ring-1 ring-amber-400/50' : ''}`}>
+                              {effectivePlanThisMonth === 'Per Visit' ? 'Per Visit' : 'Monthly'}
+                              {isOverridden && ' ✦'}
+                            </span>
+                            <span className="text-[11px] text-gray-400">{presentDates.length}x hadir</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right"><p className="text-[10px] text-gray-500">Target</p><p className="text-xs font-semibold text-white">Rp {target.toLocaleString('id-ID')}</p></div>
+                            <div className="text-right"><p className="text-[10px] text-gray-500">Bayar</p><p className="text-xs font-semibold text-emerald-400">Rp {paid.toLocaleString('id-ID')}</p></div>
+                            <div className="text-right"><p className="text-[10px] text-gray-500">Sisa</p><p className={`text-xs font-bold ${outstanding > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Rp {outstanding.toLocaleString('id-ID')}</p></div>
+                            <ChevronDown size={13} className={`text-gray-500 transition-transform shrink-0 ${isMonthOpen ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+                        {isMonthOpen && (
+                          <div className="px-4 pb-3 border-t border-gray-700/50 pt-3">
+                            {attRecords.length === 0 ? (
+                              <p className="text-gray-500 text-xs">Belum ada data kehadiran bulan ini.</p>
+                            ) : (
+                              <>
+                                <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide mb-2">Rekap Kehadiran</p>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                  {attRecords.map((a, i) => {
+                                    const d = new Date(a.date + 'T00:00:00');
+                                    const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+                                    return (
+                                      <div key={i} className={`text-center rounded-lg px-2.5 py-1.5 text-[11px] font-semibold border ${a.status === 'Present' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : a.status === 'Absent' ? 'bg-rose-500/15 text-rose-400 border-rose-500/30' : 'bg-gray-500/15 text-gray-400 border-gray-600'}`}>
+                                        <div className="font-bold">{dayNames[d.getDay()]}</div>
+                                        <div>{String(d.getDate()).padStart(2, '0')}</div>
+                                        <div className="text-[9px] opacity-70">{a.status === 'Present' ? 'Hadir' : a.status === 'Absent' ? 'Absen' : a.status}</div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+                            {(() => {
+                              const payRecs = (db.payments || []).filter(p =>
+                                String(p.studentId) === String(s.id) && Number(p.month) === mo && Number(p.year) === yr
+                              );
+                              if (payRecs.length === 0) return null;
+                              return (
+                                <div className="space-y-1">
+                                  <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide mb-1.5">Pembayaran Diterima</p>
+                                  {payRecs.map((p, i) => (
+                                    <div key={i} className="flex items-center justify-between bg-[#0B0F19] rounded-lg px-3 py-2">
+                                      <div>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${statusColor(p.status)}`}>{p.status}</span>
+                                        <span className="text-[11px] text-gray-400 ml-2">{p.method || '-'}</span>
+                                        {p.date && <span className="text-[11px] text-gray-500 ml-2">{p.date}</span>}
+                                      </div>
+                                      <span className="text-sm font-bold text-emerald-400">Rp {Number(p.amount).toLocaleString('id-ID')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {totalOutstanding > 0 && s.whatsapp && (
+                    <button
+                      onClick={() => {
+                        const unpaidMonths = monthDetails.filter(m => m.outstanding > 0);
+                        const monthList = unpaidMonths.map(m => `- ${MONTHS[m.mo - 1]} ${m.yr}: Rp ${m.outstanding.toLocaleString('id-ID')}`).join('\n');
+                        const msg = `Halo, orang tua/wali ${s.name}.\n\nKami menginformasikan bahwa masih terdapat tunggakan SPP sebagai berikut:\n\n${monthList}\n\nTotal tunggakan: Rp ${totalOutstanding.toLocaleString('id-ID')}\n\nMohon segera diselesaikan. Terima kasih.\n\n- English Club Gresik`;
+                        window.open(`https://wa.me/${normalizeWhatsapp(s.whatsapp)}?text=${encodeURIComponent(msg)}`, '_blank');
+                      }}
+                      className="w-full mt-1 flex items-center justify-center gap-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 text-green-400 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors"
+                    >
+                      <MessageCircle size={15} />
+                      Kirim Pengingat via WhatsApp
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Plan Per Bulan Modal ────────────────────────────────────────────── */}
+      {planEditStudent && (() => {
+        const months = getMonthRangeForStudent(planEditStudent);
+        const basePlan = planEditStudent.paymentPlan || 'Monthly';
+        return ReactDOM.createPortal(
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}
+            onClick={() => setPlanEditStudent(null)}
+          >
+            <div
+              className="bg-[#151B26] border border-[#00D4FF]/30 rounded-2xl shadow-2xl w-full max-w-md flex flex-col"
+              style={{ maxHeight: '85vh' }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between shrink-0">
+                <div>
+                  <p className="text-[11px] text-[#00D4FF] font-semibold uppercase tracking-wider mb-0.5">Edit Tipe Bayar</p>
+                  <h3 className="text-white font-bold text-base">{planEditStudent.name}</h3>
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    Base plan: <span className={`font-semibold ${basePlan === 'Per Visit' ? 'text-purple-300' : 'text-blue-300'}`}>{basePlan}</span>
+                    &nbsp;&bull;&nbsp;Override berlaku per bulan
+                  </p>
+                </div>
+                <button onClick={() => setPlanEditStudent(null)} className="text-gray-500 hover:text-white p-1">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Month list */}
+              <div className="overflow-y-auto flex-1 custom-scrollbar px-5 py-3 space-y-2">
+                <p className="text-[11px] text-gray-500 mb-3">
+                  Pilih tipe pembayaran untuk tiap bulan. Bulan yang sudah sesuai base plan tidak perlu diubah.
+                  Override aktif ditandai <span className="text-amber-400 font-semibold">✦</span>
+                </p>
+                {months.map(({ yr, mo }) => {
+                  const key = `${yr}-${String(mo).padStart(2, '0')}`;
+                  const val = planEditDraft[key] || basePlan;
+                  const isOverride = val !== basePlan;
+                  const isCurrent = yr === currentYear && mo === currentMonth;
+                  return (
+                    <div key={key} className={`flex items-center justify-between rounded-xl px-4 py-3 border ${isOverride ? 'border-amber-500/30 bg-amber-500/5' : 'border-gray-700/50 bg-[#0B0F19]'}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white">{MONTHS[mo - 1]} {yr}</span>
+                        {isCurrent && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#00D4FF]/20 text-[#00D4FF] border border-[#00D4FF]/30 font-semibold">Bulan Ini</span>}
+                        {isOverride && <span className="text-[10px] text-amber-400 font-bold">✦ override</span>}
+                      </div>
+                      {/* Toggle Monthly / Per Visit */}
+                      <div className="flex gap-1.5 shrink-0">
+                        {['Monthly', 'Per Visit'].map(plan => (
+                          <button
+                            key={plan}
+                            onClick={() => setPlanEditDraft(d => ({ ...d, [key]: plan }))}
+                            className={`text-[11px] px-3 py-1.5 rounded-lg font-semibold border transition-colors ${
+                              val === plan
+                                ? plan === 'Per Visit'
+                                  ? 'bg-purple-500/30 text-purple-200 border-purple-500/50'
+                                  : 'bg-blue-500/30 text-blue-200 border-blue-500/50'
+                                : 'bg-transparent text-gray-500 border-gray-700 hover:border-gray-500'
+                            }`}
+                          >
+                            {plan === 'Per Visit' ? 'Per Visit' : 'Monthly'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-4 border-t border-gray-800 flex gap-3 shrink-0">
+                <button
+                  onClick={() => setPlanEditStudent(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm font-semibold hover:bg-gray-700/30 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={savePlanEdit}
+                  className="flex-1 py-2.5 rounded-xl bg-[#00D4FF] text-black text-sm font-bold hover:bg-[#00bbdd] transition-colors"
+                >
+                  Simpan Override
+                </button>
+              </div>
+            </div>
+          </div>
+          , document.body
+        );
+      })()}
+      {/* ─────────────────────────────────────────────────────────────────────── */}
+    </div>
+  );
+}
+
+
 function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleShareImage, downloadPNG }) {
   const [view, setView] = useState('directory');
   const [dirType, setDirType] = useState('student');
@@ -6674,7 +7449,8 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
     const endMonthStr = endDate.substring(0, 7);
     
     // Fix 4: Only count attendance from student's current effective session (respects override)
-    const att = db.studentAttendance.filter((a) => a.studentId === student.id && a.date >= startDate && a.date <= endDate && isAttendanceValidForStudent(a, student));
+    // 'Not in Package' records are excluded from all stats — they are not absences.
+    const att = db.studentAttendance.filter((a) => a.studentId === student.id && a.date >= startDate && a.date <= endDate && isAttendanceValidForStudent(a, student) && a.status !== 'Not in Package');
     const presentCount = att.filter((a) => a.status === 'Present').length;
     const sickCount = att.filter((a) => a.status === 'Sick').length;
     const excusedCount = att.filter((a) => a.status === 'Excused').length;
@@ -8717,14 +9493,11 @@ function SettingsModule({ db, setDb, generateId, user, showToast, requestConfirm
             token,
             baseVersion: dbVersion.current,
             user: currentUser ? currentUser.name : 'SYSTEM',
-            payload: { ...db,
-              users: resetDialog.role !== 'tutor'
-                ? db.users.map(u => u.id === resetDialog.id ? {...u, password: newPassword, mustChangePassword: true} : u)
-                : db.users,
-              tutors: resetDialog.role === 'tutor'
-                ? db.tutors.map(t => t.id === resetDialog.id ? {...t, password: newPassword, mustChangePassword: true} : t)
-                : db.tutors,
-            }
+            // Kirim hanya koleksi yang berubah (delta), bukan seluruh DB.
+          // Mengirim seluruh db berisiko timeout & conflict karena GAS harus upsert semua koleksi.
+          payload: resetDialog.role !== 'tutor'
+            ? { users: db.users.map(u => u.id === resetDialog.id ? {...u, password: newPassword, mustChangePassword: true} : u) }
+            : { tutors: db.tutors.map(t => t.id === resetDialog.id ? {...t, password: newPassword, mustChangePassword: true} : t) }
           })
         })
         .then(r => r.json())
@@ -11167,7 +11940,8 @@ function DataExportModule({ db }) {
   );
 }
 
-function RecycleBinModule({ db, setDb, showToast, requestConfirm }) {
+function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletion }) {
+  // Gunakan onQueueDeletion dari parent agar deletions masuk ke sync debounce utama.
   const [selectedIds, setSelectedIds] = useState([]);
   const binItems = db.recycleBin || [];
 
@@ -11212,9 +11986,13 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm }) {
 
   const handlePermDelete = (binId) => {
     requestConfirm('Permanent Delete', 'WARNING: This will permanently delete the record. This cannot be undone. Continue?', () => {
+      if (onQueueDeletion) onQueueDeletion({ collection: 'recycleBin', id: binId });
       setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => x.binId !== binId) }));
       setSelectedIds((prev) => prev.filter((id) => id !== binId));
       showToast('Permanently Deleted', 'error');
+      // pendingDeletionsRef lokal akan diambil oleh getAuthToken+setDb di parent saat sync berikutnya.
+      // Karena RecycleBin punya pendingDeletionsRef sendiri yang tidak terhubung ke debounce parent,
+      // kita trigger sync langsung di sini via setDb spread agar useEffect sync parent mendeteksi perubahan.
     });
   };
 
@@ -11224,7 +12002,8 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm }) {
       'Permanent Delete Selected',
       `WARNING: This will permanently delete ${selectedIds.length} selected record(s). This cannot be undone. Continue?`,
       () => {
-        setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => !selectedIds.includes(x.binId)) }));
+        if (onQueueDeletion) selectedIds.forEach((id) => onQueueDeletion({ collection:'recycleBin', id }));
+         setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => !selectedIds.includes(x.binId) && !selectedIds.includes(x.id)) }));
         showToast(`${selectedIds.length} item(s) permanently deleted`, 'error');
         setSelectedIds([]);
       }
@@ -11244,7 +12023,13 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm }) {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div><h2 className="text-2xl font-bold text-white mb-1">Recycle Bin</h2><p className="text-gray-400 text-sm">Restore or permanently delete removed records.</p></div>
-        <Button onClick={() => requestConfirm('Empty Recycle Bin', 'Are you absolutely sure? This will PERMANENTLY delete all items in the bin. This cannot be undone.', () => { setDb(p => ({ ...p, recycleBin: [] })); showToast('Recycle bin emptied', 'warning'); })} variant="secondary" className="border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white" icon={Trash2} disabled={db.recycleBin.length === 0}>Empty Bin</Button>
+        <Button onClick={() => requestConfirm('Empty Recycle Bin', 'Are you absolutely sure? This will PERMANENTLY delete all items in the bin. This cannot be undone.', () => { 
+            setDb((p) => {
+              if (onQueueDeletion) (p.recycleBin || []).forEach((x) => onQueueDeletion({ collection:'recycleBin', id: x.binId || x.id }));
+              return { ...p, recycleBin: [] };
+            });
+            showToast('Recycle bin emptied', 'warning');
+          })} variant="secondary" className="border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white" icon={Trash2} disabled={db.recycleBin.length === 0}>Empty Bin</Button>
       </div>
       
       <Card className="p-0 flex flex-col overflow-hidden">
