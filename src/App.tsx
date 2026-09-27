@@ -157,16 +157,6 @@ const MERGE_ALL_COLS = [
 // Ini mencegah double-entry ketika dua perangkat (misal admin + tutor) submit
 // absensi sesi yang sama secara bersamaan. Keduanya mendapat id unik sehingga
 // lolos mergeByIds, tapi fungsi ini menyisakan hanya record TERBARU per siswa per sesi.
-// OPTIMASI: Cache parseT di luar loop — hindari re-define fungsi per iterasi
-const _parseAttTime = (item: any): number => {
-  const t = item.timestamp || item.updatedAt || item.date || '';
-  if (!t) return 0;
-  // Ganti spasi dengan T hanya jika diperlukan (string lokal "YYYY-MM-DD HH:mm:ss")
-  const s = String(t);
-  const ms = new Date(s.length === 19 && s[10] === ' ' ? s.replace(' ', 'T') : s).getTime();
-  return isNaN(ms) ? 0 : ms;
-};
-
 const dedupeAttendance = (records: any[]): any[] => {
   const map = new Map<string, any>();
   (records || []).forEach(r => {
@@ -176,7 +166,12 @@ const dedupeAttendance = (records: any[]): any[] => {
     if (!existing) {
       map.set(key, r);
     } else {
-      if (_parseAttTime(r) > _parseAttTime(existing)) map.set(key, r);
+      const parseT = (item: any) => {
+        const t = item.timestamp || item.updatedAt || item.date || '';
+        const ms = new Date(String(t).replace(' ', 'T')).getTime();
+        return isNaN(ms) ? 0 : ms;
+      };
+      if (parseT(r) > parseT(existing)) map.set(key, r);
     }
   });
   return Array.from(map.values());
@@ -294,13 +289,12 @@ const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] =
     return false;
   };
 
-  // 3. Last Write Wins (LWW) Time Parser (gunakan helper yang sama dengan dedupeAttendance)
+  // 3. Last Write Wins (LWW) Time Parser
   const parseTime = (item: any) => {
     if (!item) return 0;
     const t = item.updatedAt || item.timestamp || item.lastEditedAt || item.date;
     if (!t) return 0;
-    const s = String(t);
-    const ms = new Date(s.length === 19 && s[10] === ' ' ? s.replace(' ', 'T') : s).getTime();
+    const ms = new Date(String(t).replace(' ', 'T')).getTime();
     return isNaN(ms) ? 0 : ms;
   };
 
@@ -867,11 +861,10 @@ function useLocalStorage<T>(key: string, defaultValue: T): [T, (v: T) => void] {
       return defaultValue;
     }
   });
-  // useCallback: fungsi `set` stabil referensinya antar render → tidak trigger re-render child
-  const set = React.useCallback((v: T) => {
+  const set = (v: T) => {
     setValue(v);
     try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
-  }, [key]);
+  };
   return [value, set];
 }
 
@@ -1759,17 +1752,6 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
   const [leaderboardFilter, setLeaderboardFilter] = useState('All');
   const [expModalStudent, setExpModalStudent] = useState(null);
   const [expInput, setExpInput] = useState('');
-
-  // OPTIMASI: Hitung EXP semua siswa sekali saja menggunakan useMemo.
-  // calculateStudentEXP dipanggil per-siswa dan melakukan filter array besar — sangat mahal
-  // jika dijalankan ulang setiap render (misalnya saat ketik di input EXP).
-  const studentExpMap = useMemo(() => {
-    const map = new Map<string, number>();
-    (db.students || []).forEach(s => {
-      map.set(s.id, calculateStudentEXP(s.id, db));
-    });
-    return map;
-  }, [db.students, db.studentAttendance, db.assessments, db.materials]);
   
   const getActiveCount = (collection) => (db[collection] || []).filter((item) => item.status === 'Active' || item.active === 'Active').length;
   
@@ -1989,7 +1971,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                <tbody className="divide-y divide-gray-800">
                   {db.students.filter(s => s.status === 'Active' || s.active === 'Active')
                     .filter(s => leaderboardFilter === 'All' ? true : getStudentSession(s) === leaderboardFilter)
-                    .map(s => ({ ...s, exp: studentExpMap.get(s.id) ?? 0 }))
+                    .map(s => ({ ...s, exp: calculateStudentEXP(s.id, db) }))
                     .sort((a,b) => b.exp - a.exp)
                     .map((s, idx) => {
                        const lvl = getLevelInfo(s.exp);
@@ -2064,15 +2046,6 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
 const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected, language = 'en', showToast }: any) => {
   const [expModalStudent, setExpModalStudent] = useState(null);
   const [expInput, setExpInput] = useState('');
-
-  // OPTIMASI: Pre-hitung EXP semua siswa sekali, bukan per-render di tabel leaderboard
-  const tutorStudentExpMap = useMemo(() => {
-    const map = new Map<string, number>();
-    (db.students || []).forEach(s => {
-      map.set(s.id, calculateStudentEXP(s.id, db));
-    });
-    return map;
-  }, [db.students, db.studentAttendance, db.assessments, db.materials]);
   
   const dObj = new Date();
   const currentMonth = String(dObj.getMonth() + 1);
@@ -2272,7 +2245,7 @@ const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                </thead>
                <tbody className="divide-y divide-gray-800">
                   {activeStudents.filter(s => mySessions.includes(getStudentSession(s)))
-                    .map(s => ({ ...s, exp: tutorStudentExpMap.get(s.id) ?? 0 }))
+                    .map(s => ({ ...s, exp: calculateStudentEXP(s.id, db) }))
                     .sort((a,b) => b.exp - a.exp)
                     .map((s, idx) => {
                        const lvl = getLevelInfo(s.exp);
@@ -3259,72 +3232,41 @@ function MainApp() {
     loadData();
   }, []);
 
-  // Ref untuk throttle localStorage write — hindari stringify besar setiap render kecil
-  const lastLocalSaveRef = useRef<number>(0);
-  const lastLocalFpRef = useRef<string>('');
-
   useEffect(() => {
     if (isDbLoaded && db && Array.isArray(db.users)) {
-      // OPTIMASI: Hanya tulis ke localStorage jika fingerprint berubah ATAU sudah >5 detik.
-      // Mencegah JSON.stringify(db) besar (~1-5MB) dipanggil setiap render kecil.
-      const _LS_COLS = [
-        'users','students','tutors','studentAttendance','tutorAttendance',
-        'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
-      ];
-      const currentFp = _LS_COLS.map(col => {
-        const arr = db[col];
-        if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
-        const last = arr[arr.length - 1];
-        const ts = last?.updatedAt || last?.timestamp || last?.date || arr.length;
-        return `${col}:${arr.length}:${ts}`;
-      }).join('|');
-      const now = Date.now();
-      const fpChanged = currentFp !== lastLocalFpRef.current;
-      const timeElapsed = now - lastLocalSaveRef.current > 5000;
-      if (fpChanged || timeElapsed) {
-        lastLocalFpRef.current = currentFp;
-        lastLocalSaveRef.current = now;
-        localStorage.setItem('ecg_db', JSON.stringify(db));
-      }
+      // Selalu simpan ke local storage
+      localStorage.setItem('ecg_db', JSON.stringify(db));
       
       // Jika ini adalah proses muat data awal, JANGAN tembak ke Cloud agar tidak menimpa data server
       if (skipCloudSave.current) {
          skipCloudSave.current = false;
          // Inisialisasi snapshot entitas pada load awal agar guard clause di bawah punya baseline
-         // Pakai fingerprint ringan yang sama dengan guard clause di bawah
-         const _INIT_COLS = [
-           'users','students','tutors','studentAttendance','tutorAttendance',
-           'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
-         ];
-         prevEntitiesRef.current = _INIT_COLS.map(col => {
-           const arr = db[col];
-           if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
-           const lastItem = arr[arr.length - 1];
-           const ts = lastItem?.updatedAt || lastItem?.timestamp || lastItem?.date || arr.length;
-           return `${col}:${arr.length}:${ts}`;
-         }).join('|');
+         prevEntitiesRef.current = JSON.stringify({
+           users: db.users, students: db.students, tutors: db.tutors,
+           studentAttendance: db.studentAttendance, tutorAttendance: db.tutorAttendance,
+           journals: db.journals, assessments: db.assessments, payments: db.payments,
+           payroll: db.payroll, calendar: db.calendar, announcements: db.announcements,
+           recycleBin: db.recycleBin, materials: db.materials
+         });
          return;
       }
 
       // FIX (Silent Overwrite Race Condition): Guard clause — bandingkan hanya entitas
-      // inti (BUKAN logs). Gunakan fingerprint ringan (length + latest updatedAt per koleksi)
-      // daripada JSON.stringify penuh (~MB) untuk mencegah jank di setiap keystroke.
-      const ENTITY_COLS = [
-        'users','students','tutors','studentAttendance','tutorAttendance',
-        'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
-      ];
-      const entityFingerprint = ENTITY_COLS.map(col => {
-        const arr = db[col];
-        if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
-        const lastItem = arr[arr.length - 1];
-        const ts = lastItem?.updatedAt || lastItem?.timestamp || lastItem?.date || arr.length;
-        return `${col}:${arr.length}:${ts}`;
-      }).join('|');
-      if (prevEntitiesRef.current === entityFingerprint) {
+      // intuh (BUKAN logs). Jika tidak ada perubahan entitas, maka perubahan ini hanyalah
+      // log/field non-kritis dan TIDAK boleh memicu full-state push yang bisa menimpa
+      // data cloud dengan state lokal yang belum ter-update.
+      const currentEntities = JSON.stringify({
+        users: db.users, students: db.students, tutors: db.tutors,
+        studentAttendance: db.studentAttendance, tutorAttendance: db.tutorAttendance,
+        journals: db.journals, assessments: db.assessments, payments: db.payments,
+        payroll: db.payroll, calendar: db.calendar, announcements: db.announcements,
+        recycleBin: db.recycleBin, materials: db.materials
+      });
+      if (prevEntitiesRef.current === currentEntities) {
         // Hanya log/field non-kritis yang berubah — skip sync ke cloud
         return;
       }
-      prevEntitiesRef.current = entityFingerprint;
+      prevEntitiesRef.current = currentEntities;
 
       // TANDAI BAHWA DATABASE LOKAL SUDAH DIMODIFIKASI OLEH USER DI SESI INI
       // (Ini mengunci data lokal agar tidak ditimpa oleh delay response dari Cloud)
@@ -3363,18 +3305,9 @@ function MainApp() {
         // agar data yang dikirim ke cloud adalah versi TERBARU saat timer meletus —
         // bukan versi 2 detik lalu saat useEffect pertama kali berjalan.
         const latestDb = latestDbRef.current;
-        // Fingerprint kolom untuk deteksi perubahan — lebih ringan dari JSON.stringify penuh
-        const colFingerprint = (arr: any[]) => {
-          if (!Array.isArray(arr) || arr.length === 0) return '0';
-          const last = arr[arr.length - 1];
-          const ts = last?.updatedAt || last?.timestamp || last?.date || arr.length;
-          return `${arr.length}:${ts}`;
-        };
         DELTA_COLS.forEach(col => {
           dbSnapshotAtRequest[col] = latestDb[col];
-          const localFp = colFingerprint(latestDb[col] as any[]);
-          const snapFp  = colFingerprint((lastSnap[col] as any[]) || []);
-          if (localFp !== snapFp) {
+          if (JSON.stringify(latestDb[col]) !== JSON.stringify(lastSnap[col])) {
             deltaPayload[col] = latestDb[col];
           }
         });
@@ -3443,20 +3376,14 @@ function MainApp() {
                // dengan dbSnapshotAtRequest (data yang baru saja berhasil dikirim).
                // Jika sama → tidak ada perubahan baru selama fetch berlangsung → aman di-reset.
                // Jika berbeda → ada input baru dari user → biarkan dirty agar sync ulang terjadi.
-               // Gunakan fingerprint ringan untuk cek dirty (sama dengan guard clause di atas)
-               const _POST_SYNC_COLS = [
-                 'users','students','tutors','studentAttendance','tutorAttendance',
-                 'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
-               ];
-               const mkFp = (src) => _POST_SYNC_COLS.map(col => {
-                 const arr = src[col];
-                 if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
-                 const lastItem = arr[arr.length - 1];
-                 const ts = lastItem?.updatedAt || lastItem?.timestamp || lastItem?.date || arr.length;
-                 return `${col}:${arr.length}:${ts}`;
-               }).join('|');
-               const currentEntitiesStr = mkFp(latestDbRef.current);
-               const snapshotStr = mkFp(dbSnapshotAtRequest);
+               const currentEntitiesStr = JSON.stringify({
+                   users: latestDbRef.current.users, students: latestDbRef.current.students, tutors: latestDbRef.current.tutors,
+                   studentAttendance: latestDbRef.current.studentAttendance, tutorAttendance: latestDbRef.current.tutorAttendance,
+                   journals: latestDbRef.current.journals, assessments: latestDbRef.current.assessments, payments: latestDbRef.current.payments,
+                   payroll: latestDbRef.current.payroll, calendar: latestDbRef.current.calendar, announcements: latestDbRef.current.announcements,
+                   recycleBin: latestDbRef.current.recycleBin, materials: latestDbRef.current.materials
+               });
+               const snapshotStr = JSON.stringify(dbSnapshotAtRequest);
                if (currentEntitiesStr === snapshotStr) {
                    isDbDirty.current = false;
                }
@@ -3553,7 +3480,7 @@ function MainApp() {
            // prevEntitiesRef dikosongkan agar ketikan selanjutnya bisa memicu trigger fetch ulang
            prevEntitiesRef.current = null;
         });
-      }, 800); // Tunggu 800ms setelah user berhenti mengubah data sebelum mem-fetch (dioptimasi dari 1000ms)
+      }, 1000); // Tunggu 1 detik setelah user berhenti mengubah data sebelum mem-fetch
     }
   }, [db, isDbLoaded]);
 
