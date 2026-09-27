@@ -157,6 +157,16 @@ const MERGE_ALL_COLS = [
 // Ini mencegah double-entry ketika dua perangkat (misal admin + tutor) submit
 // absensi sesi yang sama secara bersamaan. Keduanya mendapat id unik sehingga
 // lolos mergeByIds, tapi fungsi ini menyisakan hanya record TERBARU per siswa per sesi.
+// OPTIMASI: Cache parseT di luar loop — hindari re-define fungsi per iterasi
+const _parseAttTime = (item: any): number => {
+  const t = item.timestamp || item.updatedAt || item.date || '';
+  if (!t) return 0;
+  // Ganti spasi dengan T hanya jika diperlukan (string lokal "YYYY-MM-DD HH:mm:ss")
+  const s = String(t);
+  const ms = new Date(s.length === 19 && s[10] === ' ' ? s.replace(' ', 'T') : s).getTime();
+  return isNaN(ms) ? 0 : ms;
+};
+
 const dedupeAttendance = (records: any[]): any[] => {
   const map = new Map<string, any>();
   (records || []).forEach(r => {
@@ -166,25 +176,72 @@ const dedupeAttendance = (records: any[]): any[] => {
     if (!existing) {
       map.set(key, r);
     } else {
-      const parseT = (item: any) => {
-        const t = item.timestamp || item.updatedAt || item.date || '';
-        const ms = new Date(String(t).replace(' ', 'T')).getTime();
-        return isNaN(ms) ? 0 : ms;
-      };
-      if (parseT(r) > parseT(existing)) map.set(key, r);
+      if (_parseAttTime(r) > _parseAttTime(existing)) map.set(key, r);
     }
   });
   return Array.from(map.values());
 };
 
+// PERM-DELETE GUARD: Simpan ID bin yang sudah dihapus permanen di localStorage
+// agar cloud merge tidak mengembalikan item tersebut ke local state.
+const PERM_DELETED_KEY = 'ecg_perm_deleted_bin_ids';
+const getPermDeletedBinIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(PERM_DELETED_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch { return new Set(); }
+};
+const addPermDeletedBinIds = (ids: string[]) => {
+  try {
+    const existing = getPermDeletedBinIds();
+    ids.forEach(id => existing.add(id));
+    localStorage.setItem(PERM_DELETED_KEY, JSON.stringify(Array.from(existing)));
+  } catch {}
+};
+
 const mergeCloudData = (prevDb: any, normalizedCloud: any): any => {
   const localBin = Array.isArray(prevDb.recycleBin) ? prevDb.recycleBin : [];
-  const cloudBin = Array.isArray(normalizedCloud.recycleBin) ? normalizedCloud.recycleBin : [];
+  // Filter cloudBin: buang item yang sudah perm-deleted secara lokal
+  const permDeleted = getPermDeletedBinIds();
+  const rawCloudBin = Array.isArray(normalizedCloud.recycleBin) ? normalizedCloud.recycleBin : [];
+  const cloudBin = rawCloudBin.filter((b: any) => {
+    const bid = b.binId || b.id;
+    return !bid || !permDeleted.has(String(bid));
+  });
   const combinedBin = mergeByIds(localBin, cloudBin, []);
+
+  // BUGFIX SISWA MUNCUL KEMBALI: Bangun set ID yang ada di recycleBin LOKAL secara langsung
+  // sebagai lapis pertahanan kedua. mergeByIds sudah memfilter via binSet, tapi kalau
+  // b.data parsing gagal di cloud bin, siswa tetap lolos. Guard ini memakai localBin
+  // (sudah pasti ter-parse dengan benar) untuk memblok cloud students/tutors/users.
+  const localDeletedIds = new Set<string>(
+    localBin.flatMap((b: any) => {
+      const ids: string[] = [];
+      if (b.data?.id) ids.push(String(b.data.id));
+      if (b.dataId) ids.push(String(b.dataId));
+      if (typeof b.data === 'string') {
+        try { const p = JSON.parse(b.data); if (p?.id) ids.push(String(p.id)); } catch {}
+      }
+      return ids;
+    }).filter(Boolean)
+  );
+
   const merged: any = { ...normalizedCloud, recycleBin: combinedBin };
   MERGE_ALL_COLS.filter(col => col !== 'recycleBin').forEach(col => {
-    const local = Array.isArray(prevDb[col]) ? prevDb[col] : [];
-    const cloud = Array.isArray(normalizedCloud[col]) ? normalizedCloud[col] : [];
+    let local = Array.isArray(prevDb[col]) ? prevDb[col] : [];
+    let cloud = Array.isArray(normalizedCloud[col]) ? normalizedCloud[col] : [];
+    // Buang item dari cloud yang ID-nya ada di recycleBin lokal
+    if (localDeletedIds.size > 0) {
+      cloud = cloud.filter((item: any) => {
+        if (!item?.id) return true;
+        // Direct ID match (siswa/tutor/user dihapus)
+        if (localDeletedIds.has(String(item.id))) return false;
+        // Cascade: studentId atau scheduleId ada di bin
+        if (item.studentId && localDeletedIds.has(String(item.studentId))) return false;
+        if (item.scheduleId && localDeletedIds.has(String(item.scheduleId))) return false;
+        return true;
+      });
+    }
     merged[col] = mergeByIds(local, cloud, combinedBin);
   });
   // Terapkan dedup attendance setelah semua kolom di-merge
@@ -210,7 +267,20 @@ const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] =
     const delTime = new Date(String(b.deletedAt).replace(' ', 'T')).getTime(); // Safe parsing
     return isNaN(delTime) || (Date.now() - delTime < THIRTY_DAYS_MS);
   });
-  const binSet = new Set(activeBin.map((b: any) => String(b.data?.id)).filter(Boolean));
+  // BUGFIX SISWA MUNCUL KEMBALI: Tambah fallback b.dataId (GAS kadang flatten data.id → dataId)
+  // dan b.data sebagai string parsed on-the-fly (double-guard jika normalizeData terlewat).
+  const binSet = new Set(activeBin.flatMap((b: any) => {
+    const ids: string[] = [];
+    // Primary: data.id (nested object)
+    if (b.data?.id) ids.push(String(b.data.id));
+    // Fallback 1: GAS flattened dataId field
+    if (b.dataId) ids.push(String(b.dataId));
+    // Fallback 2: data masih string JSON (tidak sempat di-parse normalizeData)
+    if (typeof b.data === 'string') {
+      try { const p = JSON.parse(b.data); if (p?.id) ids.push(String(p.id)); } catch {}
+    }
+    return ids;
+  }).filter(Boolean));
   
   const merged = new Map<string, any>();
 
@@ -224,12 +294,13 @@ const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] =
     return false;
   };
 
-  // 3. Last Write Wins (LWW) Time Parser
+  // 3. Last Write Wins (LWW) Time Parser (gunakan helper yang sama dengan dedupeAttendance)
   const parseTime = (item: any) => {
     if (!item) return 0;
     const t = item.updatedAt || item.timestamp || item.lastEditedAt || item.date;
     if (!t) return 0;
-    const ms = new Date(String(t).replace(' ', 'T')).getTime();
+    const s = String(t);
+    const ms = new Date(s.length === 19 && s[10] === ' ' ? s.replace(' ', 'T') : s).getTime();
     return isNaN(ms) ? 0 : ms;
   };
 
@@ -796,10 +867,11 @@ function useLocalStorage<T>(key: string, defaultValue: T): [T, (v: T) => void] {
       return defaultValue;
     }
   });
-  const set = (v: T) => {
+  // useCallback: fungsi `set` stabil referensinya antar render → tidak trigger re-render child
+  const set = React.useCallback((v: T) => {
     setValue(v);
     try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
-  };
+  }, [key]);
   return [value, set];
 }
 
@@ -1687,6 +1759,17 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
   const [leaderboardFilter, setLeaderboardFilter] = useState('All');
   const [expModalStudent, setExpModalStudent] = useState(null);
   const [expInput, setExpInput] = useState('');
+
+  // OPTIMASI: Hitung EXP semua siswa sekali saja menggunakan useMemo.
+  // calculateStudentEXP dipanggil per-siswa dan melakukan filter array besar — sangat mahal
+  // jika dijalankan ulang setiap render (misalnya saat ketik di input EXP).
+  const studentExpMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (db.students || []).forEach(s => {
+      map.set(s.id, calculateStudentEXP(s.id, db));
+    });
+    return map;
+  }, [db.students, db.studentAttendance, db.assessments, db.materials]);
   
   const getActiveCount = (collection) => (db[collection] || []).filter((item) => item.status === 'Active' || item.active === 'Active').length;
   
@@ -1906,7 +1989,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                <tbody className="divide-y divide-gray-800">
                   {db.students.filter(s => s.status === 'Active' || s.active === 'Active')
                     .filter(s => leaderboardFilter === 'All' ? true : getStudentSession(s) === leaderboardFilter)
-                    .map(s => ({ ...s, exp: calculateStudentEXP(s.id, db) }))
+                    .map(s => ({ ...s, exp: studentExpMap.get(s.id) ?? 0 }))
                     .sort((a,b) => b.exp - a.exp)
                     .map((s, idx) => {
                        const lvl = getLevelInfo(s.exp);
@@ -1981,6 +2064,15 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
 const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected, language = 'en', showToast }: any) => {
   const [expModalStudent, setExpModalStudent] = useState(null);
   const [expInput, setExpInput] = useState('');
+
+  // OPTIMASI: Pre-hitung EXP semua siswa sekali, bukan per-render di tabel leaderboard
+  const tutorStudentExpMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (db.students || []).forEach(s => {
+      map.set(s.id, calculateStudentEXP(s.id, db));
+    });
+    return map;
+  }, [db.students, db.studentAttendance, db.assessments, db.materials]);
   
   const dObj = new Date();
   const currentMonth = String(dObj.getMonth() + 1);
@@ -2180,7 +2272,7 @@ const TutorDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
                </thead>
                <tbody className="divide-y divide-gray-800">
                   {activeStudents.filter(s => mySessions.includes(getStudentSession(s)))
-                    .map(s => ({ ...s, exp: calculateStudentEXP(s.id, db) }))
+                    .map(s => ({ ...s, exp: tutorStudentExpMap.get(s.id) ?? 0 }))
                     .sort((a,b) => b.exp - a.exp)
                     .map((s, idx) => {
                        const lvl = getLevelInfo(s.exp);
@@ -2446,11 +2538,22 @@ const normalizeData = (data) => {
    // CLEANUP RECYCLE BIN: Hapus permanen data yang sudah lebih dari 30 hari di tong sampah
    if (norm.recycleBin && Array.isArray(norm.recycleBin)) {
       const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-      norm.recycleBin = norm.recycleBin.filter(b => {
-         if (!b.deletedAt) return true;
-         const delTime = new Date(String(b.deletedAt).replace(' ', 'T')).getTime();
-         return isNaN(delTime) || (Date.now() - delTime < THIRTY_DAYS);
-      });
+      norm.recycleBin = norm.recycleBin
+        .map(b => {
+          // BUGFIX SISWA MUNCUL KEMBALI: GAS/Sheets menyimpan field 'data' sebagai
+          // JSON string. Jika tidak di-parse, b.data?.id = undefined → binSet kosong
+          // → siswa dari cloud tidak difilter → muncul kembali setelah sync.
+          let parsedData = b.data;
+          if (typeof b.data === 'string') {
+            try { parsedData = JSON.parse(b.data); } catch { parsedData = {}; }
+          }
+          return { ...b, data: parsedData };
+        })
+        .filter(b => {
+           if (!b.deletedAt) return true;
+           const delTime = new Date(String(b.deletedAt).replace(' ', 'T')).getTime();
+           return isNaN(delTime) || (Date.now() - delTime < THIRTY_DAYS);
+        });
    }
    // --- END PATCH BUG ---
 
@@ -2622,6 +2725,10 @@ function MainApp() {
   const [isCloudConnected, setIsCloudConnected] = useState(true);
   const [syncStatus, setSyncStatus] = useState('saved'); // State Baru: 'saved' | 'syncing' | 'error'
   const prevCloudState = useRef(true);
+  // FIX SYNC LAMA: Throttle toast "Cloud connection lost" — hanya muncul 1x per 2 menit.
+  // Tanpa ini, setiap retry 30 detik bisa memunculkan toast ulang jika isCloudConnected
+  // bolak-balik false → true → false akibat intermittent network.
+  const lastOfflineToastRef = useRef(0);
 
   // State untuk Bahasa (hanya aktif untuk student)
   const [language, setLanguage] = useState(() => localStorage.getItem('ecg_lang') || 'en');
@@ -2682,6 +2789,11 @@ function MainApp() {
   // BUGFIX #6: Ganti window._syncBusyAttempt (global, race condition multi-tab)
   // dengan useRef yang scoped ke instance komponen ini saja.
   const syncBusyAttempt = useRef(0);
+  // FIX SYNC LAMA: Counter kegagalan berturut-turut.
+  // isCloudConnected hanya di-set false setelah 2x gagal berturut-turut,
+  // bukan langsung dari 1 kegagalan — mencegah toast "Cloud connection lost"
+  // muncul saat GAS sekadar cold-start atau lambat sesaat.
+  const syncFailCount = useRef(0);
   // FIX DELTA PAYLOAD: Snapshot db terakhir yang BERHASIL tersinkron ke cloud.
   // Digunakan untuk menghitung delta (koleksi mana yang berubah) sebelum kirim ke server.
   // Dengan ini, kita TIDAK mengirim seluruh db — hanya koleksi yang benar-benar berubah,
@@ -3147,41 +3259,72 @@ function MainApp() {
     loadData();
   }, []);
 
+  // Ref untuk throttle localStorage write — hindari stringify besar setiap render kecil
+  const lastLocalSaveRef = useRef<number>(0);
+  const lastLocalFpRef = useRef<string>('');
+
   useEffect(() => {
     if (isDbLoaded && db && Array.isArray(db.users)) {
-      // Selalu simpan ke local storage
-      localStorage.setItem('ecg_db', JSON.stringify(db));
+      // OPTIMASI: Hanya tulis ke localStorage jika fingerprint berubah ATAU sudah >5 detik.
+      // Mencegah JSON.stringify(db) besar (~1-5MB) dipanggil setiap render kecil.
+      const _LS_COLS = [
+        'users','students','tutors','studentAttendance','tutorAttendance',
+        'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
+      ];
+      const currentFp = _LS_COLS.map(col => {
+        const arr = db[col];
+        if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
+        const last = arr[arr.length - 1];
+        const ts = last?.updatedAt || last?.timestamp || last?.date || arr.length;
+        return `${col}:${arr.length}:${ts}`;
+      }).join('|');
+      const now = Date.now();
+      const fpChanged = currentFp !== lastLocalFpRef.current;
+      const timeElapsed = now - lastLocalSaveRef.current > 5000;
+      if (fpChanged || timeElapsed) {
+        lastLocalFpRef.current = currentFp;
+        lastLocalSaveRef.current = now;
+        localStorage.setItem('ecg_db', JSON.stringify(db));
+      }
       
       // Jika ini adalah proses muat data awal, JANGAN tembak ke Cloud agar tidak menimpa data server
       if (skipCloudSave.current) {
          skipCloudSave.current = false;
          // Inisialisasi snapshot entitas pada load awal agar guard clause di bawah punya baseline
-         prevEntitiesRef.current = JSON.stringify({
-           users: db.users, students: db.students, tutors: db.tutors,
-           studentAttendance: db.studentAttendance, tutorAttendance: db.tutorAttendance,
-           journals: db.journals, assessments: db.assessments, payments: db.payments,
-           payroll: db.payroll, calendar: db.calendar, announcements: db.announcements,
-           recycleBin: db.recycleBin, materials: db.materials
-         });
+         // Pakai fingerprint ringan yang sama dengan guard clause di bawah
+         const _INIT_COLS = [
+           'users','students','tutors','studentAttendance','tutorAttendance',
+           'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
+         ];
+         prevEntitiesRef.current = _INIT_COLS.map(col => {
+           const arr = db[col];
+           if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
+           const lastItem = arr[arr.length - 1];
+           const ts = lastItem?.updatedAt || lastItem?.timestamp || lastItem?.date || arr.length;
+           return `${col}:${arr.length}:${ts}`;
+         }).join('|');
          return;
       }
 
       // FIX (Silent Overwrite Race Condition): Guard clause — bandingkan hanya entitas
-      // intuh (BUKAN logs). Jika tidak ada perubahan entitas, maka perubahan ini hanyalah
-      // log/field non-kritis dan TIDAK boleh memicu full-state push yang bisa menimpa
-      // data cloud dengan state lokal yang belum ter-update.
-      const currentEntities = JSON.stringify({
-        users: db.users, students: db.students, tutors: db.tutors,
-        studentAttendance: db.studentAttendance, tutorAttendance: db.tutorAttendance,
-        journals: db.journals, assessments: db.assessments, payments: db.payments,
-        payroll: db.payroll, calendar: db.calendar, announcements: db.announcements,
-        recycleBin: db.recycleBin, materials: db.materials
-      });
-      if (prevEntitiesRef.current === currentEntities) {
+      // inti (BUKAN logs). Gunakan fingerprint ringan (length + latest updatedAt per koleksi)
+      // daripada JSON.stringify penuh (~MB) untuk mencegah jank di setiap keystroke.
+      const ENTITY_COLS = [
+        'users','students','tutors','studentAttendance','tutorAttendance',
+        'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
+      ];
+      const entityFingerprint = ENTITY_COLS.map(col => {
+        const arr = db[col];
+        if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
+        const lastItem = arr[arr.length - 1];
+        const ts = lastItem?.updatedAt || lastItem?.timestamp || lastItem?.date || arr.length;
+        return `${col}:${arr.length}:${ts}`;
+      }).join('|');
+      if (prevEntitiesRef.current === entityFingerprint) {
         // Hanya log/field non-kritis yang berubah — skip sync ke cloud
         return;
       }
-      prevEntitiesRef.current = currentEntities;
+      prevEntitiesRef.current = entityFingerprint;
 
       // TANDAI BAHWA DATABASE LOKAL SUDAH DIMODIFIKASI OLEH USER DI SESI INI
       // (Ini mengunci data lokal agar tidak ditimpa oleh delay response dari Cloud)
@@ -3220,9 +3363,18 @@ function MainApp() {
         // agar data yang dikirim ke cloud adalah versi TERBARU saat timer meletus —
         // bukan versi 2 detik lalu saat useEffect pertama kali berjalan.
         const latestDb = latestDbRef.current;
+        // Fingerprint kolom untuk deteksi perubahan — lebih ringan dari JSON.stringify penuh
+        const colFingerprint = (arr: any[]) => {
+          if (!Array.isArray(arr) || arr.length === 0) return '0';
+          const last = arr[arr.length - 1];
+          const ts = last?.updatedAt || last?.timestamp || last?.date || arr.length;
+          return `${arr.length}:${ts}`;
+        };
         DELTA_COLS.forEach(col => {
           dbSnapshotAtRequest[col] = latestDb[col];
-          if (JSON.stringify(latestDb[col]) !== JSON.stringify(lastSnap[col])) {
+          const localFp = colFingerprint(latestDb[col] as any[]);
+          const snapFp  = colFingerprint((lastSnap[col] as any[]) || []);
+          if (localFp !== snapFp) {
             deltaPayload[col] = latestDb[col];
           }
         });
@@ -3232,6 +3384,11 @@ function MainApp() {
         // ─────────────────────────────────────────────────────────────────────────
 
         // Sinkronisasi ke Google App Script (Dilengkapi Token & DB Version)
+        // FIX SYNC LAMA: Tambah AbortController + 15 detik timeout.
+        // Tanpa ini, GAS cold-start bisa bikin request nggantung 60+ detik
+        // dan indikator "Sending to Cloud" tidak hilang sampai browser timeout sendiri.
+        const syncAbortCtrl = new AbortController();
+        const syncFetchTimeout = setTimeout(() => syncAbortCtrl.abort(), 15000);
         fetch(APPSCRIPT_URL, {
           method: 'POST',
           // WAJIB 1: Gunakan text/plain untuk menghindari pemblokiran CORS Preflight (OPTIONS)
@@ -3240,6 +3397,7 @@ function MainApp() {
           },
           // WAJIB 2: Google Apps Script melakukan 302 Redirect setelah POST. Browser harus mengikutinya.
           redirect: 'follow',
+          signal: syncAbortCtrl.signal,
           // Kirim hanya delta — bukan seluruh db
           body: JSON.stringify({ 
             action: 'sync', 
@@ -3253,6 +3411,7 @@ function MainApp() {
           })
         })
         .then(res => {
+           clearTimeout(syncFetchTimeout);
            if (!res.ok) throw new Error('Response AppScript gagal');
            return res.json().catch(() => ({})); 
         })
@@ -3261,6 +3420,8 @@ function MainApp() {
                return handleUnauthorized();
            }
            if (data.status === 'success') {
+               // FIX SYNC LAMA: Reset fail counter saat berhasil
+               syncFailCount.current = 0;
                // GAS mengembalikan updatedRows, insertedRows, deletedRows, dan changed.
                // data.changed === false berarti tidak ada baris baru/berubah (sudah identik).
                // Verifikasi berbasis field standar GAS — writtenCollections tidak dikirim GAS.
@@ -3282,14 +3443,20 @@ function MainApp() {
                // dengan dbSnapshotAtRequest (data yang baru saja berhasil dikirim).
                // Jika sama → tidak ada perubahan baru selama fetch berlangsung → aman di-reset.
                // Jika berbeda → ada input baru dari user → biarkan dirty agar sync ulang terjadi.
-               const currentEntitiesStr = JSON.stringify({
-                   users: latestDbRef.current.users, students: latestDbRef.current.students, tutors: latestDbRef.current.tutors,
-                   studentAttendance: latestDbRef.current.studentAttendance, tutorAttendance: latestDbRef.current.tutorAttendance,
-                   journals: latestDbRef.current.journals, assessments: latestDbRef.current.assessments, payments: latestDbRef.current.payments,
-                   payroll: latestDbRef.current.payroll, calendar: latestDbRef.current.calendar, announcements: latestDbRef.current.announcements,
-                   recycleBin: latestDbRef.current.recycleBin, materials: latestDbRef.current.materials
-               });
-               const snapshotStr = JSON.stringify(dbSnapshotAtRequest);
+               // Gunakan fingerprint ringan untuk cek dirty (sama dengan guard clause di atas)
+               const _POST_SYNC_COLS = [
+                 'users','students','tutors','studentAttendance','tutorAttendance',
+                 'journals','assessments','payments','payroll','calendar','announcements','recycleBin','materials'
+               ];
+               const mkFp = (src) => _POST_SYNC_COLS.map(col => {
+                 const arr = src[col];
+                 if (!Array.isArray(arr) || arr.length === 0) return `${col}:0`;
+                 const lastItem = arr[arr.length - 1];
+                 const ts = lastItem?.updatedAt || lastItem?.timestamp || lastItem?.date || arr.length;
+                 return `${col}:${arr.length}:${ts}`;
+               }).join('|');
+               const currentEntitiesStr = mkFp(latestDbRef.current);
+               const snapshotStr = mkFp(dbSnapshotAtRequest);
                if (currentEntitiesStr === snapshotStr) {
                    isDbDirty.current = false;
                }
@@ -3368,16 +3535,25 @@ function MainApp() {
            }
         })
         .catch((e) => {
+           clearTimeout(syncFetchTimeout);
            console.warn('AppScript Sync failed', e);
-           setIsCloudConnected(false);
-           setSyncStatus('error'); // SET INDIKATOR GAGAL
+           // FIX SYNC LAMA: Jangan langsung set offline dari 1 kegagalan.
+           // GAS bisa lambat/cold-start sesaat — naikkan counter dulu.
+           // Baru set isCloudConnected=false setelah 2x gagal berturut-turut
+           // agar toast "Cloud connection lost" tidak muncul dari gangguan sesaat.
+           syncFailCount.current = syncFailCount.current + 1;
+           setSyncStatus('error'); // SET INDIKATOR GAGAL (indikator kecil tetap muncul)
+           if (syncFailCount.current >= 2) {
+             setIsCloudConnected(false); // Baru benar-benar offline setelah 2x gagal
+             syncFailCount.current = 0;
+           }
            
            // PENAMBALAN FINAL: Lepaskan pengunci retry jika putus koneksi di tengah jalan
            syncBusyAttempt.current = 0;
            // prevEntitiesRef dikosongkan agar ketikan selanjutnya bisa memicu trigger fetch ulang
            prevEntitiesRef.current = null;
         });
-      }, 1000); // Tunggu 1 detik setelah user berhenti mengubah data sebelum mem-fetch
+      }, 800); // Tunggu 800ms setelah user berhenti mengubah data sebelum mem-fetch (dioptimasi dari 1000ms)
     }
   }, [db, isDbLoaded]);
 
@@ -3386,8 +3562,14 @@ function MainApp() {
     if (prevCloudState.current !== isCloudConnected) {
       if (isCloudConnected) {
         showToast('Cloud connection restored.', 'success');
+        lastOfflineToastRef.current = 0; // Reset throttle saat pulih
       } else {
-        showToast('Cloud connection lost. Running in offline mode.', 'warning');
+        // FIX SYNC LAMA: Throttle toast offline — hanya muncul 1x per 2 menit
+        const now = Date.now();
+        if (now - lastOfflineToastRef.current > 120000) {
+          showToast('Cloud connection lost. Running in offline mode.', 'warning');
+          lastOfflineToastRef.current = now;
+        }
       }
       prevCloudState.current = isCloudConnected;
     }
@@ -5363,10 +5545,12 @@ function TutorAttendanceModule({ db, setDb, user, showToast, softDelete, generat
     if (existingRecords.find((a) => (a.tutorId === user.id || (!a.tutorId && a.name === user.name)) && a.date === today)) {
        return showToast('Already checked in today', 'warning');
     }
-    // Fix #2: only allow check-in when there is a scheduled class today
+    // Fix #2 (relaxed): warn tutor if no calendar entry today, but still allow check-in.
+    // This covers classes that run beyond the last entry in the academic calendar.
     const hasScheduleToday = (db.calendar || []).some(c => c.date === today && c.tutor && c.tutor.split(' & ').includes(user.name));
     if (!hasScheduleToday) {
-       return showToast('No scheduled class today — check-in not allowed', 'warning');
+       showToast('No calendar entry for today — check-in recorded anyway', 'warning');
+       // (continue — do not return)
     }
     
     setIsSubmitting(true);
@@ -8244,9 +8428,12 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
   }, [db.journals]);
 
   // NEW: Filter available schedules from Calendar
+  // Tutors are allowed to fill journals for ALL their scheduled classes (including past the last
+  // calendar entry) — no date ceiling is applied for tutors.
   const availableSchedules = useMemo(() => {
+     const today = getTodayDateLocal();
      let scheds = [...(db.calendar || [])]
-        .filter(c => c.date <= getTodayDateLocal())
+        .filter(c => user.role === 'tutor' ? true : c.date <= today) // tutors: no date ceiling
         .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
      if (user.role === 'tutor') {
         scheds = scheds.filter(c => c.tutor && c.tutor.split(' & ').includes(user.name));
@@ -11986,13 +12173,12 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletio
 
   const handlePermDelete = (binId) => {
     requestConfirm('Permanent Delete', 'WARNING: This will permanently delete the record. This cannot be undone. Continue?', () => {
+      // BUGFIX: Catat ID ke perm-deleted guard agar tidak kembali saat merge cloud
+      addPermDeletedBinIds([String(binId)]);
       if (onQueueDeletion) onQueueDeletion({ collection: 'recycleBin', id: binId });
       setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => x.binId !== binId) }));
       setSelectedIds((prev) => prev.filter((id) => id !== binId));
       showToast('Permanently Deleted', 'error');
-      // pendingDeletionsRef lokal akan diambil oleh getAuthToken+setDb di parent saat sync berikutnya.
-      // Karena RecycleBin punya pendingDeletionsRef sendiri yang tidak terhubung ke debounce parent,
-      // kita trigger sync langsung di sini via setDb spread agar useEffect sync parent mendeteksi perubahan.
     });
   };
 
@@ -12002,8 +12188,10 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletio
       'Permanent Delete Selected',
       `WARNING: This will permanently delete ${selectedIds.length} selected record(s). This cannot be undone. Continue?`,
       () => {
+        // BUGFIX: Catat semua ID ke perm-deleted guard agar tidak kembali saat merge cloud
+        addPermDeletedBinIds(selectedIds.map(String));
         if (onQueueDeletion) selectedIds.forEach((id) => onQueueDeletion({ collection:'recycleBin', id }));
-         setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => !selectedIds.includes(x.binId) && !selectedIds.includes(x.id)) }));
+        setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => !selectedIds.includes(x.binId) && !selectedIds.includes(x.id)) }));
         showToast(`${selectedIds.length} item(s) permanently deleted`, 'error');
         setSelectedIds([]);
       }
@@ -12025,6 +12213,8 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletio
         <div><h2 className="text-2xl font-bold text-white mb-1">Recycle Bin</h2><p className="text-gray-400 text-sm">Restore or permanently delete removed records.</p></div>
         <Button onClick={() => requestConfirm('Empty Recycle Bin', 'Are you absolutely sure? This will PERMANENTLY delete all items in the bin. This cannot be undone.', () => { 
             setDb((p) => {
+              // BUGFIX: Catat semua bin ID ke perm-deleted guard sebelum dikosongkan
+              addPermDeletedBinIds((p.recycleBin || []).map((x: any) => String(x.binId || x.id)).filter(Boolean));
               if (onQueueDeletion) (p.recycleBin || []).forEach((x) => onQueueDeletion({ collection:'recycleBin', id: x.binId || x.id }));
               return { ...p, recycleBin: [] };
             });
