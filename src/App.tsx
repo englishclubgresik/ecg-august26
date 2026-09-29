@@ -4,7 +4,7 @@ import { Toaster, toast as sonnerToast } from 'sonner';
 import { Users, UserCheck, BookOpen, Calendar as CalendarIcon, DollarSign, FileText, Settings, LogOut, LayoutDashboard, Activity, ChartBar as BarChart3, Plus, Search, ListFilter as Filter, Download, Printer, Share2, Pencil as Edit2, UserCog, Trash2, CircleCheck as CheckCircle2, Circle as XCircle, ChevronDown, Menu, X, SquareCheck as CheckSquare, Briefcase, Bell, CircleAlert as AlertCircle, Eye, RefreshCw, Trash, ArchiveRestore, ArrowLeft, KeyRound, ShieldCheck, Shield, MessageSquare, GraduationCap, Clock, Hash, User, Award, QrCode, Quote, Cloud, CloudOff, Sun, CloudRain, CloudLightning, Droplets, Wind, Thermometer, Link as LinkIcon, MessageCircle, Check, Trophy, Target, Zap, Star, Medal, Mic, Terminal, Copy, Inbox, Database } from 'lucide-react';
 
 // Link Eksekusi Google App Script Anda
-const APPSCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwEz5ZxXjcBCQhoyyA0q5VJfiX3pFi68njg6tvy39n-U4u64HXRqu4OG7jbjZ8lWk-2EQ/exec';
+const APPSCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbK6RYe_n5f1Z_97fgYCaTFKUeMIhQG6WrpvEortmfnOtM8gDOxyBzijZKt-s-72qHcw/exec';
 
 declare global {
   interface Window {
@@ -2621,6 +2621,144 @@ const CloudAutoSaveIndicator = ({ status, language }: { status: string, language
   return null;
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONNECTION MONITOR PANEL
+// ═══════════════════════════════════════════════════════════════════════════
+const ConnectionMonitorPanel = ({
+  isCloudConnected, syncStatus, syncLog, isPingRunning,
+  appscriptUrl, language, onManualSync, onPing
+}: any) => {
+  const statusColor = syncStatus === 'saved' ? 'emerald' :
+                      syncStatus === 'syncing' || syncStatus === 'saving' ? 'yellow' : 'red';
+  const statusLabel = {
+    saved:   language === 'id' ? 'Tersimpan di Cloud' : 'Saved to Cloud',
+    syncing: language === 'id' ? 'Menyinkronkan...'  : 'Syncing...',
+    saving:  language === 'id' ? 'Tersimpan Lokal...' : 'Saved Locally...',
+    error:   language === 'id' ? 'Sync Error'         : 'Sync Error',
+  }[syncStatus] || syncStatus;
+
+  const maskedUrl = appscriptUrl.replace(/\/s\/[^/]+\//, '/s/****/');
+
+  return (
+    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-1">
+          {language === 'id' ? '🔌 Monitor Koneksi' : '🔌 Connection Monitor'}
+        </h2>
+        <p className="text-xs text-gray-500">
+          {language === 'id'
+            ? 'Pantau koneksi antara aplikasi dan Google Apps Script secara real-time.'
+            : 'Monitor the connection between this app and Google Apps Script in real time.'}
+        </p>
+      </div>
+
+      {/* ── Status cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* App status */}
+        <div className="bg-[#0F1623] border border-gray-800 rounded-2xl p-5 flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-500">
+            <Database size={13} /> {language === 'id' ? 'Aplikasi' : 'App'}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex rounded-full h-3 w-3 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+            <span className="text-emerald-400 font-bold text-sm">
+              {language === 'id' ? 'Berjalan Normal' : 'Running'}
+            </span>
+          </div>
+          <p className="text-xs text-gray-600 leading-relaxed">
+            {language === 'id' ? 'Data lokal tersedia dan siap digunakan.' : 'Local data is available and ready.'}
+          </p>
+        </div>
+
+        {/* GAS status */}
+        <div className={`bg-[#0F1623] border rounded-2xl p-5 flex flex-col gap-3 border-${statusColor}-800/60`}>
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-500">
+            <Cloud size={13} /> Google Apps Script
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`inline-flex rounded-full h-3 w-3 bg-${statusColor}-400 ${
+              syncStatus === 'syncing' || syncStatus === 'saving' ? 'animate-ping' : ''
+            } shadow-[0_0_8px_rgba(52,211,153,0.4)]`} />
+            <span className={`text-${statusColor}-400 font-bold text-sm`}>{statusLabel}</span>
+          </div>
+          <p className="text-xs text-gray-600 font-mono break-all">{maskedUrl}</p>
+        </div>
+      </div>
+
+      {/* ── Action buttons ── */}
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={onPing}
+          disabled={isPingRunning}
+          className="flex items-center gap-2 bg-[#151B26] hover:bg-[#1E293B] border border-gray-700 hover:border-[#00D4FF]/60 text-[#00D4FF] px-5 py-2.5 rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw size={14} className={isPingRunning ? 'animate-spin' : ''} />
+          {isPingRunning
+            ? (language === 'id' ? 'Pinging...' : 'Pinging...')
+            : (language === 'id' ? 'Ping Apps Script' : 'Ping Apps Script')}
+        </button>
+        <button
+          onClick={onManualSync}
+          className="flex items-center gap-2 bg-[#151B26] hover:bg-[#1E293B] border border-gray-700 hover:border-emerald-500/60 text-emerald-400 px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
+        >
+          <Cloud size={14} />
+          {language === 'id' ? 'Sync Manual' : 'Force Sync'}
+        </button>
+      </div>
+
+      {/* ── Log entries ── */}
+      <div className="bg-[#080C14] border border-gray-800 rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+          <span className="text-xs font-black uppercase tracking-widest text-gray-500">
+            {language === 'id' ? 'Log Koneksi' : 'Connection Log'}
+          </span>
+          <span className="text-[11px] text-gray-700">{syncLog.length} entries</span>
+        </div>
+        <div className="max-h-72 overflow-y-auto custom-scrollbar divide-y divide-gray-800/60">
+          {syncLog.length === 0 ? (
+            <div className="px-5 py-8 text-center text-xs text-gray-700">
+              {language === 'id'
+                ? 'Belum ada log. Coba Ping atau lakukan Sync Manual.'
+                : 'No log yet. Try Ping or Force Sync.'}
+            </div>
+          ) : syncLog.map((entry, i) => (
+            <div key={i} className="flex items-start gap-3 px-5 py-3">
+              <span className="text-[10px] font-mono text-gray-600 shrink-0 mt-0.5 w-20">{entry.time}</span>
+              <span className={`text-[10px] font-black uppercase tracking-widest shrink-0 mt-0.5 w-8 ${
+                entry.type === 'app' ? 'text-blue-400' : 'text-purple-400'
+              }`}>{entry.type.toUpperCase()}</span>
+              <span className={`mr-1 shrink-0 mt-0.5 ${
+                entry.status === 'ok'      ? 'text-emerald-400' :
+                entry.status === 'error'   ? 'text-red-400' : 'text-yellow-400'
+              }`}>
+                {entry.status === 'ok' ? '✓' : entry.status === 'error' ? '✗' : '⟳'}
+              </span>
+              <span className="text-xs text-gray-400 leading-relaxed break-all">{entry.msg}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Troubleshoot tips ── */}
+      {!isCloudConnected && (
+        <div className="bg-red-950/30 border border-red-800/40 rounded-2xl p-5 space-y-2">
+          <p className="text-red-400 font-bold text-sm">
+            {language === 'id' ? '⚠ Tips Pemecahan Masalah' : '⚠ Troubleshooting Tips'}
+          </p>
+          <ul className="text-xs text-gray-400 space-y-1.5 list-disc list-inside">
+            <li>{language === 'id' ? 'Pastikan deployment Apps Script masih aktif (Manage Deployments)' : 'Make sure the Apps Script deployment is still active (Manage Deployments)'}</li>
+            <li>{language === 'id' ? '"Who has access" harus diset ke "Anyone"' : '"Who has access" must be set to "Anyone"'}</li>
+            <li>{language === 'id' ? 'Klik "Ping Apps Script" untuk mengecek koneksi secara manual' : 'Click "Ping Apps Script" to manually test the connection'}</li>
+            <li>{language === 'id' ? 'Apps Script butuh 10–30 detik untuk cold start pertama kali' : 'Apps Script needs 10–30 s on cold start — wait and retry'}</li>
+            <li>{language === 'id' ? 'Pastikan tidak ada 403/404 di Console browser' : 'Check browser Console for 403/404 errors on the GAS URL'}</li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
 function MainApp() {
   const [db, setDb] = useState(defaultDbStructure);
   
@@ -2697,6 +2835,12 @@ function MainApp() {
   // State untuk Cloud Connection
   const [isCloudConnected, setIsCloudConnected] = useState(true);
   const [syncStatus, setSyncStatus] = useState('saved'); // State Baru: 'saved' | 'syncing' | 'error'
+  const [syncLog, setSyncLog] = useState<Array<{time: string, type: 'app'|'gas', status: 'ok'|'error'|'pending', msg: string}>>([]);
+  const [isPingRunning, setIsPingRunning] = useState(false);
+  const addSyncLog = (type: 'app'|'gas', status: 'ok'|'error'|'pending', msg: string) => {
+    const time = new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    setSyncLog(prev => [{time, type, status, msg}, ...prev].slice(0, 50));
+  };
   const prevCloudState = useRef(true);
   // FIX SYNC LAMA: Throttle toast "Cloud connection lost" — hanya muncul 1x per 2 menit.
   // Tanpa ini, setiap retry 30 detik bisa memunculkan toast ulang jika isCloudConnected
@@ -2817,7 +2961,7 @@ function MainApp() {
     // Tidak perlu showToast di sini — CloudAutoSaveIndicator sudah menampilkan status 'Sending to Cloud...'
     // Menampilkan toast sekaligus indikator menyebabkan UI tampak error (dua notifikasi bersamaan).
     try {
-      const res = await fetch(`${APPSCRIPT_URL}?token=${token}`);
+      const res = await fetch(`${APPSCRIPT_URL}?token=${token}`, { redirect: 'follow' });
       const data = await res.json();
       
       if (data.status === 'unauthorized') return handleUnauthorized();
@@ -3139,8 +3283,8 @@ function MainApp() {
 
       try {
         const startupController = new AbortController();
-        const startupTimeout = setTimeout(() => startupController.abort(), 12000);
-        const res = await fetch(`${APPSCRIPT_URL}?token=${token}`, { signal: startupController.signal });
+        const startupTimeout = setTimeout(() => startupController.abort(), 35000);
+        const res = await fetch(`${APPSCRIPT_URL}?token=${token}`, { signal: startupController.signal, redirect: 'follow' });
         clearTimeout(startupTimeout);
         if (!res.ok) throw new Error('Failed to load from AppScript');
         
@@ -3321,7 +3465,7 @@ function MainApp() {
         // Tanpa ini, GAS cold-start bisa bikin request nggantung 60+ detik
         // dan indikator "Sending to Cloud" tidak hilang sampai browser timeout sendiri.
         const syncAbortCtrl = new AbortController();
-        const syncFetchTimeout = setTimeout(() => syncAbortCtrl.abort(), 15000);
+        const syncFetchTimeout = setTimeout(() => syncAbortCtrl.abort(), 35000);
         fetch(APPSCRIPT_URL, {
           method: 'POST',
           // WAJIB 1: Gunakan text/plain untuk menghindari pemblokiran CORS Preflight (OPTIONS)
@@ -3345,11 +3489,15 @@ function MainApp() {
         })
         .then(res => {
            clearTimeout(syncFetchTimeout);
-           if (!res.ok) throw new Error('Response AppScript gagal');
+           if (!res.ok) {
+             addSyncLog('gas', 'error', `HTTP ${res.status} ${res.statusText} — GAS menolak request`);
+             throw new Error(`Response AppScript gagal: HTTP ${res.status}`);
+           }
            return res.json().catch(() => ({})); 
         })
         .then((data) => {
            if (data.status === 'unauthorized') {
+               addSyncLog('gas', 'error', 'Token tidak valid atau kedaluwarsa — sesi perlu login ulang');
                return handleUnauthorized();
            }
            if (data.status === 'success') {
@@ -3371,6 +3519,8 @@ function MainApp() {
                lastSyncedSnapshotRef.current = JSON.stringify(dbSnapshotAtRequest);
                setIsCloudConnected(true);
                setSyncStatus('saved'); // SET INDIKATOR BERHASIL
+               addSyncLog('gas', 'ok', `Sync OK — updated:${data.updatedRows||0} inserted:${data.insertedRows||0} deleted:${data.deletedRows||0} v${data.newVersion||'?'}`);
+               addSyncLog('gas', 'ok', language === 'id' ? 'Sync ke Apps Script berhasil' : 'Sync to Apps Script successful');
                
                // FIX #2 (isDbDirty TIDAK PERNAH RESET): Bandingkan latestDb (state terkini)
                // dengan dbSnapshotAtRequest (data yang baru saja berhasil dikirim).
@@ -3397,6 +3547,7 @@ function MainApp() {
                // response conflict — kita PAKAI LANGSUNG tanpa request GET kedua yang redundan.
                // Ini lebih cepat dan mencegah race condition akibat 2 request paralel.
                console.warn('DATABASE CONFLICT — resolving with payload from conflict response');
+               addSyncLog('gas', 'error', `Conflict v${data.newVersion||'?'} code=${data.code||'?'} — ${data.message||'pulling server data'}`);
                showToast(
                  language === 'id'
                    ? 'Data diperbarui pengguna lain. Menyelaraskan data...'
@@ -3458,18 +3609,24 @@ function MainApp() {
                  // sync di render berikutnya ketika ada perubahan db apapun.
                }, delay);
            } else {
+               addSyncLog('gas', 'error', `Server response: status=${data.status} msg=${data.message||data.code||JSON.stringify(data).slice(0,120)}`);
                throw new Error(data.message || 'Sync error');
            }
         })
         .catch((e) => {
            clearTimeout(syncFetchTimeout);
            console.warn('AppScript Sync failed', e);
+           const errMsg = e?.name === 'AbortError'
+             ? `Timeout >35s — GAS tidak merespons (cold start terlalu lama?)`
+             : `${e?.name||'Error'}: ${e?.message||String(e)}`;
+           addSyncLog('gas', 'error', errMsg);
            // FIX SYNC LAMA: Jangan langsung set offline dari 1 kegagalan.
            // GAS bisa lambat/cold-start sesaat — naikkan counter dulu.
            // Baru set isCloudConnected=false setelah 2x gagal berturut-turut
            // agar toast "Cloud connection lost" tidak muncul dari gangguan sesaat.
            syncFailCount.current = syncFailCount.current + 1;
            setSyncStatus('error'); // SET INDIKATOR GAGAL (indikator kecil tetap muncul)
+               addSyncLog('gas', 'error', language === 'id' ? 'Sync gagal — koneksi ke Apps Script bermasalah' : 'Sync failed — Apps Script unreachable');
            if (syncFailCount.current >= 2) {
              setIsCloudConnected(false); // Baru benar-benar offline setelah 2x gagal
              syncFailCount.current = 0;
@@ -3711,7 +3868,7 @@ function MainApp() {
         controller.abort();
         setIsCloudConnected(false);
         setSyncStatus('error');
-      }, 12000);
+      }, 35000);
 
       setSyncStatus('syncing'); // Set syncing tepat sebelum request dikirim
       fetch(APPSCRIPT_URL, {
@@ -3732,7 +3889,7 @@ function MainApp() {
             setIsCloudConnected(true);
             const syncController = new AbortController();
             const syncTimeout = setTimeout(() => syncController.abort(), 15000);
-            fetch(`${APPSCRIPT_URL}?token=${result.token}`, { signal: syncController.signal })
+            fetch(`${APPSCRIPT_URL}?token=${result.token}`, { signal: syncController.signal, redirect: 'follow' })
               .then(r => { clearTimeout(syncTimeout); return r.json(); })
               .then(data => {
                 const cloudDb = data.payload || data.state_data || data;
@@ -3766,6 +3923,7 @@ function MainApp() {
             console.warn('Background token verification failed — staying logged in with local session.');
             setIsCloudConnected(false);
             setSyncStatus('error');
+            addSyncLog('gas', 'error', language === 'id' ? 'Verifikasi token gagal — Apps Script tidak merespons' : 'Token verification failed — Apps Script not responding');
           } else {
             setIsCloudConnected(false);
             setSyncStatus('error');
@@ -3784,7 +3942,7 @@ function MainApp() {
     // (first-time login on a new device, or account just created by admin)
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timeout = setTimeout(() => controller.abort(), 25000);
       const res = await fetch(APPSCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -3807,7 +3965,7 @@ function MainApp() {
         setSyncStatus('syncing');
         const syncController = new AbortController();
         const syncTimeout = setTimeout(() => syncController.abort(), 15000);
-        fetch(`${APPSCRIPT_URL}?token=${result.token}`, { signal: syncController.signal })
+        fetch(`${APPSCRIPT_URL}?token=${result.token}`, { signal: syncController.signal, redirect: 'follow' })
           .then(r => { clearTimeout(syncTimeout); return r.json(); })
           .then(data => {
             const cloudDb = data.payload || data.state_data || data;
@@ -3828,8 +3986,17 @@ function MainApp() {
         return loginResult;
       }
 
+      if (result?.status === 'rate_limited' || result?.status === 'busy') {
+        return { success: false, error: language === 'id'
+          ? 'Terlalu banyak percobaan login atau server sedang sibuk. Tunggu sekitar 15 menit lalu coba lagi.'
+          : 'Too many login attempts or the server is busy. Please wait about 15 minutes and try again.' };
+      }
       if (result?.status === 'error') {
-        return { success: false, error: result.message || (language === 'id' ? 'Nama pengguna atau kata sandi salah.' : 'Invalid username or password.') };
+        const msg = String(result.message || '');
+        let friendly = language === 'id' ? 'Nama pengguna atau kata sandi salah.' : 'Invalid username or password.';
+        if (/inactive/i.test(msg)) friendly = language === 'id' ? 'Akun Anda tidak aktif.' : 'Your account is inactive.';
+        else if (msg && !/invalid credentials/i.test(msg)) friendly = msg;
+        return { success: false, error: friendly };
       }
     } catch (e) {
       console.warn('Server login unreachable', e);
@@ -4116,6 +4283,48 @@ function MainApp() {
       return <div className="p-8 text-center text-gray-400">Access denied.</div>;
     }
     switch (activeTab) {
+      case 'connection-monitor':
+        return (
+          <ConnectionMonitorPanel
+            isCloudConnected={isCloudConnected}
+            syncStatus={syncStatus}
+            syncLog={syncLog}
+            isPingRunning={isPingRunning}
+            appscriptUrl={APPSCRIPT_URL}
+            language={language}
+            onManualSync={refreshBeforeEdit}
+            onPing={async () => {
+              setIsPingRunning(true);
+              addSyncLog('app', 'pending', language === 'id' ? 'Pinging Apps Script...' : 'Pinging Apps Script...');
+              try {
+                const controller = new AbortController();
+                const t = setTimeout(() => controller.abort(), 35000);
+                const res = await fetch(APPSCRIPT_URL, { signal: controller.signal, redirect: 'follow' });
+                clearTimeout(t);
+                const text = await res.text();
+                let data: any = null;
+                try { data = JSON.parse(text); } catch { /* bukan JSON */ }
+                if (data && data.status === 'success') {
+                  addSyncLog('gas', 'ok', language === 'id' ? 'Apps Script merespons dengan baik' : 'Apps Script responded OK');
+                  setIsCloudConnected(true);
+                  setSyncStatus('saved');
+                } else if (data) {
+                  addSyncLog('gas', 'error', `Response error: status=${data.status} — ${data.message || JSON.stringify(data).slice(0, 100)}`);
+                } else {
+                  const preview = text.slice(0, 150).replace(/\s+/g, ' ');
+                  addSyncLog('gas', 'error', `Non-JSON response — cek URL GAS atau deploy ulang. Preview: ${preview}`);
+                }
+              } catch(err: any) {
+                const msg = err?.name === 'AbortError'
+                  ? 'Timeout >35s — GAS cold start terlalu lama atau URL salah'
+                  : String(err);
+                addSyncLog('gas', 'error', `Ping gagal: ${msg}`);
+              } finally {
+                setIsPingRunning(false);
+              }
+            }}
+          />
+        );
       case 'dashboard':
         return <Dashboard db={db} setDb={setDb} user={currentUser} setActiveTab={setActiveTab} isCloudConnected={isCloudConnected} language={language} showToast={showToast} />;
       case 'students':
@@ -4324,6 +4533,30 @@ function MainApp() {
                    <button onClick={() => setLanguage('id')} className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${language === 'id' ? 'bg-[#00D4FF] text-[#0B0F19]' : 'text-gray-500 hover:text-white'}`}>ID</button>
                 </div>
              </div>
+          {/* ── CONNECTION MONITOR PANEL ── */}
+          <div className="mb-3">
+            <button
+              onClick={() => setActiveTab('connection-monitor')}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors text-xs font-bold ${
+                activeTab === 'connection-monitor'
+                  ? 'bg-[#151B26] text-[#00D4FF] border-l-2 border-[#00D4FF]'
+                  : isCloudConnected ? 'text-emerald-400 hover:bg-[#151B26]' : 'text-red-400 hover:bg-[#151B26] animate-pulse'
+              }`}
+            >
+              <span className={`inline-flex rounded-full h-2.5 w-2.5 ${
+                syncStatus === 'syncing' || syncStatus === 'saving' ? 'bg-yellow-400 animate-ping' :
+                isCloudConnected ? 'bg-emerald-400' : 'bg-red-500'
+              }`} />
+              <span className="uppercase tracking-wider">
+                {syncStatus === 'syncing' || syncStatus === 'saving'
+                  ? (language === 'id' ? 'Menyinkronkan...' : 'Syncing...')
+                  : isCloudConnected
+                    ? (language === 'id' ? 'Cloud Terhubung' : 'Cloud Connected')
+                    : (language === 'id' ? '⚠ Offline / Error' : '⚠ Offline / Error')}
+              </span>
+            </button>
+          </div>
+
           <Button variant="ghost" className="w-full justify-start text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors mb-2" icon={RefreshCw} onClick={refreshBeforeEdit}>
             {language === 'id' ? 'Sinkronkan Data' : 'Sync Data'}
           </Button>
