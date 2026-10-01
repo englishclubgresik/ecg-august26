@@ -6,6 +6,32 @@ import { Users, UserCheck, BookOpen, Calendar as CalendarIcon, DollarSign, FileT
 // Link Eksekusi Google App Script Anda
 const APPSCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwbK6RYe_n5f1Z_97fgYCaTFKUeMIhQG6WrpvEortmfnOtM8gDOxyBzijZKt-s-72qHcw/exec';
 
+// Fetch khusus Google Apps Script: timeout longgar (cold start bisa ~30 detik) + retry otomatis.
+// Retry HANYA untuk kegagalan jaringan / timeout (bukan untuk respons HTTP dari server).
+// Aman untuk POST sync karena body (termasuk requestId) dibuat sekali dan dipakai ulang,
+// sehingga server bisa mendeduplikasi lewat requestId.
+async function fetchGas(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 60000,
+  retries = 1
+): Promise<Response> {
+  let lastErr: any;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { redirect: 'follow', ...init, signal: controller.signal });
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) await new Promise(r => setTimeout(r, 1500));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
+
 declare global {
   interface Window {
     html2canvas?: (element: HTMLElement, options?: any) => Promise<HTMLCanvasElement>;
@@ -72,6 +98,16 @@ const getStudentSession = (student) => {
     return student.sessionOverride;
   }
   return getSessionGroup(student.class);
+};
+
+// Global helper: Kembalikan tarif per sesi siswa.
+// Siswa Private Session (atau siapapun yang ratePerSession-nya diisi admin) pakai rate custom.
+// Siswa lain pakai tarif reguler Rp 25.000.
+const DEFAULT_RATE = 25000;
+const getStudentRate = (student: any): number => {
+  if (!student) return DEFAULT_RATE;
+  const custom = Number(student.ratePerSession);
+  return custom > 0 ? custom : DEFAULT_RATE;
 };
 
 // Fix 4: Returns true if an attendance record's sessionGroup matches the student's CURRENT effective session.
@@ -194,7 +230,43 @@ const addPermDeletedBinIds = (ids: string[]) => {
   } catch {}
 };
 
+// PATCH TOMBSTONE: Simpan ID DATA ASLI (mis. CAL-xxxx) yang dihapus permanen dari Recycle Bin.
+// Berbeda dengan PERM_DELETED_KEY (ID bin), ini memblokir data aslinya agar tidak
+// dihidupkan lagi oleh localStorage / perangkat lain yang masih menyimpan salinannya.
+const DELETED_DATA_KEY = 'ecg_perm_deleted_data_ids';
+const getDeletedDataIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_DATA_KEY);
+    return raw ? new Set(JSON.parse(raw).map(String)) : new Set();
+  } catch { return new Set(); }
+};
+const addDeletedDataIds = (ids: any[]) => {
+  try {
+    const existing = getDeletedDataIds();
+    ids.filter(Boolean).forEach(id => existing.add(String(id)));
+    localStorage.setItem(DELETED_DATA_KEY, JSON.stringify(Array.from(existing)));
+  } catch {}
+};
+// Buang item yang ID-nya sudah di-tombstone dari semua koleksi (kecuali recycleBin).
+const stripDeletedData = (dbObj: any): any => {
+  const deleted = getDeletedDataIds();
+  if (!dbObj || deleted.size === 0) return dbObj;
+  const out: any = { ...dbObj };
+  MERGE_ALL_COLS.filter(col => col !== 'recycleBin').forEach(col => {
+    if (Array.isArray(out[col])) out[col] = out[col].filter((i: any) => !(i?.id && deleted.has(String(i.id))));
+  });
+  return out;
+};
+
 const mergeCloudData = (prevDb: any, normalizedCloud: any): any => {
+  // PATCH TOMBSTONE (server): serap daftar penanda hapus permanen dari cloud, lalu
+  // keluarkan dari objek agar tidak ikut tersimpan sebagai koleksi db.
+  if (normalizedCloud && Array.isArray(normalizedCloud.tombstones)) {
+    addDeletedDataIds(normalizedCloud.tombstones.map((t: any) => t && t.id));
+    const { tombstones: _tomb, ...cloudWithoutTomb } = normalizedCloud;
+    normalizedCloud = cloudWithoutTomb;
+  }
+  prevDb = stripDeletedData(prevDb);
   const localBin = Array.isArray(prevDb.recycleBin) ? prevDb.recycleBin : [];
   // Filter cloudBin: buang item yang sudah perm-deleted secara lokal
   const permDeleted = getPermDeletedBinIds();
@@ -277,12 +349,14 @@ const mergeByIds = (local: any[], cloud: any[], recycleBin: any[] = []): any[] =
     return ids;
   }).filter(Boolean));
   
+  const deletedData = getDeletedDataIds(); // PATCH TOMBSTONE
   const merged = new Map<string, any>();
 
   // 2. Cascade Delete Checker (Mencegah Orphaned Records)
   const isInvalid = (item: any) => {
     if (!item || !item.id) return true;
     if (binSet.has(String(item.id))) return true;
+    if (deletedData.has(String(item.id))) return true; // PATCH TOMBSTONE
     // Efek Domino: Jika studentId atau scheduleId item ini ada di tong sampah, item ini ikut diblokir
     if (item.studentId && binSet.has(String(item.studentId))) return true;
     if (item.scheduleId && binSet.has(String(item.scheduleId))) return true;
@@ -959,10 +1033,14 @@ function LoginScreen({ onLogin, isDbLoaded = true, language = 'en', setLanguage 
     // After 5s, reassure user we're still trying
     const t2 = setTimeout(() => setLoginStatus(language === 'id' ? 'Hampir selesai, harap tunggu...' : 'Almost there, please wait...'), 5000);
 
+    // After 15s, tell user cold start can take up to ~30s
+    const t3 = setTimeout(() => setLoginStatus(language === 'id' ? 'Server sedang bangun, bisa sampai 30 detik...' : 'Server is waking up, this can take up to 30 seconds...'), 15000);
+
     const result = await onLogin(username, password, rememberMe);
 
     clearTimeout(t1);
     clearTimeout(t2);
+    clearTimeout(t3);
     setLoginStatus('');
     if (!result || !result.success) {
       setLoginError(result?.error || (language === 'id' ? 'Nama pengguna atau kata sandi salah. Silakan coba lagi.' : 'Invalid username or password. Please try again.'));
@@ -1539,9 +1617,9 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
         c.date.startsWith(currentMonthPrefix) &&
         _sessionMatchPayment(c.sessionGroup || c.name, mySessionGroup) &&
         (!_sameMonthDash || c.date >= _bsdDash)
-      ).length * 25000;
+      ).length * getStudentRate(studentRecord);
   } else {
-      paymentTarget = db.studentAttendance.filter(a => a.studentId === user.studentId && a.date.startsWith(currentMonthPrefix) && a.status === 'Present').length * 25000;
+      paymentTarget = db.studentAttendance.filter(a => a.studentId === user.studentId && a.date.startsWith(currentMonthPrefix) && a.status === 'Present').length * getStudentRate(studentRecord);
   }
   
   const myPaymentsThisMonth = db.payments.filter(p => p.studentId === user.studentId && Number(p.month) === Number(currentMonthStr) && String(p.year) === currentYearStr && p.status === 'Paid');
@@ -1797,7 +1875,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
        (c.sessionGroup || c.name) === sGroup &&
        (!_sameMonthAdmin || c.date >= _bsdAdmin)
      ).length;
-     const studentTarget = scheduledCount * 25000;
+     const studentTarget = scheduledCount * getStudentRate(s);
      expectedRevenueAmount += studentTarget;
 
      const studentPaid = currentMonthPayments.filter(p => p.studentId === s.id && p.status === 'Paid').reduce((sum, p) => sum + Number(p.amount), 0);
@@ -2583,9 +2661,8 @@ const normalizeData = (data) => {
 
 // KOMPONEN BARU: Indikator Auto-Save Real-time
 // Status: 'saving' (lokal instan) | 'syncing' (mengirim ke cloud) | 'saved' | 'error'
-const CloudAutoSaveIndicator = ({ status, language }: { status: string, language: string }) => {
+const CloudAutoSaveIndicator = ({ status, language, lastSyncedAt = null, lastSavedLabel = null, onRetry = null }: { status: string, language: string, lastSyncedAt?: string | null, lastSavedLabel?: string | null, onRetry?: (() => void) | null }) => {
   if (status === 'saving') {
-    // Fase 1: Data sudah aman di localStorage, sedang menunggu kirim ke cloud
     return (
       <div className="flex items-center gap-2 bg-[#0A0E17]/95 backdrop-blur-md border border-blue-500/40 px-3.5 py-1.5 rounded-full text-blue-400 text-xs font-bold shadow-[0_0_15px_rgba(59,130,246,0.2)] animation-fade-in pointer-events-auto">
         <Database size={14} className="animate-pulse" />
@@ -2594,7 +2671,6 @@ const CloudAutoSaveIndicator = ({ status, language }: { status: string, language
     );
   }
   if (status === 'syncing') {
-    // Fase 2: Request sedang dikirim ke Google Apps Script
     return (
       <div className="flex items-center gap-2 bg-[#0A0E17]/95 backdrop-blur-md border border-yellow-500/40 px-3.5 py-1.5 rounded-full text-yellow-400 text-xs font-bold shadow-[0_0_15px_rgba(234,179,8,0.2)] animation-fade-in pointer-events-auto">
         <RefreshCw size={14} className="animate-spin" />
@@ -2606,15 +2682,37 @@ const CloudAutoSaveIndicator = ({ status, language }: { status: string, language
     return (
       <div className="flex items-center gap-2 bg-[#0A0E17]/95 backdrop-blur-md border border-emerald-500/40 px-3.5 py-1.5 rounded-full text-emerald-400 text-xs font-bold shadow-[0_0_15px_rgba(16,185,129,0.2)] animation-fade-in pointer-events-auto transition-opacity duration-500">
         <Cloud size={14} />
-        <span className="tracking-wide">{language === 'id' ? 'Tersimpan di Cloud' : 'Saved to Cloud'}</span>
+        {lastSavedLabel && lastSyncedAt ? (
+          <span className="tracking-wide flex items-center gap-1.5">
+            <span className="opacity-90">{lastSavedLabel}</span>
+            <span className="opacity-40 text-[10px] font-normal">•</span>
+            <span className="opacity-60 font-normal">{language === 'id' ? `Tersimpan ${lastSyncedAt}` : `Saved ${lastSyncedAt}`}</span>
+          </span>
+        ) : (
+          <span className="tracking-wide">
+            {lastSyncedAt
+              ? (language === 'id' ? `Tersimpan ${lastSyncedAt}` : `Saved ${lastSyncedAt}`)
+              : (language === 'id' ? 'Tersimpan di Cloud' : 'Saved to Cloud')}
+          </span>
+        )}
       </div>
     );
   }
   if (status === 'error') {
     return (
-      <div className="flex items-center gap-2 bg-[#0A0E17]/95 backdrop-blur-md border border-red-500/40 px-3.5 py-1.5 rounded-full text-red-400 text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.2)] animation-fade-in pointer-events-auto">
-        <CloudOff size={14} />
+      <div className="flex items-center gap-1.5 bg-[#0A0E17]/95 backdrop-blur-md border border-red-500/40 px-3 py-1.5 rounded-full text-red-400 text-xs font-bold shadow-[0_0_15px_rgba(239,68,68,0.2)] animation-fade-in pointer-events-auto">
+        <CloudOff size={14} className="shrink-0" />
         <span className="tracking-wide">{language === 'id' ? 'Gagal Simpan' : 'Sync Error'}</span>
+        {onRetry && (
+          <button
+            onClick={onRetry}
+            title={language === 'id' ? 'Coba kirim ulang' : 'Retry sync'}
+            className="ml-1 flex items-center gap-1 bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 px-2 py-0.5 rounded-full transition-colors text-red-300 hover:text-white"
+          >
+            <RefreshCw size={11} />
+            <span>{language === 'id' ? 'Coba Lagi' : 'Retry'}</span>
+          </button>
+        )}
       </div>
     );
   }
@@ -2723,7 +2821,7 @@ const ConnectionMonitorPanel = ({
                 : 'No log yet. Try Ping or Force Sync.'}
             </div>
           ) : syncLog.map((entry, i) => (
-            <div key={i} className="flex items-start gap-3 px-5 py-3">
+            <div key={i} className={`flex items-start gap-3 px-5 py-3 ${entry.dataType && entry.status === 'ok' ? 'bg-emerald-950/30 border-l-2 border-emerald-500/40' : ''}`}>
               <span className="text-[10px] font-mono text-gray-600 shrink-0 mt-0.5 w-20">{entry.time}</span>
               <span className={`text-[10px] font-black uppercase tracking-widest shrink-0 mt-0.5 w-8 ${
                 entry.type === 'app' ? 'text-blue-400' : 'text-purple-400'
@@ -2734,7 +2832,31 @@ const ConnectionMonitorPanel = ({
               }`}>
                 {entry.status === 'ok' ? '✓' : entry.status === 'error' ? '✗' : '⟳'}
               </span>
-              <span className="text-xs text-gray-400 leading-relaxed break-all">{entry.msg}</span>
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {entry.dataType && (
+                    <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded shrink-0 ${
+                      entry.dataType === 'PAYMENT'    ? 'bg-emerald-500/20 text-emerald-400' :
+                      entry.dataType === 'ABSENSI'    ? 'bg-blue-500/20 text-blue-400' :
+                      entry.dataType === 'TUTOR ATT'  ? 'bg-cyan-500/20 text-cyan-400' :
+                      entry.dataType === 'JOURNAL'    ? 'bg-purple-500/20 text-purple-400' :
+                      entry.dataType === 'ASSESSMENT' ? 'bg-yellow-500/20 text-yellow-400' :
+                      entry.dataType === 'SISWA'      ? 'bg-pink-500/20 text-pink-400' :
+                      entry.dataType === 'TUTOR'      ? 'bg-orange-500/20 text-orange-400' :
+                      entry.dataType === 'PAYROLL'    ? 'bg-amber-500/20 text-amber-400' :
+                      entry.dataType === 'KALENDER'   ? 'bg-sky-500/20 text-sky-400' :
+                      entry.dataType === 'PENGUMUMAN' ? 'bg-violet-500/20 text-violet-400' :
+                      entry.dataType === 'MATERI'     ? 'bg-teal-500/20 text-teal-400' :
+                      entry.dataType === 'USER'       ? 'bg-rose-500/20 text-rose-400' :
+                      'bg-gray-700/50 text-gray-400'
+                    }`}>{entry.dataType}</span>
+                  )}
+                  <span className="text-xs text-gray-400 leading-relaxed break-all">{entry.msg}</span>
+                </div>
+                {entry.detail && (
+                  <span className="text-[10px] text-gray-500 font-mono break-all pl-0.5">{entry.detail}</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -2835,12 +2957,37 @@ function MainApp() {
   // State untuk Cloud Connection
   const [isCloudConnected, setIsCloudConnected] = useState(true);
   const [syncStatus, setSyncStatus] = useState('saved'); // State Baru: 'saved' | 'syncing' | 'error'
-  const [syncLog, setSyncLog] = useState<Array<{time: string, type: 'app'|'gas', status: 'ok'|'error'|'pending', msg: string}>>([]);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null); // Timestamp terakhir berhasil sync
+  const [lastSavedLabel, setLastSavedLabel] = useState<string | null>(null); // Label data terakhir yang masuk cloud
+  const pendingSyncLabelRef = useRef<string | null>(null); // Label dari showToast — dipakai saat diff tidak tersedia
+  const [syncLog, setSyncLog] = useState<Array<{time: string, type: 'app'|'gas', status: 'ok'|'error'|'pending', msg: string, dataType?: string, detail?: string}>>([]);
   const [isPingRunning, setIsPingRunning] = useState(false);
-  const addSyncLog = (type: 'app'|'gas', status: 'ok'|'error'|'pending', msg: string) => {
+  const addSyncLog = (type: 'app'|'gas', status: 'ok'|'error'|'pending', msg: string, dataType?: string, detail?: string) => {
     const time = new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    setSyncLog(prev => [{time, type, status, msg}, ...prev].slice(0, 50));
+    setSyncLog(prev => [{time, type, status, msg, dataType, detail}, ...prev].slice(0, 50));
   };
+
+  // ── CLOUD CONFIRMATION SYSTEM ────────────────────────────────────────────
+  // Snapshot koleksi yang SEDANG dikirim ke cloud (diisi saat debounce timer meletus,
+  // dipakai saat sync sukses untuk diff dan menampilkan konfirmasi per item).
+  const syncingSnapshotRef = useRef<Record<string, any[]> | null>(null);
+
+  // Mapping koleksi → label tampilan + fungsi ekstrak detail item
+  const COLLECTION_META: Record<string, {label: string, color: string, getDetail: (item: any) => string}> = {
+    payments:         { label: 'PAYMENT',    color: 'emerald', getDetail: (i) => `${i.studentName} • Rp ${Number(i.amount||0).toLocaleString('id-ID')} • ${i.method||''} • ${i.month||''}/${i.year||''}` },
+    studentAttendance:{ label: 'ABSENSI',    color: 'blue',    getDetail: (i) => `${i.studentName||i.studentId} • ${i.status} • ${i.date||''} • ${i.sessionGroup||''}` },
+    tutorAttendance:  { label: 'TUTOR ATT',  color: 'cyan',    getDetail: (i) => `${i.tutorName||i.tutorId} • ${i.status} • ${i.date||''}` },
+    journals:         { label: 'JOURNAL',    color: 'purple',  getDetail: (i) => `${i.tutorName||''} • ${i.sessionGroup||''} • ${i.date||''}` },
+    assessments:      { label: 'ASSESSMENT', color: 'yellow',  getDetail: (i) => `${i.studentName||i.studentId} • ${i.subject||''} • ${i.date||''}` },
+    students:         { label: 'SISWA',      color: 'pink',    getDetail: (i) => `${i.name} • ${i.level||''} • ${i.class||''}` },
+    tutors:           { label: 'TUTOR',      color: 'orange',  getDetail: (i) => `${i.name} • ${i.level||''}` },
+    payroll:          { label: 'PAYROLL',    color: 'amber',   getDetail: (i) => `${i.tutorName||i.tutorId} • Rp ${Number(i.amount||0).toLocaleString('id-ID')} • ${i.month||''}/${i.year||''}` },
+    calendar:         { label: 'KALENDER',   color: 'sky',     getDetail: (i) => `${i.name||i.sessionGroup||''} • ${i.date||''}` },
+    announcements:    { label: 'PENGUMUMAN', color: 'violet',  getDetail: (i) => `${i.title||i.message||''}`.slice(0,60) },
+    materials:        { label: 'MATERI',     color: 'teal',    getDetail: (i) => `${i.title||''} • ${i.sessionGroup||''}` },
+    users:            { label: 'USER',       color: 'rose',    getDetail: (i) => `${i.name} • ${i.role||''}` },
+  };
+  // ─────────────────────────────────────────────────────────────────────────
   const prevCloudState = useRef(true);
   // FIX SYNC LAMA: Throttle toast "Cloud connection lost" — hanya muncul 1x per 2 menit.
   // Tanpa ini, setiap retry 30 detik bisa memunculkan toast ulang jika isCloudConnected
@@ -2891,8 +3038,19 @@ function MainApp() {
   const logsRef = useRef({ auditLogs: [], debugLogs: [] });
   useEffect(() => { logsRef.current = logs; }, [logs]);
 
+  // PERSIST LOGS: Simpan logs ke localStorage terpisah (ecg_logs) setiap kali berubah.
+  // Ini memastikan logs tetap ada setelah logout/login, bahkan jika cloud sync belum berjalan.
+  // Di-gate dengan isDbLoaded agar tidak menimpa logs lama saat inisialisasi (sebelum load selesai).
+  useEffect(() => {
+    if (!isDbLoaded) return;
+    try { localStorage.setItem('ecg_logs', JSON.stringify(logs)); } catch {}
+  }, [logs, isDbLoaded]);
+
   // NEW: Ref untuk melacak versi database (Version Control & Anti-Conflict)
-  const dbVersion = useRef(null);
+  // FIX BASE_VERSION_REQUIRED: Init dari localStorage agar tidak null setelah reload.
+  const dbVersion = useRef<any>((() => { try { return localStorage.getItem('ecg_version') || null; } catch { return null; } })());
+  // Helper: set version sekaligus persist ke localStorage
+  const setDbVer = (v: any) => { dbVersion.current = v; if (v != null) try { localStorage.setItem('ecg_version', String(v)); } catch {} };
 
   // NEW: Ref untuk timer double-click tombol back (Exit App)
   const exitToastTimeout = useRef(null);
@@ -2903,6 +3061,7 @@ function MainApp() {
   // PATCH: daftar operasi delete yang harus dikomit ke Spreadsheet.
   // Array payload saja tidak cukup untuk menghapus row lama di Google Sheet.
   const pendingDeletionsRef = useRef<any[]>([]);
+  const pendingTombstonesRef = useRef<any[]>([]); // PATCH TOMBSTONE (server)
   // BUGFIX #6: Ganti window._syncBusyAttempt (global, race condition multi-tab)
   // dengan useRef yang scoped ke instance komponen ini saja.
   const syncBusyAttempt = useRef(0);
@@ -2943,6 +3102,22 @@ function MainApp() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [syncStatus]);
 
+  // WARM-UP GAS: bangunkan Apps Script sejak halaman dibuka / tab kembali aktif,
+  // supaya saat user menekan Login instance sudah hangat (tanpa token = endpoint ringan).
+  useEffect(() => {
+    let lastWarm = 0;
+    const warm = () => {
+      const now = Date.now();
+      if (now - lastWarm < 4 * 60 * 1000) return;
+      lastWarm = now;
+      fetch(APPSCRIPT_URL, { mode: 'no-cors', redirect: 'follow', cache: 'no-store' }).catch(() => {});
+    };
+    warm();
+    const onVisible = () => { if (document.visibilityState === 'visible') warm(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   const getAuthToken = () => sessionStorage.getItem('ecg_session_token');
 
   const handleUnauthorized = () => {
@@ -2961,13 +3136,13 @@ function MainApp() {
     // Tidak perlu showToast di sini — CloudAutoSaveIndicator sudah menampilkan status 'Sending to Cloud...'
     // Menampilkan toast sekaligus indikator menyebabkan UI tampak error (dua notifikasi bersamaan).
     try {
-      const res = await fetch(`${APPSCRIPT_URL}?token=${token}`, { redirect: 'follow' });
+      const res = await fetchGas(`${APPSCRIPT_URL}?token=${token}`);
       const data = await res.json();
       
       if (data.status === 'unauthorized') return handleUnauthorized();
 
       if (data && data._dbVersion) {
-         dbVersion.current = data._dbVersion;
+         setDbVer(data._dbVersion);
       }
 
       const cloudDb = data.payload || data.state_data || data;
@@ -3038,7 +3213,8 @@ function MainApp() {
   };
 
   // Diangkat ke atas agar bisa digunakan di mana saja termasuk deteksi tombol Back
-  const showToast = (msg, type = 'success') => {
+  // logDetails: opsional — jika diisi, dipakai di System Log sebagai Details (lebih informatif dari toast msg)
+  const showToast = (msg, type = 'success', logDetails?: string) => {
     let finalMsg = msg;
     
     // Sistem Interceptor: Terjemahkan Toast Notifikasi otomatis jika bahasa ID aktif
@@ -3113,20 +3289,61 @@ function MainApp() {
     }
 
     // PELACAK OTOMATIS: Jika ada notifikasi berhasil simpan/hapus, catat sebagai LOG!
+    // Deteksi action berdasarkan msg INGGRIS (sebelum translate) agar konsisten.
     if (!msg.includes('Welcome back') && !msg.includes('logged out') && !msg.includes('Cloud connection') && !msg.includes('Press back again')) {
        let actionName = 'USER_ACTION';
        const msgLower = msg.toLowerCase();
-       
-       if (msgLower.includes('delete') || msgLower.includes('hapus') || msgLower.includes('recycle bin') || msgLower.includes('removed')) {
+
+       // Deteksi DELETE terlebih dahulu (prioritas tertinggi)
+       if (msgLower.includes('delete') || msgLower.includes('recycle bin') || msgLower.includes('removed') || msgLower.includes('permanently deleted')) {
           actionName = 'DELETE_DATA';
-       } else if (msgLower.includes('save') || msgLower.includes('simpan') || msgLower.includes('record') || msgLower.includes('publish') || msgLower.includes('update') || msgLower.includes('perbarui')) {
+       // Deteksi spesifik tipe data yang disimpan
+       } else if (msgLower.includes('payment') || msgLower.includes('payroll') || msgLower.includes('paid')) {
+          actionName = 'SAVE_PAYMENT';
+       } else if (msgLower.includes('student')) {
+          actionName = 'SAVE_STUDENT';
+       } else if (msgLower.includes('tutor')) {
+          actionName = 'SAVE_TUTOR';
+       } else if (msgLower.includes('attendance') || msgLower.includes('checked in') || msgLower.includes('absen')) {
+          actionName = 'SAVE_ATTENDANCE';
+       } else if (msgLower.includes('journal')) {
+          actionName = 'SAVE_JOURNAL';
+       } else if (msgLower.includes('assessment') || msgLower.includes('score')) {
+          actionName = 'SAVE_ASSESSMENT';
+       } else if (msgLower.includes('material') || msgLower.includes('submission') || msgLower.includes('task')) {
+          actionName = 'SAVE_MATERIAL';
+       } else if (msgLower.includes('event') || msgLower.includes('schedule') || msgLower.includes('calendar')) {
+          actionName = 'SAVE_CALENDAR';
+       } else if (msgLower.includes('announcement') || msgLower.includes('published')) {
+          actionName = 'SAVE_ANNOUNCEMENT';
+       } else if (msgLower.includes('password') || msgLower.includes('user saved') || msgLower.includes('restored')) {
+          actionName = 'SAVE_USER';
+       } else if (msgLower.includes('save') || msgLower.includes('saved') || msgLower.includes('record') || msgLower.includes('update') || msgLower.includes('updated')) {
           actionName = 'SAVE_DATA';
        }
 
+       // Detail log: gunakan logDetails jika ada, fallback ke msg Inggris (bukan finalMsg yg sudah ditranslate)
+       const logDetailText = logDetails || msg;
+
        if (type === 'error') {
-          sendLogAction('SYSTEM_ERROR', finalMsg, true);
+          sendLogAction('SYSTEM_ERROR', logDetailText, true);
        } else if (type === 'success' || actionName === 'DELETE_DATA') {
-          sendLogAction(actionName, finalMsg, false);
+          sendLogAction(actionName, logDetailText, false);
+          // Simpan label ringkas untuk sync bar — ambil tipe + nama pertama dari logDetails
+          if (logDetails) {
+            // logDetails format: "Payment recorded: Gio Saka | Rp..." → ambil setelah ":" sampai "|"
+            const afterColon = logDetails.includes(':') ? logDetails.split(':').slice(1).join(':').trim() : logDetails;
+            const shortName = afterColon.split('|')[0].trim().slice(0, 22);
+            // Map actionName ke label pendek
+            const actionLabel: Record<string, string> = {
+              SAVE_PAYMENT: 'PAYMENT', SAVE_STUDENT: 'SISWA', SAVE_TUTOR: 'TUTOR',
+              SAVE_ATTENDANCE: 'ABSENSI', SAVE_JOURNAL: 'JOURNAL', SAVE_ASSESSMENT: 'ASSESSMENT',
+              SAVE_MATERIAL: 'MATERI', SAVE_CALENDAR: 'KALENDER', SAVE_ANNOUNCEMENT: 'PENGUMUMAN',
+              SAVE_USER: 'USER', DELETE_DATA: 'DELETE', SAVE_DATA: 'DATA',
+            };
+            const typeLabel = actionLabel[actionName] || actionName.replace('SAVE_', '');
+            pendingSyncLabelRef.current = shortName ? `${typeLabel} · ${shortName}` : typeLabel;
+          }
        }
     }
 
@@ -3251,12 +3468,14 @@ function MainApp() {
             setDb(generateDummyDatabase());
           } else {
             skipCloudSave.current = true;
-            const normLocal = normalizeData(parsed);
+            const normLocal = stripDeletedData(normalizeData(parsed)); // PATCH TOMBSTONE
             setDb(normLocal);
-            // FIX: Muat logs dari localStorage ke state terpisah
+            // FIX: Muat logs dari ecg_logs (key terpisah) agar tetap ada setelah logout/login.
+            // Fallback ke parsed.auditLogs/.debugLogs untuk kompatibilitas data lama.
+            const savedLogs = (() => { try { const r = localStorage.getItem('ecg_logs'); return r ? JSON.parse(r) : null; } catch { return null; } })();
             setLogs({
-              auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
-              debugLogs: Array.isArray(parsed.debugLogs) ? parsed.debugLogs : []
+              auditLogs: Array.isArray(savedLogs?.auditLogs) ? savedLogs.auditLogs : (Array.isArray(parsed.auditLogs) ? parsed.auditLogs : []),
+              debugLogs: Array.isArray(savedLogs?.debugLogs) ? savedLogs.debugLogs : (Array.isArray(parsed.debugLogs) ? parsed.debugLogs : [])
             });
           }
         } catch (e) {
@@ -3282,10 +3501,7 @@ function MainApp() {
       }
 
       try {
-        const startupController = new AbortController();
-        const startupTimeout = setTimeout(() => startupController.abort(), 35000);
-        const res = await fetch(`${APPSCRIPT_URL}?token=${token}`, { signal: startupController.signal, redirect: 'follow' });
-        clearTimeout(startupTimeout);
+        const res = await fetchGas(`${APPSCRIPT_URL}?token=${token}`);
         if (!res.ok) throw new Error('Failed to load from AppScript');
         
         const data = await res.json();
@@ -3298,7 +3514,7 @@ function MainApp() {
 
         // NEW: Ambil _dbVersion dari root level response (sesuai struktur AppScript)
         if (data && data._dbVersion) {
-           dbVersion.current = data._dbVersion;
+           setDbVer(data._dbVersion);
         }
 
         const cloudDb = data.payload || data.state_data || data; 
@@ -3348,7 +3564,8 @@ function MainApp() {
                const localHasExtra = MERGE_COLS_CHECK.some(col => {
                  const localArr = Array.isArray(prevDb[col]) ? prevDb[col] : [];
                  const cloudIds = new Set((Array.isArray(normalizedCloudStartup[col]) ? normalizedCloudStartup[col] : []).map(i => String(i.id)));
-                 return localArr.some(item => item?.id && !cloudIds.has(String(item.id)));
+                 const tomb = getDeletedDataIds(); // PATCH TOMBSTONE
+                 return localArr.some(item => item?.id && !tomb.has(String(item.id)) && !cloudIds.has(String(item.id)));
                });
                if (localHasExtra) {
                  console.warn('Local has IDs not in cloud — forcing sync (Bug 9 fix)');
@@ -3356,10 +3573,22 @@ function MainApp() {
                }
              }
 
-             // FIX: Muat logs dari cloud ke state terpisah (bukan ke db)
+             // FIX: Muat logs dari cloud ke state terpisah, lalu merge dengan local agar tidak ada yang hilang.
+             // Cloud diutamakan jika lebih banyak entry; local dipakai sebagai fallback.
+             const cloudAudit = Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [];
+             const cloudDebug = Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [];
+             const localLogsRaw = (() => { try { const r = localStorage.getItem('ecg_logs'); return r ? JSON.parse(r) : null; } catch { return null; } })();
+             const localAudit = Array.isArray(localLogsRaw?.auditLogs) ? localLogsRaw.auditLogs : [];
+             const localDebug = Array.isArray(localLogsRaw?.debugLogs) ? localLogsRaw.debugLogs : [];
+             // Merge: gabungkan cloud + local, deduplikasi berdasarkan .id atau .timestamp, ambil maks 2000
+             const mergeLogArrays = (cloud: any[], local: any[]) => {
+               const seen = new Set(cloud.map((l: any) => l.id || l.timestamp || JSON.stringify(l)));
+               const extras = local.filter((l: any) => !seen.has(l.id || l.timestamp || JSON.stringify(l)));
+               return [...cloud, ...extras].slice(0, 2000);
+             };
              setLogs({
-               auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [],
-               debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : []
+               auditLogs: mergeLogArrays(cloudAudit, localAudit),
+               debugLogs: mergeLogArrays(cloudDebug, localDebug)
              });
              return mergedData;
           });
@@ -3449,12 +3678,18 @@ function MainApp() {
         // agar data yang dikirim ke cloud adalah versi TERBARU saat timer meletus —
         // bukan versi 2 detik lalu saat useEffect pertama kali berjalan.
         const latestDb = latestDbRef.current;
+        // Catat snapshot koleksi yang ada di lastSnap (sebelum sync ini) untuk diff konfirmasi
+        // Snapshot untuk diff konfirmasi — hanya diisi jika ada baseline (bukan sync pertama)
+        const hasBaseline = !!lastSyncedSnapshotRef.current;
+        const preSyncSnap: Record<string, any[]> | null = hasBaseline ? {} : null;
         DELTA_COLS.forEach(col => {
           dbSnapshotAtRequest[col] = latestDb[col];
+          if (preSyncSnap) preSyncSnap[col] = Array.isArray(lastSnap[col]) ? lastSnap[col] : [];
           if (JSON.stringify(latestDb[col]) !== JSON.stringify(lastSnap[col])) {
             deltaPayload[col] = latestDb[col];
           }
         });
+        syncingSnapshotRef.current = preSyncSnap;
         // Log selalu disertakan (tidak mempengaruhi data utama)
         deltaPayload.auditLogs = logsRef.current.auditLogs;
         deltaPayload.debugLogs = logsRef.current.debugLogs;
@@ -3464,9 +3699,7 @@ function MainApp() {
         // FIX SYNC LAMA: Tambah AbortController + 15 detik timeout.
         // Tanpa ini, GAS cold-start bisa bikin request nggantung 60+ detik
         // dan indikator "Sending to Cloud" tidak hilang sampai browser timeout sendiri.
-        const syncAbortCtrl = new AbortController();
-        const syncFetchTimeout = setTimeout(() => syncAbortCtrl.abort(), 35000);
-        fetch(APPSCRIPT_URL, {
+        fetchGas(APPSCRIPT_URL, {
           method: 'POST',
           // WAJIB 1: Gunakan text/plain untuk menghindari pemblokiran CORS Preflight (OPTIONS)
           headers: {
@@ -3474,7 +3707,6 @@ function MainApp() {
           },
           // WAJIB 2: Google Apps Script melakukan 302 Redirect setelah POST. Browser harus mengikutinya.
           redirect: 'follow',
-          signal: syncAbortCtrl.signal,
           // Kirim hanya delta — bukan seluruh db
           body: JSON.stringify({ 
             action: 'sync', 
@@ -3484,11 +3716,11 @@ function MainApp() {
             user: currentUser ? currentUser.name : 'SYSTEM',
             payload: deltaPayload,
             // PATCH DELETE: dikirim terpisah agar GAS benar-benar menghapus row.
-            deletions: pendingDeletionsRef.current.slice()
+            deletions: pendingDeletionsRef.current.slice(),
+            tombstones: pendingTombstonesRef.current.slice() // PATCH TOMBSTONE (server)
           })
-        })
+        }, 60000, 1)
         .then(res => {
-           clearTimeout(syncFetchTimeout);
            if (!res.ok) {
              addSyncLog('gas', 'error', `HTTP ${res.status} ${res.statusText} — GAS menolak request`);
              throw new Error(`Response AppScript gagal: HTTP ${res.status}`);
@@ -3509,9 +3741,10 @@ function MainApp() {
                const hasDelete = Number(data.deletedRows || 0) > 0;
 
                // Perbarui versi lokal dengan versi terbaru dari server jika ada
-               if (data.newVersion) dbVersion.current = data.newVersion;
+               if (data.newVersion) setDbVer(data.newVersion);
                // PATCH DELETE: hanya hapus queue jika request delete ini sukses.
                pendingDeletionsRef.current = [];
+               pendingTombstonesRef.current = []; // PATCH TOMBSTONE (server)
                
                syncBusyAttempt.current = 0;
                // FIX DELTA: Simpan snapshot yang DIKIRIM ke cloud, BUKAN state terbaru yang 
@@ -3520,7 +3753,54 @@ function MainApp() {
                setIsCloudConnected(true);
                setSyncStatus('saved'); // SET INDIKATOR BERHASIL
                addSyncLog('gas', 'ok', `Sync OK — updated:${data.updatedRows||0} inserted:${data.insertedRows||0} deleted:${data.deletedRows||0} v${data.newVersion||'?'}`);
-               addSyncLog('gas', 'ok', language === 'id' ? 'Sync ke Apps Script berhasil' : 'Sync to Apps Script successful');
+               // ── CLOUD CONFIRMATION: diff snapshot sebelum vs sesudah sync ──────────
+               // Deteksi item baru/diedit per koleksi dan log konfirmasi per item.
+               const preSyncSnap = syncingSnapshotRef.current;
+               const confirmedItems: Array<{dataType: string, color: string, detail: string}> = [];
+               // Hanya diff jika ada snapshot baseline (bukan sync pertama setelah login)
+               if (preSyncSnap) {
+                 Object.entries(COLLECTION_META).forEach(([col, meta]) => {
+                   const before = preSyncSnap[col] || [];
+                   const after  = Array.isArray((dbSnapshotAtRequest as any)[col]) ? (dbSnapshotAtRequest as any)[col] as any[] : [];
+                   const beforeIds = new Set(before.map((i: any) => String(i.id)));
+                   const beforeMap = new Map(before.map((i: any) => [String(i.id), JSON.stringify(i)]));
+                   // Item baru = ID tidak ada di snapshot sebelumnya
+                   const newItems = after.filter((i: any) => i?.id && !beforeIds.has(String(i.id)));
+                   // Item diedit = JSON berbeda dari snapshot sebelumnya (tangkap semua perubahan field apapun)
+                   const editedItems = after.filter((i: any) => {
+                     if (!i?.id || !beforeIds.has(String(i.id))) return false;
+                     return beforeMap.get(String(i.id)) !== JSON.stringify(i);
+                   });
+                   [...newItems, ...editedItems].forEach(item => {
+                     confirmedItems.push({dataType: meta.label, color: meta.color, detail: meta.getDetail(item)});
+                   });
+                 });
+               }
+               const nowTime = new Date().toLocaleTimeString('id-ID', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+               if (confirmedItems.length > 0) {
+                 confirmedItems.forEach(entry => {
+                   addSyncLog('gas', 'ok', `✅ MASUK SPREADSHEET`, entry.dataType, entry.detail);
+                   // Log ke System Log dengan detail sama persis seperti indicator
+                   sendLogAction('CLOUD_SAVED', `[${entry.dataType}] ${entry.detail} — ${nowTime}`);
+                 });
+                 const summary = Array.from(new Set(confirmedItems.map(e => e.dataType))).join(', ');
+                 showToast(`✅ ${summary} tersimpan ke spreadsheet`, 'success');
+                 const last = confirmedItems[0];
+                 // Ambil hanya nama pertama (sebelum '•') dan potong maks 22 karakter agar tidak meluber
+                 const shortName = last.detail.split('•')[0].trim().slice(0, 22);
+                 setLastSavedLabel(`${last.dataType} · ${shortName}`);
+               } else {
+                 // Fallback: preSyncSnap null (sync pertama/post-conflict) — tidak bisa diff.
+                 // Gunakan label yang sudah di-set langsung dari showToast (paling akurat).
+                 if (pendingSyncLabelRef.current) {
+                   setLastSavedLabel(pendingSyncLabelRef.current);
+                   pendingSyncLabelRef.current = null;
+                 }
+               }
+               syncingSnapshotRef.current = null;
+               // ─────────────────────────────────────────────────────────────────────
+               // Catat waktu terakhir berhasil sync ke cloud
+               setLastSyncedAt(nowTime);
                
                // FIX #2 (isDbDirty TIDAK PERNAH RESET): Bandingkan latestDb (state terkini)
                // dengan dbSnapshotAtRequest (data yang baru saja berhasil dikirim).
@@ -3556,12 +3836,12 @@ function MainApp() {
                );
                // Selalu ambil newVersion dari conflict response untuk update dbVersion.current.
                // Ini mencegah dbVersion null permanen saat startup pertama berhasil konflik.
-               if (data.newVersion) dbVersion.current = data.newVersion;
+               if (data.newVersion) setDbVer(data.newVersion);
                const freshPayload = data.payload;
                const freshVersion  = data.newVersion ?? data._dbVersion ?? null;
                if (freshPayload) {
                  const freshNormalized = normalizeData(freshPayload);
-                 if (freshVersion) dbVersion.current = freshVersion;
+                 if (freshVersion) setDbVer(freshVersion);
 
                  // BUGFIX PAYMENT HILANG (CONFLICT): Selalu merge lokal+cloud berdasarkan ID,
                  // JANGAN pernah setDb(merged) murni dari cloud — payment/data lokal yang
@@ -3587,7 +3867,15 @@ function MainApp() {
                  setSyncStatus('saved');
                  setIsCloudConnected(true);
                } else {
-                 setSyncStatus('error');
+                 // FIX BASE_VERSION_REQUIRED: Server sudah beri tahu versi terbaru via data.newVersion.
+                 // dbVersion.current sudah di-update di atas — langsung retry sync dengan version yg benar.
+                 // Tidak perlu GET dulu karena tidak ada conflict data yang perlu di-merge.
+                 addSyncLog('gas', 'pending', `BASE_VERSION_REQUIRED resolved — retry sync dengan baseVersion=${dbVersion.current}`);
+                 lastSyncedSnapshotRef.current = null; // paksa delta penuh di sync berikutnya
+                 isDbDirty.current = true;
+                 prevEntitiesRef.current = null;
+                 setSyncStatus('saving');
+                 setTimeout(() => { skipCloudSave.current = false; }, 150);
                }
            } else if (data.status === 'busy') {
                // FIX #8 (BUSY BACKOFF COUNTER SELALU RESET): Increment DULU, SIMPAN nilai,
@@ -3614,7 +3902,6 @@ function MainApp() {
            }
         })
         .catch((e) => {
-           clearTimeout(syncFetchTimeout);
            console.warn('AppScript Sync failed', e);
            const errMsg = e?.name === 'AbortError'
              ? `Timeout >35s — GAS tidak merespons (cold start terlalu lama?)`
@@ -3637,7 +3924,7 @@ function MainApp() {
            // prevEntitiesRef dikosongkan agar ketikan selanjutnya bisa memicu trigger fetch ulang
            prevEntitiesRef.current = null;
         });
-      }, 1000); // Tunggu 1 detik setelah user berhenti mengubah data sebelum mem-fetch
+      }, 400); // FIX DELAY: diperpendek 1000ms → 400ms agar data lebih cepat masuk ke Sheets
     }
   }, [db, isDbLoaded]);
 
@@ -3863,22 +4150,13 @@ function MainApp() {
       showToast(language === 'id' ? `Selamat datang, ${sessionUser.name}` : `Welcome, ${sessionUser.name}`);
 
       // ─── BACKGROUND: get real token + sync data ────────────────────────────
-      const controller = new AbortController();
-      const bgTimeout = setTimeout(() => {
-        controller.abort();
-        setIsCloudConnected(false);
-        setSyncStatus('error');
-      }, 35000);
-
       setSyncStatus('syncing'); // Set syncing tepat sebelum request dikirim
-      fetch(APPSCRIPT_URL, {
+      fetchGas(APPSCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        redirect: 'follow',
-        signal: controller.signal,
         body: JSON.stringify({ action: 'login', username: cleanUser, password: cleanPass })
-      })
-        .then(res => { clearTimeout(bgTimeout); return res.json().catch(() => null); })
+      }, 60000, 1)
+        .then(res => res.json().catch(() => null))
         .then(result => {
           if (result?.status === 'success' && result.token) {
             sessionStorage.setItem('ecg_session_token', result.token);
@@ -3894,7 +4172,7 @@ function MainApp() {
               .then(data => {
                 const cloudDb = data.payload || data.state_data || data;
                 if (cloudDb && Array.isArray(cloudDb.users)) {
-                  if (data._dbVersion) dbVersion.current = data._dbVersion;
+                  if (data._dbVersion) setDbVer(data._dbVersion);
                   setDb(prevDb => {
                     if (isDbDirty.current) return prevDb;
                     const normalizedCloud = normalizeData(cloudDb);
@@ -3905,10 +4183,17 @@ function MainApp() {
                     const localHasExtra = MERGE_COLS_CHECK2.some(col => {
                       const localArr = Array.isArray(prevDb[col]) ? prevDb[col] : [];
                       const cloudIds = new Set((Array.isArray(normalizedCloud[col]) ? normalizedCloud[col] : []).map(i => String(i.id)));
-                      return localArr.some(item => item?.id && !cloudIds.has(String(item.id)));
+                      const tomb = getDeletedDataIds(); // PATCH TOMBSTONE
+                 return localArr.some(item => item?.id && !tomb.has(String(item.id)) && !cloudIds.has(String(item.id)));
                     });
                     if (localHasExtra) isDbDirty.current = true;
-                    setLogs({ auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [], debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [] });
+                    const _cA4a = Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [];
+                    const _cD4a = Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [];
+                    const _lRaw4a = (() => { try { const r = localStorage.getItem('ecg_logs'); return r ? JSON.parse(r) : null; } catch { return null; } })();
+                    const _lA4a = Array.isArray(_lRaw4a?.auditLogs) ? _lRaw4a.auditLogs : logsRef.current.auditLogs;
+                    const _lD4a = Array.isArray(_lRaw4a?.debugLogs) ? _lRaw4a.debugLogs : logsRef.current.debugLogs;
+                    const _mL4a = (c: any[], l: any[]) => { const s = new Set(c.map((x: any) => x.id || x.timestamp || JSON.stringify(x))); return [...c, ...l.filter((x: any) => !s.has(x.id || x.timestamp || JSON.stringify(x)))].slice(0, 2000); };
+                    setLogs({ auditLogs: _mL4a(_cA4a, _lA4a), debugLogs: _mL4a(_cD4a, _lD4a) });
                     return merged;
                   });
                   setSyncStatus('saved');
@@ -3930,7 +4215,6 @@ function MainApp() {
           }
         })
         .catch(() => {
-          clearTimeout(bgTimeout);
           setIsCloudConnected(false);
           setSyncStatus('error');
         });
@@ -3941,16 +4225,11 @@ function MainApp() {
     // ─── SLOW PATH: no local cache — must wait for server ───────────────────
     // (first-time login on a new device, or account just created by admin)
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 25000);
-      const res = await fetch(APPSCRIPT_URL, {
+      const res = await fetchGas(APPSCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        redirect: 'follow',
-        signal: controller.signal,
         body: JSON.stringify({ action: 'login', username: cleanUser, password: cleanPass })
-      });
-      clearTimeout(timeout);
+      }, 60000, 1);
       const result = await res.json().catch(() => null);
 
       if (result?.status === 'success' && result.token && result.user) {
@@ -3970,13 +4249,19 @@ function MainApp() {
           .then(data => {
             const cloudDb = data.payload || data.state_data || data;
             if (cloudDb && Array.isArray(cloudDb.users)) {
-              if (data._dbVersion) dbVersion.current = data._dbVersion;
+              if (data._dbVersion) setDbVer(data._dbVersion);
               setDb(prevDb => {
                 if (isDbDirty.current) return prevDb;
                 const merged: any = mergeCloudData(prevDb, normalizeData(cloudDb));
                 skipCloudSave.current = true;
                 localStorage.setItem('ecg_db', JSON.stringify(merged));
-                setLogs({ auditLogs: Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [], debugLogs: Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [] });
+                const _cA4b = Array.isArray(cloudDb.auditLogs) ? cloudDb.auditLogs : [];
+                const _cD4b = Array.isArray(cloudDb.debugLogs) ? cloudDb.debugLogs : [];
+                const _lRaw4b = (() => { try { const r = localStorage.getItem('ecg_logs'); return r ? JSON.parse(r) : null; } catch { return null; } })();
+                const _lA4b = Array.isArray(_lRaw4b?.auditLogs) ? _lRaw4b.auditLogs : logsRef.current.auditLogs;
+                const _lD4b = Array.isArray(_lRaw4b?.debugLogs) ? _lRaw4b.debugLogs : logsRef.current.debugLogs;
+                const _mL4b = (c: any[], l: any[]) => { const s = new Set(c.map((x: any) => x.id || x.timestamp || JSON.stringify(x))); return [...c, ...l.filter((x: any) => !s.has(x.id || x.timestamp || JSON.stringify(x)))].slice(0, 2000); };
+                setLogs({ auditLogs: _mL4b(_cA4b, _lA4b), debugLogs: _mL4b(_cD4b, _lD4b) });
                 return merged;
               });
               setSyncStatus('saved');
@@ -4197,9 +4482,9 @@ function MainApp() {
             c.date.startsWith(monthPrefix) &&
             (c.sessionGroup || c.name) === mySession &&
             (!_sameMonthNotif || c.date >= _bsdNotif)
-          ).length * 25000;
+          ).length * getStudentRate(studentRec);
       } else {
-          target = db.studentAttendance.filter(a => a.studentId === currentUser.studentId && a.date.startsWith(monthPrefix) && a.status === 'Present').length * 25000;
+          target = db.studentAttendance.filter(a => a.studentId === currentUser.studentId && a.date.startsWith(monthPrefix) && a.status === 'Present').length * getStudentRate(studentRec);
       }
       const totalPaid = db.payments.filter(p => p.studentId === currentUser.studentId && Number(p.month) === Number(currentMonth) && String(p.year) === String(currentYear) && p.status === 'Paid').reduce((sum, p) => sum + Number(p.amount), 0);
       
@@ -4297,15 +4582,14 @@ function MainApp() {
               setIsPingRunning(true);
               addSyncLog('app', 'pending', language === 'id' ? 'Pinging Apps Script...' : 'Pinging Apps Script...');
               try {
-                const controller = new AbortController();
-                const t = setTimeout(() => controller.abort(), 35000);
-                const res = await fetch(APPSCRIPT_URL, { signal: controller.signal, redirect: 'follow' });
-                clearTimeout(t);
+                const t0 = Date.now();
+                const res = await fetchGas(APPSCRIPT_URL, {}, 60000, 0);
+                const secs = ((Date.now() - t0) / 1000).toFixed(1);
                 const text = await res.text();
                 let data: any = null;
                 try { data = JSON.parse(text); } catch { /* bukan JSON */ }
                 if (data && data.status === 'success') {
-                  addSyncLog('gas', 'ok', language === 'id' ? 'Apps Script merespons dengan baik' : 'Apps Script responded OK');
+                  addSyncLog('gas', 'ok', (language === 'id' ? 'Apps Script merespons dengan baik' : 'Apps Script responded OK') + ` (${secs}s)`);
                   setIsCloudConnected(true);
                   setSyncStatus('saved');
                 } else if (data) {
@@ -4316,7 +4600,7 @@ function MainApp() {
                 }
               } catch(err: any) {
                 const msg = err?.name === 'AbortError'
-                  ? 'Timeout >35s — GAS cold start terlalu lama atau URL salah'
+                  ? 'Timeout >60s — GAS cold start terlalu lama atau URL salah'
                   : String(err);
                 addSyncLog('gas', 'error', `Ping gagal: ${msg}`);
               } finally {
@@ -4401,7 +4685,7 @@ function MainApp() {
       case 'system_logs':
         return <SystemLogsModule logs={logs} setLogs={setLogs} showToast={showToast} requestConfirm={requestConfirm} />;
       case 'recycle_bin':
-        return <RecycleBinModule db={db} setDb={setDb} showToast={showToast} requestConfirm={requestConfirm} onQueueDeletion={(item) => pendingDeletionsRef.current.push(item)} />;
+        return <RecycleBinModule db={db} setDb={setDb} showToast={showToast} requestConfirm={requestConfirm} onQueueDeletion={(item) => pendingDeletionsRef.current.push(item)} onQueueTombstone={(t) => pendingTombstonesRef.current.push(t)} />;
       case 'export':
         return <DataExportModule db={db} />;
       default:
@@ -4622,7 +4906,7 @@ function MainApp() {
           
           {/* DESKTOP CLOUD AUTO-SAVE INDICATOR */}
           <div className="hidden md:flex absolute top-6 right-8 z-50 print:hidden pointer-events-none">
-             <CloudAutoSaveIndicator status={syncStatus} language={language} />
+             <CloudAutoSaveIndicator status={syncStatus} language={language} lastSyncedAt={lastSyncedAt} lastSavedLabel={lastSavedLabel} onRetry={refreshBeforeEdit} />
           </div>
 
           {/* MOBILE STICKY HEADER (Hamburger Menu & Back Button) */}
@@ -4641,7 +4925,7 @@ function MainApp() {
              
              {/* KANAN: Sync Indicator & Refresh Button */}
              <div className="flex items-center gap-2">
-                <CloudAutoSaveIndicator status={syncStatus} language={language} />
+                <CloudAutoSaveIndicator status={syncStatus} language={language} lastSyncedAt={lastSyncedAt} lastSavedLabel={lastSavedLabel} onRetry={refreshBeforeEdit} />
                 <button onClick={refreshBeforeEdit} className="p-2 text-blue-400 hover:text-blue-300 transition-colors" title="Sync Data">
                    <RefreshCw size={20} />
                 </button>
@@ -4688,7 +4972,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
   const defaultLevel = validLevelsForTutor.length > 0 ? validLevelsForTutor[0] : LEVELS[0];
   const defaultClass = CLASS_MAPPING[defaultLevel].find(cls => user?.role === 'tutor' ? parseSessions(user.teachingSession).includes(getSessionGroup(cls)) : true) || CLASS_MAPPING[defaultLevel][0];
   
-  const [formData, setFormData] = useState({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '', scheduledDays: [] as string[] });
+  const [formData, setFormData] = useState({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '', scheduledDays: [] as string[], ratePerSession: '' as string | number });
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -4750,7 +5034,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
           })
         : [...prev.students, rec]
     }));
-    showToast('Student saved');
+    showToast('Student saved', 'success', `Student ${formData.id ? 'updated' : 'added'}: ${rec.name} | ${rec.level} – ${rec.class}`);
     setIsAdding(false);
   };
 
@@ -4777,7 +5061,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
       <div className="flex justify-between items-center">
         <div><h2 className="text-2xl font-bold text-white mb-1">Students Directory</h2><p className="text-gray-400 text-sm">Manage student records, enrollment, and class placement.</p></div>
         {(!user || user.role === 'admin' || user.role === 'tutor') && (
-          <Button onClick={() => { setFormData({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '', scheduledDays: [] }); setIsAdding(!isAdding); }} icon={Plus}>Add Student</Button>
+          <Button onClick={() => { setFormData({ id: '', name: '', gender: 'Male', level: defaultLevel, class: defaultClass, paymentPlan: 'Monthly', status: 'Active', teacherComment: '', sessionOverride: 'Default', enrollmentStatus: 'Returning', whatsapp: '', billingStartMonth: '', scheduledDays: [], ratePerSession: '' }); setIsAdding(!isAdding); }} icon={Plus}>Add Student</Button>
         )}
       </div>
       {isAdding && (
@@ -4828,8 +5112,56 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
             </div>
             <div className="mb-6">
               <Input label="Session Override (Optional)" type="select" options={['Default', ...SESSIONS]} value={formData.sessionOverride || 'Default'} onChange={(v) => setFormData({ ...formData, sessionOverride: v })} />
-              <p className="text-[11px] text-gray-500 mt-1 mb-2 px-1 leading-tight">Leave "Default" to follow the class session, or pick another if this student joins a different time slot.</p>
             </div>
+
+            {/* ── TARIF PER SESI (Custom Rate) ─────────────────────────────────── */}
+            {(() => {
+              const effectiveSession = formData.sessionOverride && formData.sessionOverride !== 'Default'
+                ? formData.sessionOverride
+                : getSessionGroup(formData.class);
+              const isPrivate = effectiveSession === 'Private Session';
+              return (
+                <div className={`mb-6 p-3 rounded-lg border ${isPrivate ? 'border-amber-500/40 bg-amber-500/5' : 'border-gray-700/50 bg-[#0B0F19]/50'}`}>
+                  <label className={`flex items-center gap-2 text-sm font-semibold mb-2 ${isPrivate ? 'text-amber-400' : 'text-gray-400'}`}>
+                    <DollarSign size={14} />
+                    Tarif Per Sesi / Meeting
+                    {isPrivate
+                      ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 font-semibold">Private Session</span>
+                      : <span className="text-[10px] text-gray-600 font-normal">(Kosongkan → pakai tarif reguler Rp 25.000)</span>
+                    }
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-sm font-semibold shrink-0">Rp</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      placeholder={isPrivate ? 'Contoh: 75000' : '25000 (default)'}
+                      value={formData.ratePerSession || ''}
+                      onChange={(e) => setFormData({ ...formData, ratePerSession: e.target.value ? Number(e.target.value) : '' })}
+                      className={`flex-1 bg-[#0B0F19] border rounded-lg px-3 py-2 text-white text-sm focus:outline-none transition-all ${isPrivate ? 'border-amber-500/50 focus:border-amber-400' : 'border-gray-700 focus:border-[#00D4FF]'}`}
+                    />
+                    {formData.ratePerSession && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, ratePerSession: '' })}
+                        className="text-gray-500 hover:text-red-400 text-xs px-2 py-1 rounded-lg border border-gray-700 hover:border-red-500/30 transition-colors shrink-0"
+                        title="Hapus custom rate, kembali ke Rp 25.000"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] mt-1.5 leading-tight text-gray-500">
+                    {isPrivate
+                      ? 'Isi tarif khusus untuk sesi private ini. Dipakai di semua perhitungan tagihan & laporan pendapatan.'
+                      : 'Opsional. Jika diisi, tarif ini menggantikan Rp 25.000 di semua perhitungan tagihan siswa ini.'
+                    }
+                  </p>
+                </div>
+              );
+            })()}
+            {/* ─────────────────────────────────────────────────────────────────── */}
 
             {/* ── SCHEDULED ATTENDANCE DAYS (Paket Hari Hadir) ─────────────────── */}
             <div className="mb-6 p-3 rounded-lg border border-indigo-500/20 bg-indigo-500/5">
@@ -4968,6 +5300,11 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
                   <span className="text-gray-400">·</span>
                   <span className="font-bold text-gray-300">{s.class}</span>
                   <span className={`px-2 py-0.5 rounded font-semibold uppercase tracking-wide border ${s.paymentPlan === 'Per Visit' ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : s.paymentPlan === 'Free' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' : 'bg-blue-500/20 text-blue-300 border-blue-500/50'}`}>{s.paymentPlan}</span>
+                  {s.ratePerSession && Number(s.ratePerSession) > 0 && (
+                    <span className="px-2 py-0.5 rounded font-semibold border bg-amber-500/15 text-amber-300 border-amber-500/40 text-[10px]" title="Tarif per sesi custom">
+                      Rp {Number(s.ratePerSession).toLocaleString('id-ID')}/sesi
+                    </span>
+                  )}
                   <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full font-bold ${count === 0 ? 'bg-gray-700/50 text-gray-500' : isPerVisit ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'}`}>{count}x hadir</span>
                 </div>
                 {/* Row 3: WA + actions */}
@@ -5216,7 +5553,7 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
       const deduped = newRecords.filter(r => !existingStudentIdsInSession.has(r.studentId));
       return { ...prev, studentAttendance: [...prev.studentAttendance, ...deduped] };
     });
-    showToast('Attendance Saved');
+    showToast('Attendance Saved', 'success', `Attendance saved: ${sGroup} | ${selectedSchedule.date} | ${newRecords.length} students`);
     setAttendanceData({});
     if (setModuleDirty) setModuleDirty(false);
     setTimeout(() => setIsSubmitting(false), 2000);
@@ -5333,7 +5670,7 @@ function StudentAttendanceModule({ db, setDb, showToast, softDelete, user, gener
       .filter((p) => p.studentId === studentId && Number(p.month) === Number(m) && String(p.year) === String(y) && p.status === 'Paid')
       .reduce((sum, p) => sum + Number(p.amount), 0);
     const studentObj = db.students.find(x => x.id === studentId);
-    const sTarget = db.studentAttendance.filter((a) => a.studentId === studentId && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, studentObj)).length * 25000;
+    const sTarget = db.studentAttendance.filter((a) => a.studentId === studentId && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, studentObj)).length * getStudentRate(studentObj);
     return sPaid - sTarget < 0;
   };
 
@@ -5970,7 +6307,7 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
 
     if (updatedCount > 0) {
       setDb((prev) => ({ ...prev, assessments: newAssessments }));
-      showToast(`Assessment saved successfully for ${updatedCount} students.`);
+      showToast(`Assessment saved successfully for ${updatedCount} students.`, 'success', `Assessment saved: ${updatedCount} students | ${sessionGroup} | ${String(month)}/${String(year)}`);
     } else {
       showToast('No scores entered to save.', 'warning');
     }
@@ -6164,9 +6501,9 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
         const _bsdRev = (s.billingStartMonth && s.billingStartMonth.length === 10) ? s.billingStartMonth : null;
         const _sameMonthRev = _bsdRev && _bsdRev.startsWith(monthPrefix);
         if ((s.paymentPlan || 'Monthly') === 'Monthly') {
-          return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonthRev || c.date >= _bsdRev)).length * 25000;
+          return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonthRev || c.date >= _bsdRev)).length * getStudentRate(s);
         }
-        return db.studentAttendance.filter(a => a.studentId === s.id && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, s)).length * 25000;
+        return db.studentAttendance.filter(a => a.studentId === s.id && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, s)).length * getStudentRate(s);
       })();
       if (target === 0) return;
       const paid = db.payments
@@ -6206,9 +6543,9 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
     const _bsd = (student.billingStartMonth && student.billingStartMonth.length === 10) ? student.billingStartMonth : null;
     const _sameMonth = _bsd && _bsd.startsWith(monthPrefix);
     if (plan === 'Monthly') {
-        return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonth || c.date >= _bsd)).length * 25000;
+        return db.calendar.filter(c => c.date.startsWith(monthPrefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonth || c.date >= _bsd)).length * getStudentRate(student);
     } else {
-        return db.studentAttendance.filter(a => a.studentId === student.id && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, student)).length * 25000;
+        return db.studentAttendance.filter(a => a.studentId === student.id && a.date.startsWith(monthPrefix) && a.status === 'Present' && isAttendanceValidForStudent(a, student)).length * getStudentRate(student);
     }
   };
 
@@ -6253,7 +6590,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
       try { localStorage.setItem('ecg_db', JSON.stringify(updated)); } catch(e) {}
       return updated;
     });
-    showToast(`Payment recorded`);
+    showToast(`Payment dicatat — menunggu konfirmasi cloud...`, 'success', `Payment recorded: ${student.name} | Rp ${Number(amt).toLocaleString('id-ID')} | ${method} | ${String(month)}/${String(year)}`);
     setAmounts((p) => ({ ...p, [student.id]: '' }));
   };
 
@@ -6797,7 +7134,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
                       <div className="w-px h-5 bg-gray-700"/>
                       <button onClick={() => handleRecordInline(s, undefined)} disabled={!amounts[s.id]} className="bg-[#00D4FF]/10 text-[#00D4FF] hover:bg-[#00D4FF]/20 px-3 py-2 text-xs font-bold transition-colors disabled:opacity-50">Add</button>
                       <div className="w-px h-5 bg-gray-700"/>
-                      <button onClick={() => handleRecordInline(s, 25000)} className="bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white px-3 py-2 text-xs font-bold transition-all whitespace-nowrap">+25k</button>
+                      <button onClick={() => handleRecordInline(s, getStudentRate(s))} className="bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white px-3 py-2 text-xs font-bold transition-all whitespace-nowrap">+{(getStudentRate(s)/1000).toFixed(0)}k</button>
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -6922,10 +7259,10 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
                            </button>
                            <div className="w-px h-5 bg-gray-700"></div>
                            <button
-                              onClick={() => handleRecordInline(s, 25000)}
+                              onClick={() => handleRecordInline(s, getStudentRate(s))}
                               className="bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white px-4 py-2 text-[11px] font-bold transition-all whitespace-nowrap"
                            >
-                              + 25k
+                              +{(getStudentRate(s)/1000).toFixed(0)}k
                            </button>
                          </div>
                       )}
@@ -7015,6 +7352,39 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
   const [filterSession, setFilterSession] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('');
 
+  // ── Pemutihan Tunggakan ───────────────────────────────────────────────────
+  const [waiverModal, setWaiverModal] = React.useState<null | {
+    student: any; yr: number; mo: number; outstanding: number; bulkMonths?: { yr: number; mo: number; outstanding: number }[];
+  }>(null);
+  const [waiverReason, setWaiverReason] = React.useState('');
+  const [waiverLoading, setWaiverLoading] = React.useState(false);
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Cutoff Month Filter ───────────────────────────────────────────────────
+  // Default: bulan & tahun saat ini (menampilkan semua tunggakan s/d hari ini)
+  const [cutoffYear, setCutoffYear] = React.useState(currentYear);
+  const [cutoffMonth, setCutoffMonth] = React.useState(currentMonth);
+
+  // Buat daftar opsi bulan dari 2020 s/d bulan ini untuk dropdown cutoff
+  const cutoffOptions = React.useMemo(() => {
+    const opts = [];
+    for (let y = 2020; y <= currentYear; y++) {
+      const maxM = y === currentYear ? currentMonth : 12;
+      for (let m = 1; m <= maxM; m++) {
+        opts.push({ yr: y, mo: m });
+      }
+    }
+    return opts.reverse(); // terbaru di atas
+  }, [currentYear, currentMonth]);
+
+  const handleCutoffChange = (val) => {
+    if (!val) { setCutoffYear(currentYear); setCutoffMonth(currentMonth); return; }
+    const [y, m] = val.split('-').map(Number);
+    setCutoffYear(y);
+    setCutoffMonth(m);
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ── Plan Override Edit Modal ──────────────────────────────────────────────
   const [planEditStudent, setPlanEditStudent] = React.useState(null); // student object
   const [planEditDraft, setPlanEditDraft] = React.useState({}); // { "YYYY-MM": "Monthly"|"Per Visit" }
@@ -7053,6 +7423,51 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
     setPlanEditStudent(null);
   };
 
+  // ── Fungsi Pemutihan Tunggakan ────────────────────────────────────────────
+  const saveWaiver = () => {
+    if (!waiverModal) return;
+    setWaiverLoading(true);
+    const { student, bulkMonths } = waiverModal;
+    const monthsToWaive = bulkMonths
+      ? bulkMonths
+      : [{ yr: waiverModal.yr, mo: waiverModal.mo, outstanding: waiverModal.outstanding }];
+
+    const newPayments = monthsToWaive.map(({ yr, mo, outstanding }) => {
+      // Buat ID unik untuk record waiver
+      const randPart = Math.floor(1000 + Math.random() * 9000) + '-' +
+        Array.from({ length: 4 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.charAt(Math.floor(Math.random() * 26))).join('');
+      return {
+        id: `WVR-${randPart}`,
+        studentId: student.id,
+        studentName: student.name,
+        year: yr,
+        month: mo,
+        amount: outstanding,
+        status: 'Waived',
+        method: 'Pemutihan',
+        note: waiverReason || 'Pemutihan tunggakan oleh admin',
+        date: getTodayDateLocal(),
+        sessionGroup: getStudentSession(student),
+        createdAt: getLocalTimestamp(),
+        updatedAt: getLocalTimestamp(),
+        waivedAt: getLocalTimestamp(),
+        waivedReason: waiverReason || 'Pemutihan tunggakan oleh admin',
+      };
+    });
+
+    setDb(prev => ({
+      ...prev,
+      payments: [...(prev.payments || []), ...newPayments],
+    }));
+
+    const totalWaived = monthsToWaive.reduce((s, m) => s + m.outstanding, 0);
+    showToast(`✅ Tunggakan Rp ${totalWaived.toLocaleString('id-ID')} berhasil diputihkan untuk ${student.name}`);
+    setWaiverModal(null);
+    setWaiverReason('');
+    setWaiverLoading(false);
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Helper: same as getMonthRange but doesn't depend on useCallback closures
   const getMonthRangeForStudent = (student) => {
     if (student.billingStartMonth) {
@@ -7061,7 +7476,7 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
       if (bY && bM) {
         const months = [];
         let y = bY, m = bM;
-        while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+        while (y < cutoffYear || (y === cutoffYear && m <= cutoffMonth)) {
           months.push({ yr: y, mo: m });
           m++; if (m > 12) { m = 1; y++; }
         }
@@ -7074,14 +7489,14 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
         p.date || (p.year && p.month ? `${p.year}-${String(p.month).padStart(2,'0')}-01` : null)
       ).filter(Boolean),
     ].filter(Boolean).sort();
-    let startY = currentYear, startM = currentMonth;
+    let startY = cutoffYear, startM = cutoffMonth;
     if (allDates.length > 0) {
       const parts = allDates[0].split('-');
       if (parts.length >= 2) { startY = Number(parts[0]); startM = Number(parts[1]); }
     }
     const months = [];
     let y = startY, m = startM;
-    while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+    while (y < cutoffYear || (y === cutoffYear && m <= cutoffMonth)) {
       months.push({ yr: y, mo: m });
       m++; if (m > 12) { m = 1; y++; }
     }
@@ -7089,9 +7504,25 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
   };
   // ─────────────────────────────────────────────────────────────────────────
 
+  // FIX: Sertakan siswa Inactive yang masih punya tunggakan (ada payment atau attendance),
+  // agar data mereka tidak hilang hanya karena status diubah ke Inactive.
+  // Siswa Free tetap dikecualikan karena tidak ada tagihan.
+  const studentsWithHistory = React.useMemo(() => {
+    const studentIdsWithData = new Set([
+      ...(db.payments || []).map(p => String(p.studentId)),
+      ...(db.studentAttendance || []).map(a => String(a.studentId)),
+    ]);
+    return db.students.filter(s => {
+      if (s.paymentPlan === 'Free') return false;
+      if (s.status === 'Active') return true;
+      // Inactive: sertakan hanya jika ada riwayat pembayaran atau kehadiran
+      return studentIdsWithData.has(String(s.id));
+    });
+  }, [db.students, db.payments, db.studentAttendance]);
+
   const activeStudents = React.useMemo(
-    () => sortStudentsLogically(db.students.filter(s => s.status === 'Active' && s.paymentPlan !== 'Free')),
-    [db.students]
+    () => sortStudentsLogically(studentsWithHistory),
+    [studentsWithHistory]
   );
 
   const getTarget = React.useCallback((student, yr, mo) => {
@@ -7113,16 +7544,26 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
     // ─────────────────────────────────────────────────────────────────────
 
     if (effectivePlan === 'Monthly') {
-      return (db.calendar || []).filter(c => c.date.startsWith(prefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonth || c.date >= _bsd)).length * 25000;
+      return (db.calendar || []).filter(c => c.date.startsWith(prefix) && (c.sessionGroup || c.name) === sGroup && (!_sameMonth || c.date >= _bsd)).length * getStudentRate(student);
     }
     return (db.studentAttendance || []).filter(a =>
       a.studentId === student.id && a.date.startsWith(prefix) && a.status === 'Present' && isAttendanceValidForStudent(a, student)
-    ).length * 25000;
+    ).length * getStudentRate(student);
   }, [db.calendar, db.studentAttendance]);
 
   const getPaid = React.useCallback((studentId, yr, mo) => {
+    // FIX: Hitung semua record pembayaran yang memiliki amount > 0,
+    // termasuk status 'Partial' atau 'Unpaid' yang mungkin diisi amount secara manual.
+    // 'Waived' juga dihitung agar tunggakan yang diputihkan dianggap lunas di billing recap
+    // (namun TIDAK dihitung sebagai pendapatan di modul Payment/Revenue).
     return (db.payments || [])
-      .filter(p => String(p.studentId) === String(studentId) && Number(p.month) === mo && Number(p.year) === yr && p.status === 'Paid')
+      .filter(p =>
+        String(p.studentId) === String(studentId) &&
+        Number(p.month) === mo &&
+        Number(p.year) === yr &&
+        (p.status === 'Paid' || p.status === 'Partial' || p.status === 'Deposit' || p.status === 'Waived') &&
+        Number(p.amount) > 0
+      )
       .reduce((s, p) => s + Number(p.amount), 0);
   }, [db.payments]);
 
@@ -7134,7 +7575,8 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
       if (bY && bM) {
         const months = [];
         let y = bY, m = bM;
-        while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+        // Gunakan cutoffYear/cutoffMonth sebagai batas akhir (bukan currentYear/currentMonth)
+        while (y < cutoffYear || (y === cutoffYear && m <= cutoffMonth)) {
           months.push({ yr: y, mo: m });
           m++; if (m > 12) { m = 1; y++; }
         }
@@ -7149,7 +7591,7 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
         p.date || (p.year && p.month ? `${p.year}-${String(p.month).padStart(2,'0')}-01` : null)
       ).filter(Boolean),
     ].filter(Boolean).sort();
-    let startY = currentYear, startM = currentMonth;
+    let startY = cutoffYear, startM = cutoffMonth;
     if (allDates.length > 0) {
       const earliest = allDates[0];
       const parts = earliest.split('-');
@@ -7157,7 +7599,8 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
     }
     const months = [];
     let y = startY, m = startM;
-    while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+    // Gunakan cutoffYear/cutoffMonth sebagai batas akhir
+    while (y < cutoffYear || (y === cutoffYear && m <= cutoffMonth)) {
       months.push({ yr: y, mo: m });
       m++; if (m > 12) { m = 1; y++; }
     }
@@ -7167,6 +7610,8 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
   const studentData = React.useMemo(() => {
     return activeStudents.map(s => {
       const months = getMonthRange(s);
+      // eslint-disable-next-line no-unused-expressions
+      void cutoffYear; void cutoffMonth; // pastikan useMemo reaktif terhadap cutoff
       let totalTarget = 0, totalPaid = 0;
       const monthDetails = months.map(({ yr, mo }) => {
         const target = getTarget(s, yr, mo);
@@ -7179,15 +7624,20 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
           a.studentId === s.id && a.date.startsWith(prefix) && isAttendanceValidForStudent(a, s)
         ).sort((a, b) => a.date.localeCompare(b.date));
         return { yr, mo, target, paid, outstanding, attRecords };
-      }).filter(m => m.target > 0);
-      const totalOutstanding = Math.max(0, totalTarget - totalPaid);
+      // FIX: Tampilkan bulan jika ada target ATAU ada pembayaran (mencegah data hilang
+      // ketika target=0 akibat session mismatch di kalender, tapi siswa sudah bayar/ada tunggakan)
+      }).filter(m => m.target > 0 || m.paid > 0);
+      // FIX: Hitung totalOutstanding dari penjumlahan outstanding per bulan (bukan totalTarget-totalPaid)
+      // agar kelebihan bayar di satu bulan tidak "menutupi" tunggakan di bulan lain secara keliru.
+      const totalOutstanding = monthDetails.reduce((sum, m) => sum + m.outstanding, 0);
       const status = totalOutstanding === 0 && totalTarget > 0 ? 'Lunas'
         : totalPaid > 0 && totalOutstanding > 0 ? 'Parsial'
-        : totalTarget === 0 ? 'Belum Tagih'
+        : totalTarget === 0 && totalPaid === 0 ? 'Belum Tagih'
+        : totalTarget === 0 && totalPaid > 0 ? 'Lunas'
         : 'Belum Bayar';
       return { student: s, monthDetails, totalTarget, totalPaid, totalOutstanding, status };
     });
-  }, [activeStudents, getTarget, getPaid, db.studentAttendance, db.students]);
+  }, [activeStudents, getTarget, getPaid, db.studentAttendance, db.students, db.payments, cutoffYear, cutoffMonth]);
 
   const filtered = React.useMemo(() => {
     let list = studentData;
@@ -7200,11 +7650,20 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
   const totalOutstandingAll = filtered.reduce((s, d) => s + d.totalOutstanding, 0);
   const debtCount = filtered.filter(d => d.totalOutstanding > 0).length;
   const paidCount = filtered.filter(d => d.status === 'Lunas').length;
+  // Hitung total & jumlah siswa yang sudah pernah diputihkan dalam rentang filter
+  const waivedTotal = React.useMemo(() => {
+    const filteredIds = new Set(filtered.map(d => String(d.student.id)));
+    return (db.payments || []).filter(p =>
+      p.status === 'Waived' && filteredIds.has(String(p.studentId)) &&
+      (Number(p.year) < cutoffYear || (Number(p.year) === cutoffYear && Number(p.month) <= cutoffMonth))
+    ).reduce((s, p) => s + Number(p.amount), 0);
+  }, [db.payments, filtered, cutoffYear, cutoffMonth]);
 
   const statusColor = (st) => {
     if (st === 'Lunas') return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     if (st === 'Parsial') return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
     if (st === 'Belum Bayar') return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+    if (st === 'Waived') return 'bg-violet-500/20 text-violet-400 border-violet-500/30';
     return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
   };
 
@@ -7216,24 +7675,70 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
             <Inbox size={22} className="text-[#00D4FF]" />
             Rekapitulasi Tagihan Siswa
           </h2>
-          <p className="text-gray-400 text-sm mt-1">Tunggakan per siswa lintas bulan — klik siswa untuk detail kehadiran dan pembayaran.</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Tunggakan per siswa lintas bulan — klik siswa untuk detail kehadiran dan pembayaran.
+            {(cutoffYear !== currentYear || cutoffMonth !== currentMonth) && (
+              <span className="ml-2 inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[#00D4FF]/10 border border-[#00D4FF]/30 text-[#00D4FF] font-semibold">
+                <CalendarIcon size={10} />
+                S/D {MONTHS[cutoffMonth - 1]} {cutoffYear}
+              </span>
+            )}
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 text-center">
           <p className="text-[11px] text-rose-400 font-semibold uppercase tracking-wide mb-1">Total Tunggakan</p>
-          <p className="text-base sm:text-2xl font-black text-rose-400">Rp {totalOutstandingAll.toLocaleString('id-ID')}</p>
+          <p className="text-base sm:text-xl font-black text-rose-400">Rp {totalOutstandingAll.toLocaleString('id-ID')}</p>
         </div>
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 text-center">
           <p className="text-[11px] text-amber-400 font-semibold uppercase tracking-wide mb-1">Siswa Menunggak</p>
-          <p className="text-base sm:text-2xl font-black text-amber-400">{debtCount}</p>
+          <p className="text-base sm:text-xl font-black text-amber-400">{debtCount}</p>
         </div>
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
           <p className="text-[11px] text-emerald-400 font-semibold uppercase tracking-wide mb-1">Siswa Lunas</p>
-          <p className="text-base sm:text-2xl font-black text-emerald-400">{paidCount}</p>
+          <p className="text-base sm:text-xl font-black text-emerald-400">{paidCount}</p>
+        </div>
+        <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4 text-center">
+          <p className="text-[11px] text-violet-400 font-semibold uppercase tracking-wide mb-1 flex items-center justify-center gap-1"><ArchiveRestore size={11}/>Diputihkan</p>
+          <p className="text-base sm:text-xl font-black text-violet-400">Rp {waivedTotal.toLocaleString('id-ID')}</p>
         </div>
       </div>
+
+      {/* ── Cutoff Month Selector ──────────────────────────────────────────── */}
+      <div className="flex items-center gap-3 bg-[#0D1520] border border-[#00D4FF]/20 rounded-xl px-4 py-3">
+        <CalendarIcon size={15} className="text-[#00D4FF] shrink-0" />
+        <div className="flex-1">
+          <p className="text-[11px] text-[#00D4FF] font-semibold uppercase tracking-wide mb-0.5">Tampilkan Tunggakan S/D Bulan</p>
+          <p className="text-[10px] text-gray-500">Hanya menghitung tagihan & pembayaran hingga bulan yang dipilih — bulan setelahnya tidak dihitung.</p>
+        </div>
+        <select
+          value={`${cutoffYear}-${String(cutoffMonth).padStart(2, '0')}`}
+          onChange={e => handleCutoffChange(e.target.value)}
+          className="bg-[#151B26] border border-[#00D4FF]/40 rounded-lg px-3 py-2 text-white text-sm font-semibold focus:outline-none focus:border-[#00D4FF] min-w-[160px]"
+        >
+          {cutoffOptions.map(({ yr, mo }) => {
+            const val = `${yr}-${String(mo).padStart(2, '0')}`;
+            const isNow = yr === currentYear && mo === currentMonth;
+            return (
+              <option key={val} value={val}>
+                {MONTHS[mo - 1]} {yr}{isNow ? ' (Bulan Ini)' : ''}
+              </option>
+            );
+          })}
+        </select>
+        {(cutoffYear !== currentYear || cutoffMonth !== currentMonth) && (
+          <button
+            onClick={() => { setCutoffYear(currentYear); setCutoffMonth(currentMonth); }}
+            className="text-[11px] text-[#00D4FF] hover:text-white border border-[#00D4FF]/30 hover:border-[#00D4FF] rounded-lg px-2.5 py-1.5 transition-colors shrink-0"
+            title="Reset ke bulan ini"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+      {/* ─────────────────────────────────────────────────────────────────── */}
 
       <div className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">
@@ -7274,6 +7779,9 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
                   onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-white">{s.name}</span>
+                    {s.status === 'Inactive' && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-500/20 border border-gray-500/40 text-gray-400 font-semibold">Inactive</span>
+                    )}
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${statusColor(status)}`}>{status}</span>
                     {totalOutstanding > 0 && (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold">
@@ -7328,6 +7836,23 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
                     <Edit2 size={12} />
                     <span className="hidden sm:inline">Plan</span>
                   </button>
+                  {/* ── Shortcut: Pemutihan Semua Tunggakan Siswa Ini ── */}
+                  {totalOutstanding > 0 && (
+                    <button
+                      type="button"
+                      title="Putihkan semua tunggakan siswa ini"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const debtMonths = monthDetails.filter(m => m.outstanding > 0).map(m => ({ yr: m.yr, mo: m.mo, outstanding: m.outstanding }));
+                        setWaiverModal({ student: s, yr: 0, mo: 0, outstanding: totalOutstanding, bulkMonths: debtMonths });
+                        setWaiverReason('');
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-400 text-[11px] font-semibold transition-colors shrink-0"
+                    >
+                      <ArchiveRestore size={12} />
+                      <span className="hidden sm:inline">Putihkan</span>
+                    </button>
+                  )}
                   <div className="cursor-pointer p-1" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
                     <ChevronDown size={16} className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                   </div>
@@ -7341,7 +7866,7 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
                     const monthKey = `${s.id}-${yr}-${mo}`;
                     const isMonthOpen = expandedMonth === monthKey;
                     const presentDates = attRecords.filter(a => a.status === 'Present');
-                    const isCurrent = yr === currentYear && mo === currentMonth;
+                    const isCurrent = yr === cutoffYear && mo === cutoffMonth;
                     const mPrefix = `${yr}-${String(mo).padStart(2,'0')}`;
                     const overrides = s.paymentPlanOverrides || {};
                     const effectivePlanThisMonth = overrides[mPrefix] || s.paymentPlan || 'Monthly';
@@ -7364,10 +7889,25 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
                             </span>
                             <span className="text-[11px] text-gray-400">{presentDates.length}x hadir</span>
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
                             <div className="text-right"><p className="text-[10px] text-gray-500">Target</p><p className="text-xs font-semibold text-white">Rp {target.toLocaleString('id-ID')}</p></div>
                             <div className="text-right"><p className="text-[10px] text-gray-500">Bayar</p><p className="text-xs font-semibold text-emerald-400">Rp {paid.toLocaleString('id-ID')}</p></div>
                             <div className="text-right"><p className="text-[10px] text-gray-500">Sisa</p><p className={`text-xs font-bold ${outstanding > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Rp {outstanding.toLocaleString('id-ID')}</p></div>
+                            {outstanding > 0 && (
+                              <button
+                                type="button"
+                                title={`Putihkan tunggakan ${MONTHS[mo - 1]} ${yr}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setWaiverModal({ student: s, yr, mo, outstanding });
+                                  setWaiverReason('');
+                                }}
+                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-400 text-[10px] font-semibold transition-colors shrink-0"
+                              >
+                                <ArchiveRestore size={11} />
+                                <span className="hidden sm:inline">Putihkan</span>
+                              </button>
+                            )}
                             <ChevronDown size={13} className={`text-gray-500 transition-transform shrink-0 ${isMonthOpen ? 'rotate-180' : ''}`} />
                           </div>
                         </button>
@@ -7402,13 +7942,16 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
                                 <div className="space-y-1">
                                   <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide mb-1.5">Pembayaran Diterima</p>
                                   {payRecs.map((p, i) => (
-                                    <div key={i} className="flex items-center justify-between bg-[#0B0F19] rounded-lg px-3 py-2">
+                                    <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2 ${p.status === 'Waived' ? 'bg-violet-500/5 border border-violet-500/20' : 'bg-[#0B0F19]'}`}>
                                       <div>
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${statusColor(p.status)}`}>{p.status}</span>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${statusColor(p.status)}`}>{p.status === 'Waived' ? '✦ Diputihkan' : p.status}</span>
                                         <span className="text-[11px] text-gray-400 ml-2">{p.method || '-'}</span>
                                         {p.date && <span className="text-[11px] text-gray-500 ml-2">{p.date}</span>}
+                                        {p.waivedReason && <span className="text-[10px] text-violet-400 ml-2 italic">"{p.waivedReason}"</span>}
                                       </div>
-                                      <span className="text-sm font-bold text-emerald-400">Rp {Number(p.amount).toLocaleString('id-ID')}</span>
+                                      <span className={`text-sm font-bold ${p.status === 'Waived' ? 'text-violet-400' : 'text-emerald-400'}`}>
+                                        {p.status === 'Waived' ? '−' : ''}Rp {Number(p.amount).toLocaleString('id-ID')}
+                                      </span>
                                     </div>
                                   ))}
                                 </div>
@@ -7439,6 +7982,126 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
           );
         })}
       </div>
+
+      {/* ── Modal Pemutihan Tunggakan ─────────────────────────────────────── */}
+      {waiverModal && ReactDOM.createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.80)' }}
+          onClick={() => { setWaiverModal(null); setWaiverReason(''); }}
+        >
+          <div
+            className="bg-[#151B26] border border-violet-500/40 rounded-2xl shadow-2xl w-full max-w-md flex flex-col"
+            style={{ maxHeight: '85vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between shrink-0">
+              <div>
+                <p className="text-[11px] text-violet-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
+                  <ArchiveRestore size={13} />
+                  Pemutihan Tunggakan
+                </p>
+                <h3 className="text-white font-bold text-base">{waiverModal.student.name}</h3>
+                {waiverModal.bulkMonths ? (
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    Semua tunggakan — <span className="text-violet-300 font-semibold">{waiverModal.bulkMonths.length} bulan</span>
+                  </p>
+                ) : (
+                  <p className="text-gray-400 text-xs mt-0.5">
+                    {MONTHS[waiverModal.mo - 1]} {waiverModal.yr}
+                  </p>
+                )}
+              </div>
+              <button onClick={() => { setWaiverModal(null); setWaiverReason(''); }} className="text-gray-500 hover:text-white p-1">
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
+              {/* Info tagihan */}
+              <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4">
+                <p className="text-[11px] text-violet-400 font-semibold uppercase tracking-wide mb-2">Rincian Tunggakan yang Diputihkan</p>
+                {waiverModal.bulkMonths ? (
+                  <div className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
+                    {waiverModal.bulkMonths.map((m, i) => (
+                      <div key={i} className="flex justify-between text-xs text-gray-300">
+                        <span>{MONTHS[m.mo - 1]} {m.yr}</span>
+                        <span className="font-semibold text-violet-300">Rp {m.outstanding.toLocaleString('id-ID')}</span>
+                      </div>
+                    ))}
+                    <div className="border-t border-violet-500/20 mt-2 pt-2 flex justify-between text-sm font-bold text-white">
+                      <span>Total</span>
+                      <span className="text-violet-300">Rp {waiverModal.outstanding.toLocaleString('id-ID')}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-300">{MONTHS[waiverModal.mo - 1]} {waiverModal.yr}</span>
+                    <span className="text-lg font-black text-violet-300">Rp {waiverModal.outstanding.toLocaleString('id-ID')}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Warning */}
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex gap-2">
+                <AlertCircle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-300">
+                  Pemutihan akan mencatat tunggakan sebagai <strong>Diputihkan</strong> dan menghapusnya dari rekapitulasi.
+                  Tindakan ini <strong>tidak menambah pendapatan</strong> dan dapat dilihat di riwayat pembayaran siswa.
+                </p>
+              </div>
+
+              {/* Alasan */}
+              <div>
+                <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">
+                  Alasan Pemutihan <span className="text-gray-600 font-normal">(opsional)</span>
+                </label>
+                <select
+                  value={waiverReason}
+                  onChange={e => setWaiverReason(e.target.value)}
+                  className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500 mb-2"
+                >
+                  <option value="">— Pilih alasan —</option>
+                  <option value="Siswa tidak melanjutkan kursus">Siswa tidak melanjutkan kursus</option>
+                  <option value="Reward free kursus dari admin">Reward free kursus dari admin</option>
+                  <option value="Kesalahan pencatatan">Kesalahan pencatatan</option>
+                  <option value="Kebijakan keringanan khusus">Kebijakan keringanan khusus</option>
+                  <option value="Lainnya">Lainnya (isi manual di bawah)</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Atau ketik alasan manual..."
+                  value={waiverReason.startsWith('Lainnya') || !['Siswa tidak melanjutkan kursus','Reward free kursus dari admin','Kesalahan pencatatan','Kebijakan keringanan khusus',''].includes(waiverReason) ? waiverReason : ''}
+                  onChange={e => setWaiverReason(e.target.value)}
+                  className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-gray-800 flex gap-3 shrink-0">
+              <button
+                onClick={() => { setWaiverModal(null); setWaiverReason(''); }}
+                className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm font-semibold hover:bg-gray-700/30 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={saveWaiver}
+                disabled={waiverLoading}
+                className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-bold transition-colors flex items-center justify-center gap-2"
+              >
+                <ArchiveRestore size={14} />
+                {waiverLoading ? 'Memproses...' : 'Konfirmasi Pemutihan'}
+              </button>
+            </div>
+          </div>
+        </div>
+        , document.body
+      )}
+      {/* ─────────────────────────────────────────────────────────────────────── */}
 
       {/* ── Plan Per Bulan Modal ────────────────────────────────────────────── */}
       {planEditStudent && (() => {
@@ -8405,7 +9068,7 @@ function TutorsModule({ db, setDb, generateId, showToast, softDelete }) {
     const finalPhone = normalizeWhatsapp(formData.phone);
     const rec = { ...formData, phone: finalPhone, id: formData.id || generateId('TUT', 'tutors'), updatedAt: getLocalTimestamp() }; // FIX BUG 3: timestamp untuk LWW
     setDb(p => ({ ...p, tutors: formData.id ? p.tutors.map(t => t.id === formData.id ? rec : t) : [...p.tutors, rec] }));
-    showToast('Tutor saved');
+    showToast('Tutor saved', 'success', `Tutor ${formData.id ? 'updated' : 'added'}: ${rec.name} | ${parseSessions(rec.teachingSession).join(', ')}`);
     setIsAdding(false);
   };
 
@@ -8637,7 +9300,7 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
     // FIX BUG #4: tambah timestamp untuk LWW yang benar di mergeByIds
     const rec = { ...formData, id: formData.id || generateId('JRN', 'journals'), tutorName: user.name, timestamp: getLocalTimestamp() };
     setDb(p => ({ ...p, journals: formData.id ? p.journals.map(j => j.id === formData.id ? rec : j) : [...p.journals, rec] }));
-    showToast(formData.id ? 'Journal updated' : 'Journal saved');
+    showToast(formData.id ? 'Journal updated' : 'Journal saved', 'success', `Journal ${formData.id ? 'updated' : 'saved'}: ${rec.sessionGroup || ''} | ${rec.date || ''} by ${rec.tutorName}`);
     setIsAdding(false);
   };
 
@@ -9390,7 +10053,7 @@ function CalendarModule({ db, setDb, generateId, user, showToast, softDelete }) 
      }
      const rec = { ...formData, id: formData.id || generateId('CAL', 'calendar'), updatedAt: getLocalTimestamp() }; // FIX BUG 3: timestamp untuk LWW
      setDb(p => ({ ...p, calendar: formData.id ? p.calendar.map(c => c.id === formData.id ? rec : c) : [...p.calendar, rec] }));
-     showToast(formData.id ? 'Event updated' : 'Event created');
+     showToast(formData.id ? 'Event updated' : 'Event created', 'success', `Event ${formData.id ? 'updated' : 'created'}: ${rec.type || ''} | ${rec.date || ''} | ${rec.sessionGroup || ''}`);
      setIsAdding(false);
   };
 
@@ -9800,7 +10463,7 @@ function SettingsModule({ db, setDb, generateId, user, showToast, requestConfirm
       const rec = { ...formData, password: finalPassword, id: isEditingId || generateId('ADM', 'users'), mustChangePassword: !isEditingId, updatedAt: getLocalTimestamp() };
       setDb((p) => ({ ...p, users: isEditingId ? p.users.map((u) => (u.id === isEditingId ? rec : u)) : [...p.users, rec] }));
     }
-    showToast('User Saved');
+    showToast('User Saved', 'success', `User ${isEditingId ? 'updated' : 'created'}: ${formData.name || formData.username} | Role: ${formData.role}`);
     setIsEditingId(null);
     setFormData({ name: '', username: '', password: '', role: 'admin', active: 'Active', studentId: '', tutorId: '', teachingSession: '' });
   };
@@ -9850,7 +10513,7 @@ function SettingsModule({ db, setDb, generateId, user, showToast, requestConfirm
         .then(r => r.json())
         .then(data => {
           if (data.status === 'success') {
-            if (data.newVersion) dbVersion.current = data.newVersion;
+            if (data.newVersion) { dbVersion.current = data.newVersion; try { localStorage.setItem('ecg_version', String(data.newVersion)); } catch {} }
             setSyncStatus('saved');
           }
         })
@@ -12287,7 +12950,17 @@ function DataExportModule({ db }) {
   );
 }
 
-function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletion }) {
+function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletion, onQueueTombstone }: any) {
+  // PATCH TOMBSTONE: catat penanda hapus permanen (lokal + antrian kirim ke server).
+  const queueTombstones = (items: any[]) => {
+    const list = (items || []).map((x: any) => {
+      let d = x?.data;
+      if (typeof d === 'string') { try { d = JSON.parse(d); } catch { d = null; } }
+      return { collection: x?.originalCollection, id: d?.id || x?.dataId };
+    }).filter((t: any) => t.collection && t.id && t.collection !== 'recycleBin');
+    addDeletedDataIds(list.map((t: any) => t.id));
+    if (onQueueTombstone) list.forEach((t: any) => onQueueTombstone(t));
+  };
   // Gunakan onQueueDeletion dari parent agar deletions masuk ke sync debounce utama.
   const [selectedIds, setSelectedIds] = useState([]);
   const binItems = db.recycleBin || [];
@@ -12327,18 +13000,21 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletio
         return d;
       })();
       setDb((p) => ({ ...p, [item.originalCollection]: [...p[item.originalCollection], restoreData], recycleBin: p.recycleBin.filter((x) => x.binId !== item.binId) }));
-      showToast('Item Restored');
+      showToast('Item Restored', 'success', `Restored: ${restoreData?.name || item.data?.name || item.binId} from ${item.originalCollection}`);
     });
   };
 
   const handlePermDelete = (binId) => {
+    const binItem = (db.recycleBin || []).find((x: any) => x.binId === binId || x.id === binId);
     requestConfirm('Permanent Delete', 'WARNING: This will permanently delete the record. This cannot be undone. Continue?', () => {
       // BUGFIX: Catat ID ke perm-deleted guard agar tidak kembali saat merge cloud
       addPermDeletedBinIds([String(binId)]);
+      // PATCH TOMBSTONE: catat juga ID data aslinya
+      queueTombstones((db.recycleBin || []).filter((x: any) => x.binId === binId || x.id === binId));
       if (onQueueDeletion) onQueueDeletion({ collection: 'recycleBin', id: binId });
       setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => x.binId !== binId) }));
       setSelectedIds((prev) => prev.filter((id) => id !== binId));
-      showToast('Permanently Deleted', 'error');
+      showToast('Permanently Deleted', 'error', `Permanently deleted: ${binItem?.data?.name || binItem?.dataId || binId} from ${binItem?.originalCollection || 'recycleBin'}`);
     });
   };
 
@@ -12350,6 +13026,8 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletio
       () => {
         // BUGFIX: Catat semua ID ke perm-deleted guard agar tidak kembali saat merge cloud
         addPermDeletedBinIds(selectedIds.map(String));
+        // PATCH TOMBSTONE: catat juga ID data aslinya
+        queueTombstones((db.recycleBin || []).filter((x: any) => selectedIds.includes(x.binId) || selectedIds.includes(x.id)));
         if (onQueueDeletion) selectedIds.forEach((id) => onQueueDeletion({ collection:'recycleBin', id }));
         setDb((p) => ({ ...p, recycleBin: p.recycleBin.filter((x) => !selectedIds.includes(x.binId) && !selectedIds.includes(x.id)) }));
         showToast(`${selectedIds.length} item(s) permanently deleted`, 'error');
@@ -12375,6 +13053,7 @@ function RecycleBinModule({ db, setDb, showToast, requestConfirm, onQueueDeletio
             setDb((p) => {
               // BUGFIX: Catat semua bin ID ke perm-deleted guard sebelum dikosongkan
               addPermDeletedBinIds((p.recycleBin || []).map((x: any) => String(x.binId || x.id)).filter(Boolean));
+              queueTombstones(p.recycleBin || []); // PATCH TOMBSTONE
               if (onQueueDeletion) (p.recycleBin || []).forEach((x) => onQueueDeletion({ collection:'recycleBin', id: x.binId || x.id }));
               return { ...p, recycleBin: [] };
             });
@@ -12569,12 +13248,60 @@ function SystemLogsModule({ logs, setLogs, showToast, requestConfirm }) {
               <tbody className="divide-y divide-gray-800/50">
                  {paginatedData.map((log, idx) => {
                     let displayTime = normalizeTimestamp(log.Timestamp);
+                    const isCloudSaved = log.Action === 'CLOUD_SAVED';
+                    // Parse "[DATATYPE] detail — time" dari Details
+                    let cloudDataType = '';
+                    let cloudDetail = log.Details || log['Error Details'] || '';
+                    if (isCloudSaved && cloudDetail.startsWith('[')) {
+                      const m = cloudDetail.match(/^\[([^\]]+)\]\s*(.+)/);
+                      if (m) { cloudDataType = m[1]; cloudDetail = m[2]; }
+                    }
+                    const dtColorClass =
+                      cloudDataType === 'PAYMENT'    ? 'bg-emerald-500/20 text-emerald-400' :
+                      cloudDataType === 'ABSENSI'    ? 'bg-blue-500/20 text-blue-400' :
+                      cloudDataType === 'TUTOR ATT'  ? 'bg-cyan-500/20 text-cyan-400' :
+                      cloudDataType === 'JOURNAL'    ? 'bg-purple-500/20 text-purple-400' :
+                      cloudDataType === 'ASSESSMENT' ? 'bg-yellow-500/20 text-yellow-400' :
+                      cloudDataType === 'SISWA'      ? 'bg-pink-500/20 text-pink-400' :
+                      cloudDataType === 'TUTOR'      ? 'bg-orange-500/20 text-orange-400' :
+                      cloudDataType === 'PAYROLL'    ? 'bg-amber-500/20 text-amber-400' :
+                      cloudDataType === 'KALENDER'   ? 'bg-sky-500/20 text-sky-400' :
+                      cloudDataType === 'PENGUMUMAN' ? 'bg-violet-500/20 text-violet-400' :
+                      cloudDataType === 'MATERI'     ? 'bg-teal-500/20 text-teal-400' :
+                      cloudDataType === 'USER'       ? 'bg-rose-500/20 text-rose-400' :
+                      'bg-gray-700/50 text-gray-400';
+                    // Color map for user-action badges
+                    const actionBadgeClass = (action: string) => {
+                      switch(action) {
+                        case 'SAVE_PAYMENT':    return 'bg-emerald-500/20 text-emerald-400';
+                        case 'SAVE_STUDENT':    return 'bg-pink-500/20 text-pink-400';
+                        case 'SAVE_TUTOR':      return 'bg-orange-500/20 text-orange-400';
+                        case 'SAVE_ATTENDANCE': return 'bg-blue-500/20 text-blue-400';
+                        case 'SAVE_JOURNAL':    return 'bg-purple-500/20 text-purple-400';
+                        case 'SAVE_ASSESSMENT': return 'bg-yellow-500/20 text-yellow-400';
+                        case 'SAVE_MATERIAL':   return 'bg-teal-500/20 text-teal-400';
+                        case 'SAVE_CALENDAR':   return 'bg-sky-500/20 text-sky-400';
+                        case 'SAVE_ANNOUNCEMENT': return 'bg-violet-500/20 text-violet-400';
+                        case 'SAVE_USER':       return 'bg-rose-500/20 text-rose-400';
+                        case 'SAVE_DATA':       return 'bg-cyan-500/20 text-cyan-400';
+                        case 'DELETE_DATA':     return 'bg-red-500/20 text-red-400';
+                        case 'LOGIN':           return 'bg-indigo-500/20 text-indigo-400';
+                        case 'SYSTEM_ERROR':    return 'bg-red-600/30 text-red-300';
+                        default:                return 'bg-blue-500/20 text-blue-400';
+                      }
+                    };
                     return (
-                    <tr key={idx} className="hover:bg-[#1A2234] transition-colors font-mono text-[13px]">
+                    <tr key={idx} className={`hover:bg-[#1A2234] transition-colors font-mono text-[13px] ${isCloudSaved ? 'bg-emerald-950/10 border-l-2 border-emerald-500/30' : ''}`}>
                        <td className="p-4 text-center text-gray-500 font-medium">{startIndex + idx + 1}</td>
                        <td className="p-4 text-gray-400">{displayTime}</td>
                        <td className="p-4 font-bold text-gray-200">{log.User}</td>
-                       <td className="p-4 text-blue-400 font-bold">{log.Action}</td>
+                       <td className="p-4 font-bold">
+                         {isCloudSaved && cloudDataType ? (
+                           <span className={`px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-widest ${dtColorClass}`}>{cloudDataType}</span>
+                         ) : (
+                           <span className={`px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-widest ${actionBadgeClass(log.Action)}`}>{log.Action}</span>
+                         )}
+                       </td>
                        <td className="p-4 text-center">
                           <span className={`px-2 py-1 rounded text-[11px] font-black uppercase tracking-widest ${
                              log.Status === 'SUCCESS' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
@@ -12585,7 +13312,7 @@ function SystemLogsModule({ logs, setLogs, showToast, requestConfirm }) {
                           </span>
                        </td>
                        <td className="p-4 text-gray-300 whitespace-normal min-w-[300px]">
-                          {log.Details || log['Error Details']}
+                         {cloudDetail}
                        </td>
                     </tr>
                  )})}
@@ -12678,7 +13405,7 @@ function MaterialsModule({ db, setDb, generateId, showToast, softDelete, user })
           // BUGFIX: Tambahkan updatedAt agar LWW tidak kalah ke cloud lama saat edit material
           materials: p.materials.map(m => m.id === isEditingId ? { ...m, ...formData, updatedAt: getLocalTimestamp() } : m)
        }));
-       showToast('Material updated successfully');
+       showToast('Material updated successfully', 'success', `Material updated: "${formData.title}" | ${formData.sessionGroup} by ${user.name}`);
     } else {
        const newMat = {
          id: generateId('MAT', 'materials'),
@@ -12690,7 +13417,7 @@ function MaterialsModule({ db, setDb, generateId, showToast, softDelete, user })
          updatedAt: getLocalTimestamp(), // FIX BUG 3: timestamp untuk LWW
        };
        setDb(p => ({ ...p, materials: [...(p.materials || []), newMat] }));
-       showToast('Material posted successfully');
+       showToast('Material posted successfully', 'success', `Material posted: "${formData.title}" | ${formData.sessionGroup} by ${user.name}`);
     }
     
     setIsAdding(false);
