@@ -1032,15 +1032,19 @@ function LoginScreen({ onLogin, isDbLoaded = true, language = 'en', setLanguage 
     const t1 = setTimeout(() => setLoginStatus(language === 'id' ? 'Server sedang bersiap...' : 'Server is warming up...'), 2000);
     // After 5s, reassure user we're still trying
     const t2 = setTimeout(() => setLoginStatus(language === 'id' ? 'Hampir selesai, harap tunggu...' : 'Almost there, please wait...'), 5000);
-
     // After 15s, tell user cold start can take up to ~30s
-    const t3 = setTimeout(() => setLoginStatus(language === 'id' ? 'Server sedang bangun, bisa sampai 30 detik...' : 'Server is waking up, this can take up to 30 seconds...'), 15000);
+    const t3 = setTimeout(() => setLoginStatus(language === 'id' ? 'Server sedang bangun, bisa sampai 30 detik...' : 'Server is waking up, this can take ~30 seconds...'), 15000);
+    // [FIX-MOBILE] After 30s & 60s: tambah pesan agar user HP tidak mengira aplikasi hang
+    const t4 = setTimeout(() => setLoginStatus(language === 'id' ? 'Masih mencoba menghubungi server, mohon bersabar...' : 'Still trying to reach the server, please be patient...'), 30000);
+    const t5 = setTimeout(() => setLoginStatus(language === 'id' ? 'Koneksi lambat terdeteksi, sedang mencoba ulang...' : 'Slow connection detected, retrying...'), 60000);
 
     const result = await onLogin(username, password, rememberMe);
 
     clearTimeout(t1);
     clearTimeout(t2);
     clearTimeout(t3);
+    clearTimeout(t4);
+    clearTimeout(t5);
     setLoginStatus('');
     if (!result || !result.success) {
       setLoginError(result?.error || (language === 'id' ? 'Nama pengguna atau kata sandi salah. Silakan coba lagi.' : 'Invalid username or password. Please try again.'));
@@ -2624,7 +2628,9 @@ const normalizeData = (data) => {
             username: String(u.username || (u.nama ? String(u.nama).toLowerCase().replace(/[^a-z0-9]/g, '') : `user_${Math.floor(Math.random()*10000)}`)).trim().toLowerCase(),
             password: (u.password !== undefined && u.password !== null && u.password !== '') ? String(u.password).trim() : '',
             active: (u.active || 'Active').toString().trim(),
-            mustChangePassword: u.password ? u.mustChangePassword : true
+            mustChangePassword: u.password
+              ? (u.mustChangePassword === true || u.mustChangePassword === 'true' || u.mustChangePassword === 1)
+              : true
          };
       });
    }
@@ -2652,7 +2658,7 @@ const normalizeData = (data) => {
          password: (t.password !== undefined && t.password !== null && t.password !== '') ? String(t.password).trim() : '',
          // BUG FIX A: status tutor harus selalu ada dan bertipe string
          status: t.status || 'Active',
-         mustChangePassword: t.mustChangePassword !== undefined ? t.mustChangePassword : false
+         mustChangePassword: (t.mustChangePassword === true || t.mustChangePassword === 'true' || t.mustChangePassword === 1)
       }));
    }
    
@@ -4425,12 +4431,15 @@ function MainApp() {
 
     // ─── SLOW PATH: no local cache — must wait for server ───────────────────
     // (first-time login on a new device, or account just created by admin)
+    // [FIX-MOBILE] Timeout dinaikkan 60s → 90s dan retry 1 → 2 karena HP (terutama
+    // jaringan seluler 4G) lebih lambat saat GAS cold start. Laptop biasanya sudah
+    // punya cache lokal (fast path) sehingga tidak kena masalah ini.
     try {
       const res = await fetchGas(APPSCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'login', username: cleanUser, password: cleanPass })
-      }, 60000, 1);
+      }, 90000, 2);
       const result = await res.json().catch(() => null);
 
       if (result?.status === 'success' && result.token && result.user) {
@@ -4484,8 +4493,15 @@ function MainApp() {
         else if (msg && !/invalid credentials/i.test(msg)) friendly = msg;
         return { success: false, error: friendly };
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Server login unreachable', e);
+      // [FIX-MOBILE] Bedakan pesan error: timeout (AbortError) vs tidak ada internet
+      const isTimeout = e && (e.name === 'AbortError' || String(e.message || '').toLowerCase().includes('abort'));
+      if (isTimeout) {
+        return { success: false, error: language === 'id'
+          ? 'Server terlalu lama merespons (cold start). Coba lagi dalam 30 detik.'
+          : 'Server took too long to respond (cold start). Please retry in 30 seconds.' };
+      }
     }
 
     return { success: false, error: language === 'id' ? 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.' : 'Cannot connect to server. Please check your internet connection.' };
