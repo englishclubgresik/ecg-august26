@@ -3070,6 +3070,12 @@ function MainApp() {
   // bukan langsung dari 1 kegagalan — mencegah toast "Cloud connection lost"
   // muncul saat GAS sekadar cold-start atau lambat sesaat.
   const syncFailCount = useRef(0);
+  // [FIX CONFLICT LOOP] Counter retry konflik berturut-turut.
+  // Tanpa ini, setiap conflict memicu retry tanpa batas dan bisa loop selamanya
+  // jika versi server terus naik (ada user/device lain aktif bersamaan).
+  // Setelah MAX_CONFLICT_RETRY kali, berhenti retry otomatis dan tunggu user action.
+  const conflictRetryCount = useRef(0);
+  const MAX_CONFLICT_RETRY = 3;
   // FIX DELTA PAYLOAD: Snapshot db terakhir yang BERHASIL tersinkron ke cloud.
   // Digunakan untuk menghitung delta (koleksi mana yang berubah) sebelum kirim ke server.
   // Dengan ini, kita TIDAK mengirim seluruh db — hanya koleksi yang benar-benar berubah,
@@ -3678,15 +3684,49 @@ function MainApp() {
         // agar data yang dikirim ke cloud adalah versi TERBARU saat timer meletus —
         // bukan versi 2 detik lalu saat useEffect pertama kali berjalan.
         const latestDb = latestDbRef.current;
+
+        // ── [FIX REFERENTIAL INTEGRITY] ORPHAN FILTER — safety net layer ─────────
+        // Meski cascadeDeleteStudent/Tutor sudah membersihkan child records saat hapus,
+        // filter ini tetap dipertahankan sebagai jaring pengaman untuk kasus edge:
+        // (1) student/tutor dihapus langsung dari spreadsheet (bypass app),
+        // (2) data lama sebelum cascade delete di-deploy masih ada di local state.
+        const _validStudentIds = new Set<string>(
+          (latestDb.students || [])
+            .map((s: any) => String(s.id ?? '').replace(/^'/, '').trim())
+            .filter(Boolean)
+        );
+        const _validTutorIds = new Set<string>(
+          (latestDb.tutors || [])
+            .map((t: any) => String(t.id ?? '').replace(/^'/, '').trim())
+            .filter(Boolean)
+        );
+        const _filterOrphans = (records: any[], field: string, validIds: Set<string>): any[] => {
+          if (!Array.isArray(records)) return [];
+          return records.filter((r: any) => {
+            const ref = String(r?.[field] ?? '').replace(/^'/, '').trim();
+            return !ref || validIds.has(ref);
+          });
+        };
+        const syncDb: any = {
+          ...latestDb,
+          studentAttendance: _filterOrphans(latestDb.studentAttendance, 'studentId', _validStudentIds),
+          assessments:       _filterOrphans(latestDb.assessments,       'studentId', _validStudentIds),
+          payments:          _filterOrphans(latestDb.payments,          'studentId', _validStudentIds),
+          tutorAttendance:   _filterOrphans(latestDb.tutorAttendance,   'tutorId',   _validTutorIds),
+          journals:          _filterOrphans(latestDb.journals,          'tutorId',   _validTutorIds),
+          payroll:           _filterOrphans(latestDb.payroll,           'tutorId',   _validTutorIds),
+        };
+        // ─────────────────────────────────────────────────────────────────────────
+
         // Catat snapshot koleksi yang ada di lastSnap (sebelum sync ini) untuk diff konfirmasi
         // Snapshot untuk diff konfirmasi — hanya diisi jika ada baseline (bukan sync pertama)
         const hasBaseline = !!lastSyncedSnapshotRef.current;
         const preSyncSnap: Record<string, any[]> | null = hasBaseline ? {} : null;
         DELTA_COLS.forEach(col => {
-          dbSnapshotAtRequest[col] = latestDb[col];
+          dbSnapshotAtRequest[col] = latestDb[col]; // snapshot: tetap pakai latestDb (unfiltered)
           if (preSyncSnap) preSyncSnap[col] = Array.isArray(lastSnap[col]) ? lastSnap[col] : [];
           if (JSON.stringify(latestDb[col]) !== JSON.stringify(lastSnap[col])) {
-            deltaPayload[col] = latestDb[col];
+            deltaPayload[col] = syncDb[col] ?? latestDb[col]; // payload: pakai syncDb (filtered)
           }
         });
         syncingSnapshotRef.current = preSyncSnap;
@@ -3699,6 +3739,8 @@ function MainApp() {
         // FIX SYNC LAMA: Tambah AbortController + 15 detik timeout.
         // Tanpa ini, GAS cold-start bisa bikin request nggantung 60+ detik
         // dan indikator "Sending to Cloud" tidak hilang sampai browser timeout sendiri.
+        // [FIX LOG] Flag untuk membedakan "server menolak request" vs "server tidak bisa dicapai".
+        let _serverReturnedError = false;
         fetchGas(APPSCRIPT_URL, {
           method: 'POST',
           // WAJIB 1: Gunakan text/plain untuk menghindari pemblokiran CORS Preflight (OPTIONS)
@@ -3735,6 +3777,8 @@ function MainApp() {
            if (data.status === 'success') {
                // FIX SYNC LAMA: Reset fail counter saat berhasil
                syncFailCount.current = 0;
+               // [FIX CONFLICT LOOP] Reset conflict retry counter saat sync berhasil
+               conflictRetryCount.current = 0;
                // GAS mengembalikan updatedRows, insertedRows, deletedRows, dan changed.
                // data.changed === false berarti tidak ada baris baru/berubah (sudah identik).
                // Verifikasi berbasis field standar GAS — writtenCollections tidak dikirim GAS.
@@ -3827,7 +3871,11 @@ function MainApp() {
                // response conflict — kita PAKAI LANGSUNG tanpa request GET kedua yang redundan.
                // Ini lebih cepat dan mencegah race condition akibat 2 request paralel.
                console.warn('DATABASE CONFLICT — resolving with payload from conflict response');
-               addSyncLog('gas', 'error', `Conflict v${data.newVersion||'?'} code=${data.code||'?'} — ${data.message||'pulling server data'}`);
+               // [FIX CONFLICT LOOP] Naikkan counter; jika sudah melebihi batas, berhenti retry
+               // agar tidak loop selamanya saat server terus naik (banyak user aktif).
+               conflictRetryCount.current = conflictRetryCount.current + 1;
+               const conflictAttempt = conflictRetryCount.current;
+               addSyncLog('gas', 'error', `Conflict v${data.newVersion||'?'} code=${data.code||'?'} — ${data.message||'pulling server data'} [retry ${conflictAttempt}/${MAX_CONFLICT_RETRY}]`);
                showToast(
                  language === 'id'
                    ? 'Data diperbarui pengguna lain. Menyelaraskan data...'
@@ -3855,27 +3903,54 @@ function MainApp() {
                    localStorage.setItem('ecg_db', JSON.stringify(conflictMerged));
                    return conflictMerged;
                  });
-                 // FIX #3 (CONFLICT RETRY): Paksa re-sync dengan cara yang andal.
-                 // setDb({...prev}) tidak cukup karena guard prevEntitiesRef bisa memblokir.
-                 // Solusi: null-kan prevEntitiesRef DAN tandai dirty, lalu tunggu React
-                 // re-render alami dari setDb merge di atas — tidak perlu setTimeout trigger.
-                 isDbDirty.current = true;
-                 prevEntitiesRef.current = null;
-                 // skipCloudSave sudah true dari dalam setDb di atas; reset agar useEffect
-                 // sync bisa jalan di render berikutnya setelah state settle.
-                 setTimeout(() => { skipCloudSave.current = false; }, 100);
+                 // [FIX CONFLICT LOOP] Hanya retry jika belum melewati batas.
+                 // Backoff eksponensial: 500ms, 1500ms, 4500ms — memberi waktu server stabil.
+                 if (conflictAttempt <= MAX_CONFLICT_RETRY) {
+                   const retryDelay = Math.min(500 * Math.pow(3, conflictAttempt - 1), 10000);
+                   addSyncLog('gas', 'pending', `BASE_VERSION_REQUIRED resolved — retry sync dengan baseVersion=${dbVersion.current} (delay ${retryDelay}ms)`);
+                   isDbDirty.current = true;
+                   prevEntitiesRef.current = null;
+                   setSyncStatus('saving');
+                   // skipCloudSave sudah true dari dalam setDb di atas; reset setelah backoff
+                   setTimeout(() => { skipCloudSave.current = false; }, retryDelay);
+                 } else {
+                   // Melebihi batas retry — berhenti agar tidak loop.
+                   // Data lokal sudah di-merge dengan cloud; user perlu refresh manual jika ada delta baru.
+                   addSyncLog('gas', 'error', `Conflict retry limit (${MAX_CONFLICT_RETRY}x) tercapai — sync dihentikan sementara. Refresh halaman jika data belum tersimpan.`);
+                   showToast(
+                     language === 'id'
+                       ? 'Konflik data berulang. Refresh halaman untuk menyinkronkan ulang.'
+                       : 'Repeated data conflict. Refresh the page to re-sync.',
+                     'warning'
+                   );
+                   conflictRetryCount.current = 0; // reset agar bisa retry manual
+                   setSyncStatus('error');
+                 }
                  setSyncStatus('saved');
                  setIsCloudConnected(true);
                } else {
                  // FIX BASE_VERSION_REQUIRED: Server sudah beri tahu versi terbaru via data.newVersion.
                  // dbVersion.current sudah di-update di atas — langsung retry sync dengan version yg benar.
                  // Tidak perlu GET dulu karena tidak ada conflict data yang perlu di-merge.
-                 addSyncLog('gas', 'pending', `BASE_VERSION_REQUIRED resolved — retry sync dengan baseVersion=${dbVersion.current}`);
-                 lastSyncedSnapshotRef.current = null; // paksa delta penuh di sync berikutnya
-                 isDbDirty.current = true;
-                 prevEntitiesRef.current = null;
-                 setSyncStatus('saving');
-                 setTimeout(() => { skipCloudSave.current = false; }, 150);
+                 if (conflictAttempt <= MAX_CONFLICT_RETRY) {
+                   const retryDelay = Math.min(500 * Math.pow(3, conflictAttempt - 1), 10000);
+                   addSyncLog('gas', 'pending', `BASE_VERSION_REQUIRED resolved — retry sync dengan baseVersion=${dbVersion.current} (delay ${retryDelay}ms)`);
+                   lastSyncedSnapshotRef.current = null; // paksa delta penuh di sync berikutnya
+                   isDbDirty.current = true;
+                   prevEntitiesRef.current = null;
+                   setSyncStatus('saving');
+                   setTimeout(() => { skipCloudSave.current = false; }, retryDelay);
+                 } else {
+                   addSyncLog('gas', 'error', `Conflict retry limit (${MAX_CONFLICT_RETRY}x) tercapai tanpa payload — sync dihentikan. Refresh halaman.`);
+                   showToast(
+                     language === 'id'
+                       ? 'Konflik data berulang. Refresh halaman untuk menyinkronkan ulang.'
+                       : 'Repeated data conflict. Refresh the page to re-sync.',
+                     'warning'
+                   );
+                   conflictRetryCount.current = 0;
+                   setSyncStatus('error');
+                 }
                }
            } else if (data.status === 'busy') {
                // FIX #8 (BUSY BACKOFF COUNTER SELALU RESET): Increment DULU, SIMPAN nilai,
@@ -3897,6 +3972,7 @@ function MainApp() {
                  // sync di render berikutnya ketika ada perubahan db apapun.
                }, delay);
            } else {
+               _serverReturnedError = true;
                addSyncLog('gas', 'error', `Server response: status=${data.status} msg=${data.message||data.code||JSON.stringify(data).slice(0,120)}`);
                throw new Error(data.message || 'Sync error');
            }
@@ -3913,7 +3989,10 @@ function MainApp() {
            // agar toast "Cloud connection lost" tidak muncul dari gangguan sesaat.
            syncFailCount.current = syncFailCount.current + 1;
            setSyncStatus('error'); // SET INDIKATOR GAGAL (indikator kecil tetap muncul)
-               addSyncLog('gas', 'error', language === 'id' ? 'Sync gagal — koneksi ke Apps Script bermasalah' : 'Sync failed — Apps Script unreachable');
+           // [FIX LOG] Hanya log "unreachable" jika benar-benar gagal di level jaringan/HTTP.
+           if (!_serverReturnedError) {
+             addSyncLog('gas', 'error', language === 'id' ? 'Sync gagal — koneksi ke Apps Script bermasalah' : 'Sync failed — Apps Script unreachable');
+           }
            if (syncFailCount.current >= 2) {
              setIsCloudConnected(false); // Baru benar-benar offline setelah 2x gagal
              syncFailCount.current = 0;
@@ -4033,6 +4112,128 @@ function MainApp() {
       }
     );
   };
+
+  // ── CASCADE DELETE ─────────────────────────────────────────────────────────
+  // Root cause fix untuk orphan records:
+  // softDelete('students'/'tutors') generik tidak membersihkan child records
+  // (studentAttendance, payments, assessments / tutorAttendance, journals, payroll).
+  // Orphan records inilah yang menyebabkan "Referential integrity gagal" di GAS.
+  //
+  // Fungsi di bawah menghapus parent SEKALIGUS semua child records-nya:
+  //   - Parent → masuk Recycle Bin (bisa di-restore)
+  //   - Child  → dihapus permanen dari local state + di-queue ke pendingDeletionsRef
+  //              (tidak masuk Recycle Bin agar bin tidak penuh dengan ratusan absensi)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const cascadeDeleteStudent = (studentId: string, studentName: string) => {
+    const childAtt  = (db.studentAttendance || []).filter((r: any) =>
+      String(r.studentId ?? '').replace(/^'/, '').trim() === studentId);
+    const childPay  = (db.payments || []).filter((r: any) =>
+      String(r.studentId ?? '').replace(/^'/, '').trim() === studentId);
+    const childAss  = (db.assessments || []).filter((r: any) =>
+      String(r.studentId ?? '').replace(/^'/, '').trim() === studentId);
+    const totalChildren = childAtt.length + childPay.length + childAss.length;
+
+    const confirmMsg = totalChildren > 0
+      ? `Hapus "${studentName}" beserta ${totalChildren} record terkait?\n\n` +
+        `  • ${childAtt.length} data absensi\n` +
+        `  • ${childPay.length} data pembayaran\n` +
+        `  • ${childAss.length} data penilaian\n\n` +
+        `Student akan masuk Recycle Bin. Data terkait dihapus permanen.`
+      : `Hapus "${studentName}"? Student akan masuk Recycle Bin.`;
+
+    requestConfirm('Hapus Student', confirmMsg, () => {
+      const student = (db.students || []).find((s: any) => s.id === studentId);
+
+      // Queue parent deletion di GAS
+      pendingDeletionsRef.current.push({ collection: 'students', id: studentId });
+
+      // Queue semua child deletions di GAS
+      childAtt.forEach((r: any)  => r.id && pendingDeletionsRef.current.push({ collection: 'studentAttendance', id: r.id }));
+      childPay.forEach((r: any)  => r.id && pendingDeletionsRef.current.push({ collection: 'payments',          id: r.id }));
+      childAss.forEach((r: any)  => r.id && pendingDeletionsRef.current.push({ collection: 'assessments',       id: r.id }));
+
+      const attIds = new Set(childAtt.map((r: any) => r.id));
+      const payIds = new Set(childPay.map((r: any) => r.id));
+      const assIds = new Set(childAss.map((r: any) => r.id));
+      const binId  = `BIN-${Date.now()}`;
+
+      setDb((prev: any) => ({
+        ...prev,
+        students:          prev.students.filter((s: any) => s.id !== studentId),
+        studentAttendance: prev.studentAttendance.filter((r: any) => !attIds.has(r.id)),
+        payments:          prev.payments.filter((r: any)  => !payIds.has(r.id)),
+        assessments:       prev.assessments.filter((r: any) => !assIds.has(r.id)),
+        recycleBin: [
+          ...(prev.recycleBin || []),
+          { id: binId, binId, originalCollection: 'students', deletedAt: getLocalTimestamp(), data: student },
+        ],
+      }));
+
+      showToast(
+        totalChildren > 0
+          ? `"${studentName}" + ${totalChildren} record terkait dihapus.`
+          : `"${studentName}" dipindah ke Recycle Bin.`,
+        'warning'
+      );
+    });
+  };
+
+  const cascadeDeleteTutor = (tutorId: string, tutorName: string) => {
+    const childAtt  = (db.tutorAttendance || []).filter((r: any) =>
+      String(r.tutorId ?? '').replace(/^'/, '').trim() === tutorId);
+    const childJour = (db.journals || []).filter((r: any) =>
+      String(r.tutorId ?? '').replace(/^'/, '').trim() === tutorId);
+    const childPay  = (db.payroll || []).filter((r: any) =>
+      String(r.tutorId ?? '').replace(/^'/, '').trim() === tutorId);
+    const totalChildren = childAtt.length + childJour.length + childPay.length;
+
+    const confirmMsg = totalChildren > 0
+      ? `Hapus "${tutorName}" beserta ${totalChildren} record terkait?\n\n` +
+        `  • ${childAtt.length} data absensi tutor\n` +
+        `  • ${childJour.length} data jurnal\n` +
+        `  • ${childPay.length} data payroll\n\n` +
+        `Tutor akan masuk Recycle Bin. Data terkait dihapus permanen.`
+      : `Hapus "${tutorName}"? Tutor akan masuk Recycle Bin.`;
+
+    requestConfirm('Hapus Tutor', confirmMsg, () => {
+      const tutor = (db.tutors || []).find((t: any) => t.id === tutorId);
+
+      // Queue parent deletion di GAS
+      pendingDeletionsRef.current.push({ collection: 'tutors', id: tutorId });
+
+      // Queue semua child deletions di GAS
+      childAtt.forEach((r: any)  => r.id && pendingDeletionsRef.current.push({ collection: 'tutorAttendance', id: r.id }));
+      childJour.forEach((r: any) => r.id && pendingDeletionsRef.current.push({ collection: 'journals',        id: r.id }));
+      childPay.forEach((r: any)  => r.id && pendingDeletionsRef.current.push({ collection: 'payroll',         id: r.id }));
+
+      const attIds  = new Set(childAtt.map((r: any)  => r.id));
+      const jourIds = new Set(childJour.map((r: any) => r.id));
+      const payIds  = new Set(childPay.map((r: any)  => r.id));
+      const binId   = `BIN-${Date.now()}`;
+
+      setDb((prev: any) => ({
+        ...prev,
+        tutors:          prev.tutors.filter((t: any) => t.id !== tutorId),
+        tutorAttendance: prev.tutorAttendance.filter((r: any) => !attIds.has(r.id)),
+        journals:        prev.journals.filter((r: any)  => !jourIds.has(r.id)),
+        payroll:         prev.payroll.filter((r: any)   => !payIds.has(r.id)),
+        recycleBin: [
+          ...(prev.recycleBin || []),
+          { id: binId, binId, originalCollection: 'tutors', deletedAt: getLocalTimestamp(), data: tutor },
+        ],
+      }));
+
+      showToast(
+        totalChildren > 0
+          ? `"${tutorName}" + ${totalChildren} record terkait dihapus.`
+          : `"${tutorName}" dipindah ke Recycle Bin.`,
+        'warning'
+      );
+    });
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const generateId = (prefix, collection) => {
     const generateRandomPart = () => {
@@ -4612,9 +4813,9 @@ function MainApp() {
       case 'dashboard':
         return <Dashboard db={db} setDb={setDb} user={currentUser} setActiveTab={setActiveTab} isCloudConnected={isCloudConnected} language={language} showToast={showToast} />;
       case 'students':
-        return <StudentsModule db={db} setDb={setDb} generateId={generateId} showToast={showToast} softDelete={softDelete} user={currentUser} />;
+        return <StudentsModule db={db} setDb={setDb} generateId={generateId} showToast={showToast} softDelete={softDelete} cascadeDeleteStudent={cascadeDeleteStudent} user={currentUser} />;
       case 'tutors':
-        return <TutorsModule db={db} setDb={setDb} generateId={generateId} showToast={showToast} softDelete={softDelete} />;
+        return <TutorsModule db={db} setDb={setDb} generateId={generateId} showToast={showToast} softDelete={softDelete} cascadeDeleteTutor={cascadeDeleteTutor} />;
       case 'student_attendance':
         return <StudentAttendanceModule db={db} setDb={setDb} showToast={showToast} softDelete={softDelete} user={currentUser} generateId={generateId} requestConfirm={requestConfirm} setModuleDirty={setModuleDirty} />;
       case 'tutor_attendance':
@@ -4965,7 +5166,7 @@ export default function App() {
   );
 }
 
-function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) {
+function StudentsModule({ db, setDb, generateId, showToast, softDelete, cascadeDeleteStudent, user }) {
   const validLevelsForTutor = user?.role === 'tutor' 
     ? LEVELS.filter(lvl => (CLASS_MAPPING[lvl] || []).some(cls => parseSessions(user.teachingSession).includes(getSessionGroup(cls))))
     : LEVELS;
@@ -5319,7 +5520,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
                       )}
                       <button onClick={() => { setFormData({...s, whatsapp: String(s.whatsapp || '').replace(/^'/,'')}); setIsAdding(true); const contentEl = document.querySelector('main'); setTimeout(() => { contentEl?.scrollTo({ top: 0, behavior: 'smooth' }); }, 50); }} className="text-blue-400 p-2 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Student"><Edit2 size={16}/></button>
                       {(!user || user.role === 'admin') && (
-                        <button onClick={() => softDelete('students', s.id, s.name)} className="text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Student"><Trash2 size={16}/></button>
+                        <button onClick={() => cascadeDeleteStudent(s.id, s.name)} className="text-red-400 p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Student"><Trash2 size={16}/></button>
                       )}
                     </div>
                   </div>
@@ -5374,7 +5575,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, user }) 
                     )}
                     <button onClick={() => { setFormData({...s, whatsapp: String(s.whatsapp || '').replace(/^'/, '')}); setIsAdding(true); const contentEl = document.querySelector('main'); setTimeout(() => { contentEl?.scrollTo({ top: 0, behavior: 'smooth' }); }, 50); }} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Student"><Edit2 size={18} /></button>
                     {(!user || user.role === 'admin') && (
-                      <button onClick={() => softDelete('students', s.id, s.name)} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Student"><Trash2 size={18} /></button>
+                      <button onClick={() => cascadeDeleteStudent(s.id, s.name)} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Student"><Trash2 size={18} /></button>
                     )}
                   </td>
                 )}
@@ -9045,7 +9246,7 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
   );
 }
 
-function TutorsModule({ db, setDb, generateId, showToast, softDelete }) {
+function TutorsModule({ db, setDb, generateId, showToast, softDelete, cascadeDeleteTutor }) {
   const [formData, setFormData] = useState({ id: '', name: '', phone: '', address: '', gender: 'Male', teachingSession: SESSIONS[0], status: 'Active', joinedDate: getTodayDateLocal() });
   const [isAdding, setIsAdding] = useState(false);
   
@@ -9186,7 +9387,7 @@ function TutorsModule({ db, setDb, generateId, showToast, softDelete }) {
                       <a href={`https://wa.me/${normalizeWhatsapp(t.phone)}`} target="_blank" rel="noopener noreferrer" className="text-green-400 p-2.5 hover:bg-green-500/10 rounded-lg transition-colors" title="Chat WhatsApp"><MessageCircle size={18}/></a>
                     )}
                     <button onClick={() => { setFormData(t); setIsAdding(true); }} className="text-blue-400 p-2.5 hover:bg-blue-500/10 rounded-lg transition-colors" title="Edit Tutor"><Edit2 size={18}/></button>
-                    <button onClick={() => softDelete('tutors', t.id, t.name)} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Tutor"><Trash2 size={18}/></button>
+                    <button onClick={() => cascadeDeleteTutor(t.id, t.name)} className="text-red-400 p-2.5 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete Tutor"><Trash2 size={18}/></button>
                   </td>
                 </tr>
               ))}
