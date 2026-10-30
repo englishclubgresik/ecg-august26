@@ -6622,9 +6622,22 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
     <div className="space-y-6">
       <div><h2 className="text-2xl font-bold text-white mb-1">Monthly Assessment</h2><p className="text-gray-400 text-sm">Spreadsheet-style mass grading. Select a period to grade or edit existing records.</p></div>
       <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center bg-[#0A0E17] p-4 sm:p-5 rounded-xl border border-gray-800 shadow-sm flex-wrap">
-        <Input label="Month" type="select" options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))} value={month} onChange={setMonth} className="mb-0" />
-        <Input label="Year" type="number" value={year} onChange={setYear} className="mb-0" />
-        <Input label="Session" type="select" options={user?.role === 'tutor' ? parseSessions(user.teachingSession) : SESSIONS} value={sessionGroup} onChange={setSessionGroup} className="mb-0" />
+        <div className="w-full">
+          <label className="block text-sm text-gray-400 mb-1.5">Month</label>
+          <select className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={month} onChange={e => setMonth(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+        </div>
+        <div className="w-full">
+          <label className="block text-sm text-gray-400 mb-1.5">Year</label>
+          <input type="number" className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={year} onChange={e => setYear(Number(e.target.value))} />
+        </div>
+        <div className="w-full">
+          <label className="block text-sm text-gray-400 mb-1.5">Session</label>
+          <select className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={sessionGroup} onChange={e => setSessionGroup(e.target.value)}>
+            {(user?.role === 'tutor' ? parseSessions(user.teachingSession) : SESSIONS).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="bg-[#151B26] border border-gray-800 rounded-xl shadow-sm overflow-hidden mb-6">
@@ -10595,8 +10608,16 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
       </div>
       <Card className="p-0 overflow-x-auto">
          <div className="p-4 sm:p-5 bg-[#0A0E17] border-b border-gray-800 flex flex-col sm:flex-row gap-4">
-           <Input label="Month" type="select" options={MONTHS.map((m,i)=>({value:i+1, label:m}))} value={month} onChange={setMonth} className="mb-0 w-full sm:w-48" />
-           <Input label="Year" type="number" value={year} onChange={setYear} className="mb-0 w-full sm:w-32" />
+           <div className="w-full sm:w-48">
+             <label className="block text-sm text-gray-400 mb-1.5">Month</label>
+             <select className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={month} onChange={e => setMonth(Number(e.target.value))}>
+               {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+             </select>
+           </div>
+           <div className="w-full sm:w-32">
+             <label className="block text-sm text-gray-400 mb-1.5">Year</label>
+             <input type="number" className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={year} onChange={e => setYear(Number(e.target.value))} />
+           </div>
          </div>
          <table className="w-full text-left text-sm">
             <thead className="bg-[#0B0F19] border-b border-gray-800 text-gray-400 uppercase tracking-wider text-[11px] font-bold">
