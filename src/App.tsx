@@ -4872,7 +4872,7 @@ function MainApp() {
         />
       );
       case 'billing_recap':
-        return <BillingRecapModule db={db} setDb={setDb} showToast={showToast} language={language} />;
+        return <BillingRecapModule db={db} setDb={setDb} showToast={showToast} language={language} downloadPNG={downloadPNG} handleShareImage={handleShareImage} />;
       case 'my_payments': // STUDENT: Read Only Payments
         return <StudentReadOnlyPaymentModule db={db} user={currentUser} downloadPNG={downloadPNG} handleShareImage={handleShareImage} language={language} showToast={showToast} />;
       case 'payroll':
@@ -6432,6 +6432,8 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
   const [sessionGroup, setSessionGroup] = useState(defaultSession);
   const [tableData, setTableData] = useState({});
   const [materialFilterSession, setMaterialFilterSession] = useState('All');
+  const [randomModal, setRandomModal] = useState(false);
+  const [randomTargetScore, setRandomTargetScore] = useState('85');
 
   const activeStudents = useMemo(() => sortStudentsLogically(db.students.filter((s) => s.status === 'Active')), [db.students]);
   const targetStudents = useMemo(() => activeStudents.filter((s) => getStudentSession(s) === sessionGroup), [activeStudents, sessionGroup]);
@@ -6472,6 +6474,91 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
     if (num > 100) num = 100;
     if (num < 0) num = 0;
     setTableData((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [field]: num } }));
+  };
+
+  const handleRandomFill = () => {
+    const target = parseInt(randomTargetScore, 10);
+    if (isNaN(target) || target < 0 || target > 100) {
+      showToast('Masukkan nilai akhir yang valid (0–100)', 'error');
+      return;
+    }
+    const N = subjects.length;
+    const SCORE_MIN = 80;
+    const SCORE_MAX = 86;
+    const newTableData: Record<string, any> = { ...tableData };
+    let zeroCount = 0;
+
+    // Hitung total pertemuan sesi ini di bulan yang dipilih (dari kalender)
+    // → dipakai sebagai kapasitas fallback jika siswa tidak punya scheduledDays
+    const sessionMeetingsThisMonth = (db.calendar || []).filter(
+      c => (c.date || '').startsWith(monthPrefix) && (c.sessionGroup === sessionGroup || c.name === sessionGroup)
+    ).length;
+
+    targetStudents.forEach((student) => {
+      const scores: Record<string, number> = {};
+
+      // ── Realisasi hadir bulan ini ──────────────────────────────────────────
+      const presentCount = (db.studentAttendance || []).filter(
+        a =>
+          a.studentId === student.id &&
+          (a.date || '').startsWith(monthPrefix) &&
+          a.status === 'Present' &&
+          (a.sessionGroup === sessionGroup || !a.sessionGroup)
+      ).length;
+
+      if (presentCount === 0) {
+        // Tidak pernah hadir → semua nilai 0
+        subjects.forEach((sub) => { scores[sub] = 0; });
+        zeroCount++;
+      } else {
+        // ── Siswa hadir → gunakan range penuh tanpa pengurangan ──────────────
+        const safeMin = SCORE_MIN;
+        const safeMax = SCORE_MAX;
+
+        // ── Generate nilai acak dalam range efektif ──────────────────────────
+        let generated: number[] = [];
+        let attempts = 0;
+        const rangeSize = safeMax - safeMin;
+        const centerTarget = Math.round((safeMin + safeMax) / 2);
+        do {
+          generated = subjects.map(() =>
+            rangeSize === 0
+              ? safeMax
+              : Math.floor(Math.random() * (rangeSize + 1)) + safeMin
+          );
+          // Koreksi rata-rata menuju centerTarget
+          let remainder = centerTarget * N - generated.reduce((a, b) => a + b, 0);
+          let pass = 0;
+          while (remainder !== 0 && pass < N * 10) {
+            const i = pass % N;
+            const adj = remainder > 0 ? 1 : -1;
+            const newVal = generated[i] + adj;
+            if (newVal >= safeMin && newVal <= safeMax) {
+              generated[i] = newVal;
+              remainder -= adj;
+            }
+            pass++;
+          }
+          attempts++;
+        } while (generated.some(v => v < safeMin || v > safeMax) && attempts < 30);
+
+        // Shuffle
+        for (let i = generated.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [generated[i], generated[j]] = [generated[j], generated[i]];
+        }
+        subjects.forEach((sub, idx) => { scores[sub] = generated[idx]; });
+      }
+
+      newTableData[student.id] = scores;
+    });
+
+    setTableData(newTableData);
+    setRandomModal(false);
+    const msg = zeroCount > 0
+      ? `✅ Selesai — ${zeroCount} siswa bernilai 0 (tidak hadir), ${targetStudents.length - zeroCount} siswa bernilai acak`
+      : `✅ Nilai acak berhasil diisi untuk ${targetStudents.length} siswa`;
+    showToast(msg, zeroCount > 0 ? 'warning' : 'success');
   };
 
   const handleSaveAll = () => {
@@ -6531,6 +6618,7 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
   };
 
   return (
+    <>
     <div className="space-y-6">
       <div><h2 className="text-2xl font-bold text-white mb-1">Monthly Assessment</h2><p className="text-gray-400 text-sm">Spreadsheet-style mass grading. Select a period to grade or edit existing records.</p></div>
       <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center bg-[#0A0E17] p-4 sm:p-5 rounded-xl border border-gray-800 shadow-sm flex-wrap">
@@ -6593,6 +6681,7 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
                 {subjects.map((s) => <th key={s} className="py-3 px-4 text-gray-400 font-medium text-sm text-center w-[100px]">{s}</th>)}
                 <th className="py-3 px-4 text-gray-400 font-medium text-sm text-center w-[80px]">Avg</th>
                 <th className="py-3 px-4 text-gray-400 font-medium text-sm text-center w-[80px]">Grade</th>
+                <th className="py-3 px-4 text-gray-400 font-medium text-sm whitespace-nowrap">Kehadiran</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-800 bg-[#151B26]">
@@ -6602,6 +6691,53 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
                 subjects.forEach((sub) => { if (studentScores[sub] !== '' && studentScores[sub] !== undefined) { total += Number(studentScores[sub]); count++; } });
                 const avg = count > 0 ? Math.round(total / count) : '-';
                 const grade = avg === '-' ? '-' : avg >= 90 ? 'A' : avg >= 80 ? 'B' : avg >= 70 ? 'C' : 'D';
+
+                // ── Hitung kehadiran & kapasitas paket siswa ──────────────────
+                const presentCount = (db.studentAttendance || []).filter(
+                  a => a.studentId === student.id &&
+                    (a.date || '').startsWith(monthPrefix) &&
+                    a.status === 'Present' &&
+                    (a.sessionGroup === sessionGroup || !a.sessionGroup)
+                ).length;
+
+                const scheduled = Array.isArray(student.scheduledDays) ? student.scheduledDays : [];
+                const isPartialPackage = scheduled.length === 1; // 1 hari/minggu = paket sebagian
+                const packageLabel = isPartialPackage ? 'Sebagian' : 'Penuh';
+
+                // Hitung kapasitas: jumlah hari scheduledDays di bulan ini
+                let packageCapacity = 0;
+                if (scheduled.length > 0) {
+                  const [y, m] = monthPrefix.split('-').map(Number);
+                  const daysInMonth = new Date(y, m, 0).getDate();
+                  for (let d = 1; d <= daysInMonth; d++) {
+                    const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    if (scheduled.includes(getDayName(dateStr))) packageCapacity++;
+                  }
+                } else {
+                  // scheduledDays kosong → pakai total pertemuan sesi dari kalender
+                  packageCapacity = (db.calendar || []).filter(
+                    c => (c.date || '').startsWith(monthPrefix) && (c.sessionGroup === sessionGroup || c.name === sessionGroup)
+                  ).length;
+                }
+
+                const ratio = packageCapacity > 0 ? presentCount / packageCapacity : 0;
+                const pct = Math.round(ratio * 100);
+
+                // ── Badge & keterangan ────────────────────────────────────────
+                let attIcon = '✅';
+                let attColor = 'text-emerald-400';
+                let attNote = '';
+                if (presentCount === 0) {
+                  attIcon = '❌';
+                  attColor = 'text-rose-400';
+                  attNote = 'Tidak hadir — nilai 0';
+                } else if (ratio < 1) {
+                  attIcon = '⚠️';
+                  attColor = 'text-amber-400';
+                  attNote = `Hadir ${presentCount}/${packageCapacity} (${pct}%)`;
+                } else {
+                  attNote = `Hadir penuh ${presentCount}/${packageCapacity}`;
+                }
 
                 return (
                   <tr key={student.id} className="hover:bg-[#0B0F19] transition-colors" style={{ height: '50px' }}>
@@ -6615,17 +6751,95 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
                     ))}
                     <td className="py-1 px-4 text-center font-bold text-[#00D4FF]">{avg}</td>
                     <td className="py-1 px-4 text-center font-bold text-gray-300">{grade}</td>
+                    <td className="py-1 px-4 whitespace-nowrap">
+                      <div className={`flex flex-col gap-0.5 text-[11px] font-medium ${attColor}`}>
+                        <span>{attIcon} {attNote}</span>
+                        <span className="text-gray-500 text-[10px]">Paket {packageLabel}</span>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        <div className="p-4 bg-[#0A0E17] border-t border-gray-800">
-          <Button onClick={handleSaveAll} className="w-full py-4 text-lg font-bold shadow-[0_0_20px_rgba(0,212,255,0.2)]" disabled={targetStudents.length === 0}>SAVE ALL ASSESSMENTS</Button>
+        <div className="p-4 bg-[#0A0E17] border-t border-gray-800 flex gap-3">
+          <Button
+            onClick={() => setRandomModal(true)}
+            variant="secondary"
+            className="py-4 text-sm font-bold border-amber-500/30 text-amber-400 hover:bg-amber-500/10 whitespace-nowrap flex items-center gap-1.5"
+            disabled={targetStudents.length === 0}
+          >
+            <RefreshCw size={14} /> Nilai Acak
+          </Button>
+          <Button onClick={handleSaveAll} className="flex-1 py-4 text-lg font-bold shadow-[0_0_20px_rgba(0,212,255,0.2)]" disabled={targetStudents.length === 0}>SAVE ALL ASSESSMENTS</Button>
         </div>
       </div>
     </div>
+
+      {/* ── Modal Nilai Acak ─────────────────────────────────────────────────────── */}
+      {randomModal && ReactDOM.createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.80)' }}
+          onClick={() => setRandomModal(false)}
+        >
+          <div
+            className="bg-[#151B26] border border-amber-500/30 rounded-2xl shadow-2xl w-full max-w-sm"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-800">
+              <p className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
+                <RefreshCw size={13} /> Nilai Acak
+              </p>
+              <h3 className="text-white font-bold text-base">Generate Nilai Random</h3>
+              <p className="text-gray-400 text-xs mt-0.5">
+                Masukkan nilai akhir yang diinginkan — sistem akan mengacak nilai tiap mata pelajaran agar rata-ratanya mendekati target.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">
+                  Nilai Akhir / Rata-rata Target (0–100)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={randomTargetScore}
+                  onChange={e => setRandomTargetScore(e.target.value)}
+                  className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-3 text-white text-2xl font-black text-center focus:outline-none focus:border-amber-500 transition-colors"
+                  placeholder="Contoh: 85"
+                />
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5">
+                <p className="text-xs text-amber-300 leading-relaxed">
+                  Kolom <strong>{subjects.join(', ')}</strong> untuk <strong>{targetStudents.length} siswa</strong> di sesi <strong>{sessionGroup}</strong> akan diisi nilai acak dengan rata-rata mendekati <strong className="text-amber-200 text-sm">{randomTargetScore || '?'}</strong>.
+                  <br /><span className="text-amber-400/70 mt-1 inline-block">⚠️ Nilai yang sudah ada akan ditimpa.</span>
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-gray-800 flex gap-3">
+              <button
+                onClick={() => setRandomModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm font-semibold hover:bg-gray-700/30 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleRandomFill}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                disabled={targetStudents.length === 0}
+              >
+                <RefreshCw size={14} /> Generate Acak
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* ─────────────────────────────────────────────────────────────────────────── */}
+    </>
   );
 }
 
@@ -7558,7 +7772,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
 }
 
 
-function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
+function BillingRecapModule({ db, setDb, showToast, language = 'en', downloadPNG, handleShareImage }) {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
@@ -7575,6 +7789,24 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
   }>(null);
   const [waiverReason, setWaiverReason] = React.useState('');
   const [waiverLoading, setWaiverLoading] = React.useState(false);
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Invoice Modal ────────────────────────────────────────────────────────
+  const [invoiceModal, setInvoiceModal] = React.useState<null | {
+    student: any; monthDetails: any[]; totalOutstanding: number; totalTarget: number;
+  }>(null);
+
+  const printInvoicePNG = () => {
+    if (!invoiceModal) return;
+    const safeName = invoiceModal.student.name.replace(/[\s/\\?%*:|"<>-]/g, '_');
+    downloadPNG('billing-invoice-print', `Invoice_${safeName}`);
+  };
+
+  const shareInvoiceImage = () => {
+    if (!invoiceModal) return;
+    const safeName = invoiceModal.student.name.replace(/[\s/\\?%*:|"<>-]/g, '_');
+    handleShareImage('billing-invoice-print', `Invoice_${safeName}`, `Invoice Tagihan ${invoiceModal.student.name}`);
+  };
   // ─────────────────────────────────────────────────────────────────────────
 
   // ── Cutoff Month Filter ───────────────────────────────────────────────────
@@ -8029,49 +8261,70 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
                     </p>
                   )}
                 </div>
-                {/* Right: amounts + edit plan button + chevron */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
-                    <p className="text-[10px] text-gray-500">Tagihan</p>
-                    <p className="text-sm font-semibold text-white">Rp {totalTarget.toLocaleString('id-ID')}</p>
+                {/* Right: amounts + buttons + chevron */}
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  {/* Row 1: angka Tagihan / Dibayar / Sisa + chevron */}
+                  <div className="flex items-center gap-3">
+                    <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                      <p className="text-[10px] text-gray-500">Tagihan</p>
+                      <p className="text-sm font-semibold text-white">Rp {totalTarget.toLocaleString('id-ID')}</p>
+                    </div>
+                    <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                      <p className="text-[10px] text-gray-500">Dibayar</p>
+                      <p className="text-sm font-semibold text-emerald-400">Rp {totalPaid.toLocaleString('id-ID')}</p>
+                    </div>
+                    <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                      <p className="text-[10px] text-gray-500">Sisa</p>
+                      <p className={`text-sm font-bold ${totalOutstanding > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Rp {totalOutstanding.toLocaleString('id-ID')}</p>
+                    </div>
+                    <div className="cursor-pointer p-1" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
+                      <ChevronDown size={16} className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                    </div>
                   </div>
-                  <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
-                    <p className="text-[10px] text-gray-500">Dibayar</p>
-                    <p className="text-sm font-semibold text-emerald-400">Rp {totalPaid.toLocaleString('id-ID')}</p>
-                  </div>
-                  <div className="text-right cursor-pointer" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
-                    <p className="text-[10px] text-gray-500">Sisa</p>
-                    <p className={`text-sm font-bold ${totalOutstanding > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>Rp {totalOutstanding.toLocaleString('id-ID')}</p>
-                  </div>
-                  {/* ── Shortcut: Edit Plan per Bulan ── */}
-                  <button
-                    type="button"
-                    title="Edit tipe bayar per bulan"
-                    onClick={(e) => { e.stopPropagation(); openPlanEdit(e, s); }}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#00D4FF]/10 hover:bg-[#00D4FF]/20 border border-[#00D4FF]/30 text-[#00D4FF] text-[11px] font-semibold transition-colors shrink-0"
-                  >
-                    <Edit2 size={12} />
-                    <span className="hidden sm:inline">Plan</span>
-                  </button>
-                  {/* ── Shortcut: Pemutihan Semua Tunggakan Siswa Ini ── */}
-                  {totalOutstanding > 0 && (
+                  {/* Row 2: tombol-tombol aksi — selalu tampil penuh */}
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {/* ── Edit Plan per Bulan ── */}
                     <button
                       type="button"
-                      title="Putihkan semua tunggakan siswa ini"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const debtMonths = monthDetails.filter(m => m.outstanding > 0).map(m => ({ yr: m.yr, mo: m.mo, outstanding: m.outstanding }));
-                        setWaiverModal({ student: s, yr: 0, mo: 0, outstanding: totalOutstanding, bulkMonths: debtMonths });
-                        setWaiverReason('');
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-400 text-[11px] font-semibold transition-colors shrink-0"
+                      title="Edit tipe bayar per bulan"
+                      onClick={(e) => { e.stopPropagation(); openPlanEdit(e, s); }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#00D4FF]/10 hover:bg-[#00D4FF]/20 border border-[#00D4FF]/30 text-[#00D4FF] text-[11px] font-semibold transition-colors"
                     >
-                      <ArchiveRestore size={12} />
-                      <span className="hidden sm:inline">Putihkan</span>
+                      <Edit2 size={12} />
+                      <span>Plan</span>
                     </button>
-                  )}
-                  <div className="cursor-pointer p-1" onClick={() => { setExpandedId(isExpanded ? null : s.id); setExpandedMonth(null); }}>
-                    <ChevronDown size={16} className={`text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                    {/* ── Pemutihan ── */}
+                    {totalOutstanding > 0 && (
+                      <button
+                        type="button"
+                        title="Putihkan semua tunggakan siswa ini"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const debtMonths = monthDetails.filter(m => m.outstanding > 0).map(m => ({ yr: m.yr, mo: m.mo, outstanding: m.outstanding }));
+                          setWaiverModal({ student: s, yr: 0, mo: 0, outstanding: totalOutstanding, bulkMonths: debtMonths });
+                          setWaiverReason('');
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-400 text-[11px] font-semibold transition-colors"
+                      >
+                        <ArchiveRestore size={12} />
+                        <span>Putihkan</span>
+                      </button>
+                    )}
+                    {/* ── Invoice Tagihan — SELALU TAMPIL jika ada tunggakan ── */}
+                    {totalOutstanding > 0 && (
+                      <button
+                        type="button"
+                        title="Cetak Invoice Tagihan"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInvoiceModal({ student: s, monthDetails, totalOutstanding, totalTarget });
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 text-[11px] font-semibold transition-colors"
+                      >
+                        <Printer size={12} />
+                        <span>Invoice</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -8412,6 +8665,213 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en' }) {
         );
       })()}
       {/* ─────────────────────────────────────────────────────────────────────── */}
+
+      {/* ── Invoice Tagihan Modal ─────────────────────────────────────────────────────── */}
+      {invoiceModal && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-50/95 backdrop-blur-md overflow-y-auto custom-scrollbar font-sans text-slate-900">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80%] h-[400px] bg-gradient-to-b from-blue-200/40 to-transparent blur-3xl pointer-events-none" />
+
+          {/* Toolbar */}
+          <div className="w-full max-w-2xl mx-auto mt-6 mb-4 px-4 flex justify-between items-center relative z-10">
+            <button
+              className="flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors font-medium text-sm bg-white/50 px-4 py-2 rounded-full border border-slate-200/50 shadow-sm"
+              onClick={() => setInvoiceModal(null)}
+            >
+              <X size={16} /> Close
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={printInvoicePNG}
+                className="p-2.5 bg-white rounded-full text-blue-600 shadow-sm border border-slate-200/50 hover:bg-blue-50 transition-colors"
+                title="Download PNG"
+              >
+                <Download size={16} />
+              </button>
+              <button
+                onClick={shareInvoiceImage}
+                className="p-2.5 bg-white rounded-full text-blue-600 shadow-sm border border-slate-200/50 hover:bg-blue-50 transition-colors"
+                title="Share"
+              >
+                <Share2 size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Invoice card */}
+          <div id="billing-invoice-print" className="w-full max-w-2xl mx-auto bg-white rounded-none shadow-2xl overflow-hidden relative z-10 mb-12">
+
+            {/* Blue header — same as receipt */}
+            <div className="bg-[#1A56DB] text-white p-6 sm:p-8 flex justify-between items-start">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black tracking-tight">PAYMENT INVOICE</h1>
+                <p className="text-blue-200 font-mono mt-1 text-sm">
+                  INV-{invoiceModal.student.id}-{new Date().toISOString().slice(0,10).replace(/-/g,'')}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold text-white leading-tight">English Club Gresik</p>
+                <p className="text-blue-200 text-xs mt-1">Academic Suite</p>
+              </div>
+            </div>
+
+            <div className="p-6 sm:p-8 pb-4">
+
+              {/* Total outstanding — centre hero, matching receipt's big amount */}
+              <div className="text-center mb-8 border-b border-slate-200 pb-8">
+                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                  Total Outstanding Balance
+                </p>
+                <p className="text-5xl font-black text-rose-600 tracking-tight">
+                  Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}
+                </p>
+                <p className="text-xs text-slate-400 mt-2">
+                  {invoiceModal.monthDetails.filter(m => m.outstanding > 0).length} unpaid month(s) · Due immediately
+                </p>
+              </div>
+
+              {/* STUDENT INFO */}
+              <div className="mb-6">
+                <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">STUDENT INFO</p>
+                <div className="bg-slate-50 border border-slate-200 p-5 shadow-sm">
+                  <p className="text-xl font-bold text-slate-800">{invoiceModal.student.name}</p>
+                  <p className="text-sm font-medium text-slate-500 mt-1">
+                    {invoiceModal.student.class} · {getStudentSession(invoiceModal.student)}
+                  </p>
+                </div>
+              </div>
+
+              {/* OUTSTANDING DETAILS */}
+              <div className="mb-6">
+                <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">OUTSTANDING DETAILS</p>
+                <div className="space-y-0 text-sm border border-slate-200">
+                  <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 py-2 px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                    <span className="flex-1">Period</span>
+                    <span className="w-28 text-right">Billed</span>
+                    <span className="w-28 text-right">Paid</span>
+                    <span className="w-28 text-right text-rose-600">Unpaid</span>
+                  </div>
+                  {invoiceModal.monthDetails.filter(m => m.outstanding > 0).map(({ yr, mo, target, paid, outstanding }, i) => (
+                    <div key={i} className={`flex justify-between items-center border-b border-slate-100 py-3 px-3 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
+                      <span className="flex-1 font-medium text-slate-700">{MONTHS[mo - 1]} {yr}</span>
+                      <span className="w-28 text-right text-slate-500">Rp {target.toLocaleString('id-ID')}</span>
+                      <span className="w-28 text-right text-emerald-600 font-semibold">Rp {paid.toLocaleString('id-ID')}</span>
+                      <span className="w-28 text-right text-rose-600 font-black">Rp {outstanding.toLocaleString('id-ID')}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center bg-rose-50 border-t-2 border-rose-200 py-3 px-3">
+                    <span className="flex-1 text-sm font-black text-rose-700 uppercase tracking-wide">Total Due</span>
+                    <span className="text-lg font-black text-rose-700">Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ATTENDANCE PER BILLED MONTH */}
+              {invoiceModal.monthDetails.filter(m => m.outstanding > 0).some(m => (m.attRecords || []).length > 0) && (
+                <div className="mb-6">
+                  <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">ATTENDANCE RECORD</p>
+                  <div className="space-y-3">
+                    {invoiceModal.monthDetails.filter(m => m.outstanding > 0).map(({ yr, mo, attRecords }, i) => {
+                      const DAY_SHORT = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+                      const allDates = (attRecords || [])
+                        .filter(a => a.status !== 'Not in Package')
+                        .map(a => {
+                          const [y2, m2, d2] = (a.date || '').split('-').map(Number);
+                          if (!d2) return null;
+                          const dayIdx = new Date(y2, m2 - 1, d2).getDay();
+                          return { day: d2, dayLabel: DAY_SHORT[dayIdx], status: a.status };
+                        })
+                        .filter(Boolean)
+                        .sort((a, b) => a.day - b.day);
+                      const presentCount = allDates.filter(a => a.status === 'Present').length;
+                      const absentCount = allDates.filter(a => a.status !== 'Present').length;
+                      return (
+                        <div key={i} className="bg-slate-50 border border-slate-200 px-4 py-3">
+                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
+                            {MONTHS[mo - 1]} {yr}
+                            <span className="ml-2 text-emerald-600">✓ {presentCount} hadir</span>
+                            {absentCount > 0 && <span className="ml-2 text-rose-500">✗ {absentCount} tidak hadir</span>}
+                          </p>
+                          {allDates.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {allDates.map(({ day, dayLabel, status }, idx) => {
+                                const isPresent = status === 'Present';
+                                return (
+                                  <span key={idx} className={`inline-block text-xs font-bold px-2 py-0.5 rounded border ${
+                                    isPresent
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                                      : 'bg-rose-50 text-rose-600 border-rose-300'
+                                  }`}>
+                                    {dayLabel} {String(day).padStart(2, '0')}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-400 italic">No attendance recorded</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* PAYMENT INSTRUCTIONS */}
+              <div className="mb-6">
+                <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">PAYMENT INSTRUCTIONS</p>
+                <div className="space-y-0 text-sm">
+                  <div className="border-b border-slate-100 py-3 px-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-slate-600">Bank Transfer</span>
+                      <span className="font-semibold text-slate-800">BNI</span>
+                    </div>
+                    <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Bank</span>
+                        <span className="font-bold text-slate-800">BNI (Bank Negara Indonesia)</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Account No.</span>
+                        <span className="font-black text-slate-900 tracking-widest text-base">0951837774</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Account Name</span>
+                        <span className="font-bold text-slate-800">Akhmad Akma Rifqi</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Amount</span>
+                        <span className="font-black text-rose-600">Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center py-3 px-2">
+                    <span className="font-medium text-slate-600">Status</span>
+                    <span className="text-lg font-black text-rose-600">UNPAID</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-center mt-10 mb-4">
+                <p className="text-sm font-medium text-slate-600 italic">Please settle this invoice at your earliest convenience.</p>
+                <p className="text-xs font-bold text-slate-500 mt-1">— English Club Gresik</p>
+              </div>
+            </div>
+
+            {/* Blue footer — identical to receipt */}
+            <div className="bg-[#1A56DB] p-6 sm:p-8 text-center">
+              <p className="text-xs text-blue-100 font-medium mb-1">English Club Gresik • WA: 0897-327-11-12</p>
+              <p className="text-[11px] text-blue-200 mb-3">Taman Anggrek Blok AB 05, Kedanyang, Kebomas, Gresik</p>
+              <div className="border-t border-blue-400/30 pt-3">
+                <p className="text-[11px] text-blue-200">This document serves as an official payment invoice</p>
+              </div>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* ─────────────────────────────────────────────────────────────────────── */}
+
     </div>
   );
 }
