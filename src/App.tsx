@@ -564,118 +564,214 @@ const sortStudentsLogically = (students) => {
 // ------------------------------------
 
 // AUTO-GENERATE TEACHER COMMENTS ALGORITHM
-const generateAutoComment = (student, attRate, avgScore, assessments) => {
+const generateAutoComment = (student, attRate, avgScore, assessments, presentCount = 0, totalSessions = 0) => {
   if (!student) return "No student data available.";
   const sClass = student.class || '';
   const sLevel = student.level || '';
   const isKids = ['Kindergarten', 'PAUD', 'TK A', 'TK B'].includes(sLevel) || sClass.includes('TK') || sClass.includes('PAUD');
-  const name = (student.name || 'Student').split(' ')[0];
-  let latestAss = assessments.length > 0 ? assessments[assessments.length - 1] : null;
-
-  let highSubj = '';
-  let lowSubj = '';
-  if (latestAss && latestAss.scores) {
-       const scores = Object.entries(latestAss.scores).filter(([k]) => k !== 'material' && latestAss.scores[k] !== '' && latestAss.scores[k] !== undefined && !isNaN(Number(latestAss.scores[k])));
-       if(scores.length > 0) {
-           scores.sort((a,b) => Number(b[1]) - Number(a[1]));
-           highSubj = scores[0][0];
-           lowSubj = scores[scores.length - 1][0];
-       }
-  }
+  const name = student.name || 'Student';
+  const attLabel = attRate > 0 ? `${Math.round(attRate)}%` : null;
+  // Apakah siswa ambil paket separuh (scheduledDays diisi) atau paket penuh (kosong)?
+  const isHalfPackage = Array.isArray(student.scheduledDays) && student.scheduledDays.length > 0;
+  const packageLabel = isHalfPackage ? 'Paket Selektif' : 'Paket Lengkap';
+  // Label detail kehadiran: "X dari Y sesi (paket penuh/separuh, XX%)"
+  const attDetail = (totalSessions > 0)
+    ? `${presentCount} dari ${totalSessions} sesi (${packageLabel}, ${Math.round(attRate)}%)`
+    : attLabel;
 
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
   let comment = "";
 
-  if (isKids) {
-       // BUGFIX: avgScore === 0 berarti belum ada data nilai, jangan masuk branch "Excellent"
-       if (avgScore === 0) {
-           comment = `${name} baru saja bergabung dan sedang dalam proses adaptasi. Kami akan terus memantau perkembangannya dengan penuh semangat!`;
-       } else if (avgScore >= 85) {
-           const intros = [
-               `${name} sangat ceria dan antusias dalam mengikuti kegiatan kelas. `,
-               `${name} menunjukkan semangat belajar yang luar biasa dan selalu aktif berpartisipasi. `,
-               `Kami sangat senang melihat perkembangan ${name} yang semakin berani dan percaya diri. `
-           ];
-           const strengths = highSubj ? [
-               `Kemampuan ${highSubj}-nya patut diacungi jempol. `,
-               `Perkembangannya dalam ${highSubj} terlihat sangat pesat. `
-           ] : [`Perkembangan bahasa Inggrisnya menunjukkan kemajuan yang sangat positif. `];
-           const closings = [
-               `Terus pertahankan semangat belajar yang luar biasa ini ya!`,
-               `Tetap semangat bermain dan belajar bahasa Inggris bersama teman-teman!`,
-               `Good job!, ${name}! Teruslah berprestasi.`
-           ];
-           comment = pick(intros) + pick(strengths) + pick(closings);
-       } else if (avgScore >= 70) {
-           const intros = [
-               `${name} menunjukkan ketertarikan yang baik selama sesi belajar bersama teman-teman. `,
-               `Perkembangan ${name} di kelas cukup baik dan semakin terbiasa dengan lingkungan belajar. `
-           ];
-           const strengths = highSubj ? `Pemahaman ${highSubj} sudah mulai terlihat dengan baik. ` : '';
-           const improvements = (lowSubj && lowSubj !== highSubj) ? `Dengan sedikit bimbingan lebih pada ${lowSubj}, hasilnya pasti akan lebih maksimal. ` : `Mari kita terus dorong keberaniannya dalam berekspresi. `;
-           const closings = [`Tetap semangat berlatih di rumah ya!`, `Mari kita terus berikan motivasi agar ${name} semakin hebat.`];
-           comment = pick(intros) + strengths + improvements + pick(closings);
-       } else {
-           const intros = [
-               `${name} adalah anak yang hebat dan sedang terus belajar beradaptasi dengan baik. `,
-               `Kami melihat potensi yang baik pada diri ${name} selama mengikuti kegiatan. `
-           ];
-           const improvements = lowSubj ? `Mari kita bersama-sama memberi dukungan lebih agar ${name} semakin percaya diri, khususnya dalam pengenalan ${lowSubj}. ` : `Bimbingan lebih lanjut akan sangat membantu pemahamannya. `;
-           const closings = [`Semangat terus belajarnya ya, ${name}!`, `Kami yakin ${name} bisa jauh lebih baik lagi.`];
-           comment = pick(intros) + improvements + pick(closings);
-       }
-  } else {
-       // BUGFIX: avgScore === 0 berarti belum ada data nilai, jangan masuk branch "Excellent"
-       if (avgScore === 0) {
-           comment = `${name} baru bergabung dan kami sangat antusias menyambut kehadiran beliau. Data penilaian akan tersedia setelah mengikuti sesi evaluasi pertama.`;
-       } else if (avgScore >= 85) {
-           const intros = [
-               `Proses belajar ${name} menunjukkan hasil yang sangat memuaskan, terlihat dari partisipasi aktif di kelas. `,
-               `Kami sangat bangga dengan pencapaian akademik ${name} sejauh ini yang terus konsisten. `,
-               `Selama periode ini, ${name} memperlihatkan dedikasi belajar yang luar biasa. `
-           ];
-           const strengths = highSubj ? [
-               `Penguasaan pada aspek ${highSubj} sangat menonjol. `,
-               `Kemampuan analitis dan pemahaman ${highSubj} berkembang pesat. `
-           ] : [`Pemahaman materi secara komprehensif sangat patut diapresiasi. `];
-           const closings = [
-               `Terus pertahankan prestasi dan dedikasi cemerlang ini untuk tantangan akademik ke depannya.`,
-               `Kami berharap ${name} dapat terus mempertahankan momentum positif ini.`,
-               `Keep up the excellent work!`
-           ];
-           comment = pick(intros) + pick(strengths) + pick(closings);
-       } else if (avgScore >= 70) {
-           const intros = [
-               `${name} memiliki pemahaman dasar yang baik dan cukup konsisten dalam mengikuti kelas. `,
-               `Performa akademik ${name} menunjukkan progress yang stabil selama periode pembelajaran ini. `
-           ];
-           const strengths = highSubj ? `Keterampilan ${highSubj} merupakan salah satu kekuatan utamanya. ` : '';
-           const improvements = lowSubj ? `Fokus tambahan pada area ${lowSubj} sangat disarankan untuk hasil yang lebih terpadu. ` : `Terdapat ruang untuk peningkatan yang lebih baik dalam kelancaran komunikasi. `;
-           const closings = [
-               `Terus tingkatkan intensitas latihan agar pencapaian akademik semakin maksimal.`,
-               `Jangan ragu untuk terus berlatih dan bertanya. Semangat!`
-           ];
-           comment = pick(intros) + strengths + improvements + pick(closings);
-       } else {
-           const intros = [
-               `${name} telah berusaha dengan baik untuk mengikuti ritme pembelajaran di kelas bahasa Inggris ini. `,
-               `Kami menghargai setiap usaha yang ditunjukkan oleh ${name} selama mengikuti sesi kelas. `
-           ];
-           const improvements = lowSubj ? `Diperlukan dedikasi lebih dan fokus tambahan, khususnya pada keterampilan ${lowSubj}, agar dapat mengejar target pembelajaran. ` : `Dibutuhkan konsistensi ekstra untuk memahami konsep dasar yang diberikan. `;
-           const closings = [
-               `Jangan ragu untuk berdiskusi lebih aktif dengan tutor. Kami siap membantu!`,
-               `Tingkatkan terus semangat belajarnya untuk mengejar ketertinggalan.`
-           ];
-           comment = pick(intros) + improvements + pick(closings);
-       }
+  // Siswa yang sama sekali tidak pernah hadir — tangani khusus di semua level
+  if (attRate === 0) {
+    const sessionCtx = totalSessions > 0 ? ` dari ${totalSessions} sesi ${packageLabel} yang tersedia pada periode ini` : ` pada periode ini`;
+    const neverAttended = [
+      `Berdasarkan catatan kami, ${name} belum tercatat hadir dalam satu pun sesi pembelajaran${sessionCtx}. Kami sangat memahami bahwa ada berbagai hal yang mungkin menjadi kendala, namun kami ingin menyampaikan dengan penuh perhatian bahwa ketidakhadiran yang berlanjut akan sangat berdampak pada perkembangan belajar ${name}. Setiap sesi yang terlewat berarti materi penting yang tidak tersampaikan, dan ketertinggalan ini akan semakin sulit dikejar seiring berjalannya waktu. Kami sangat mengharapkan agar ${name} dapat segera aktif kembali mengikuti sesi, dan kami siap menyambut serta mendampingi ${name} dengan sepenuh hati. Mohon hubungi kami untuk mendiskusikan jadwal atau kendala yang ada — kami terbuka untuk mencari solusi terbaik bersama.`,
+      `Kami perlu menyampaikan dengan hormat bahwa berdasarkan data kehadiran periode ini, ${name} belum tercatat hadir sama sekali${sessionCtx}. Tentu kami tidak ingin menyimpulkan tanpa mengetahui kondisi sebenarnya, namun hal ini menjadi perhatian serius bagi kami sebagai tutor yang peduli pada perkembangan setiap siswa. Proses belajar bahasa Inggris membutuhkan konsistensi dan kesinambungan — semakin banyak sesi yang terlewat, semakin besar jarak yang harus ditempuh untuk mengejar ketertinggalan. Kami dengan tulus mengundang Bapak/Ibu untuk menghubungi kami agar kita dapat mendiskusikan situasi ini dan menemukan solusi terbaik demi kepentingan perkembangan ${name}.`,
+      `Dengan penuh rasa hormat, kami ingin menyampaikan bahwa catatan kehadiran ${name} pada periode ini menunjukkan tidak adanya kehadiran dalam satu pun sesi yang telah terlaksana${sessionCtx}. Kami sangat berharap ini bukan karena ada kendala yang tidak kami ketahui. Perkembangan bahasa Inggris yang optimal memerlukan kehadiran dan latihan yang berkesinambungan, dan kami khawatir ketidakhadiran ini dapat memperlambat pencapaian ${name} secara signifikan. Kami mengajak Bapak/Ibu untuk segera berkoordinasi dengan kami agar kami dapat membantu ${name} kembali ke jalur belajar yang tepat. Kami siap mendukung sepenuhnya!`
+    ];
+    return pick(neverAttended);
   }
 
-  if (attRate < 75 && attRate > 0) {
-      const attWarnings = [
-          ` Selain itu, kami berharap tingkat kehadiran ${name} dapat lebih ditingkatkan agar tidak tertinggal materi penting.`,
-          ` Peningkatan kehadiran di kelas juga akan sangat berdampak positif bagi progress belajarnya.`
+  if (isKids) {
+    if (avgScore === 0) {
+      comment = `${name} baru saja bergabung di English Club dan saat ini sedang dalam masa adaptasi bersama teman-teman dan tutor. Kami sangat senang menyambut kehadiran ${name} dan sudah melihat antusias serta rasa ingin tahu yang besar sejak hari pertama. Proses adaptasi adalah bagian penting dari perjalanan belajar, dan kami akan memastikan ${name} merasa nyaman dan percaya diri di setiap sesi. Kami akan terus memantau perkembangan ${name} dengan penuh perhatian dan tidak sabar untuk melihat progresnya ke depan!`;
+    } else if (avgScore >= 85) {
+      const intros = [
+        `${name} menunjukkan perkembangan yang luar biasa dan sangat membanggakan selama periode ini. `,
+        `Kami sangat senang melaporkan bahwa ${name} tampil dengan sangat baik dan konsisten di setiap sesi belajar. `,
+        `Perkembangan ${name} selama periode ini benar-benar membuat kami bangga dan antusias sebagai tutor. `,
+        `${name} adalah salah satu murid yang menunjukkan semangat belajar paling tinggi di kelasnya. `
       ];
-      comment += pick(attWarnings);
+      const middles = [
+        `Kemampuan bahasa Inggrisnya berkembang sangat pesat — ${name} sudah mampu memahami instruksi, merespons pertanyaan, dan berinteraksi dengan kosakata yang semakin kaya. Setiap sesi selalu diikuti dengan penuh antusias, dan ${name} tidak pernah ragu untuk mencoba hal-hal baru. `,
+        `Di setiap pertemuan, ${name} selalu hadir dengan semangat yang tinggi dan langsung terlibat aktif dalam kegiatan kelas. Kemampuan menyerap kosakata baru dan menggunakannya dalam konteks percakapan terus meningkat secara nyata dari minggu ke minggu. `,
+        `Keberanian ${name} untuk berbicara, bernyanyi, dan berpartisipasi dalam permainan bahasa Inggris sangat kami apresiasi. Progres yang terlihat bukan hanya dari nilai, tapi juga dari cara ${name} semakin percaya diri berkomunikasi dalam bahasa Inggris sehari-hari. `,
+        `${name} menunjukkan kematangan belajar yang jarang kami temui pada anak seusianya — fokus, aktif bertanya, dan mampu mengikuti instruksi dengan sangat baik. Kemajuan ini adalah buah dari semangat dan konsistensi yang luar biasa. `
+      ];
+      const specifics = [
+        `Nilai rata-rata yang diraih mencerminkan kerja keras dan ketekunan yang nyata. `,
+        `Hasil penilaian periode ini sangat memuaskan dan mencerminkan dedikasi belajar yang sungguh-sungguh. `,
+        `Capaian nilai ${name} periode ini berada di level yang sangat baik dan membuktikan potensi besarnya. `,
+        `Pencapaian akademik ${name} periode ini adalah yang terbaik di kelompok belajarnya. `
+      ];
+      const closings = [
+        `Kami mengucapkan selamat kepada ${name} dan keluarga atas pencapaian yang membanggakan ini. Terus pertahankan semangat dan kebiasaan belajar yang positif — kami yakin ${name} akan terus meraih hal-hal hebat ke depannya!`,
+        `Terima kasih atas kepercayaan dan dukungan yang diberikan kepada kami. Bersama, kita akan terus mendampingi ${name} untuk tumbuh menjadi komunikator bahasa Inggris yang percaya diri. Keep it up, ${name}!`,
+        `Kami sangat antusias melihat perjalanan belajar ${name} ke depan. Dengan semangat seperti ini, tidak ada yang tidak bisa dicapai. Good job, ${name} — kami bangga dengan kamu!`,
+        `Kolaborasi antara tutor dan orang tua sangat berperan dalam kesuksesan ${name}. Teruslah dukung kebiasaan belajar di rumah, dan kami siap memberikan yang terbaik di setiap sesi. Semangat terus!`
+      ];
+      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+    } else if (avgScore >= 70) {
+      const intros = [
+        `${name} menunjukkan perkembangan yang menggembirakan dan terus bergerak ke arah yang positif selama periode ini. `,
+        `Kami senang melaporkan bahwa ${name} menunjukkan kemajuan yang konsisten dan semakin nyaman dalam belajar bahasa Inggris. `,
+        `Selama periode ini, ${name} terus berkembang dengan caranya sendiri dan menunjukkan keberanian yang semakin meningkat di kelas. `,
+        `Perkembangan ${name} selama beberapa bulan ini memberikan sinyal yang sangat positif dan menjanjikan. `
+      ];
+      const middles = [
+        `${name} semakin aktif berpartisipasi dalam kegiatan kelas dan tidak ragu untuk mencoba berbicara bahasa Inggris, meski kadang masih butuh sedikit dorongan. Kemampuan memahami instruksi dan kosakata dasar terus berkembang dari sesi ke sesi, dan ini adalah fondasi yang sangat baik untuk ke depannya. `,
+        `Kemampuan bahasa Inggris ${name} terus tumbuh secara bertahap namun pasti — terutama dalam hal kosakata dan kemampuan mengikuti instruksi kelas. ${name} juga mulai menunjukkan inisiatif untuk menjawab pertanyaan tanpa perlu diminta terlebih dahulu, yang merupakan perkembangan yang sangat kami apresiasi. `,
+        `Di setiap pertemuan, selalu ada hal baru yang berhasil dikuasai oleh ${name}. Proses belajar yang konsisten dan sikap positif yang selalu ditunjukkan membuat kami yakin bahwa perkembangan ${name} akan semakin pesat di periode berikutnya. `,
+        `${name} menunjukkan ketertarikan yang tulus terhadap bahasa Inggris, yang terlihat dari caranya merespons materi dan berinteraksi dengan teman-teman di kelas. Fondasi yang sedang dibangun saat ini sangat kuat dan akan menjadi modal besar ke depannya. `
+      ];
+      const specifics = [
+        `Nilai yang diraih mencerminkan proses belajar yang berjalan dengan baik dan konsisten. `,
+        `Hasil penilaian periode ini menunjukkan pertumbuhan yang nyata dan layak untuk dirayakan bersama. `,
+        `Capaian periode ini membuktikan bahwa usaha dan ketekunan ${name} memberikan hasil yang nyata. `,
+        `Penilaian yang diperoleh mencerminkan potensi besar yang terus berkembang dengan baik. `
+      ];
+      const closings = [
+        `Kami sangat menganjurkan untuk terus mendukung kebiasaan belajar ${name} di rumah, misalnya dengan menonton konten bahasa Inggris anak-anak atau sesekali berbicara dalam bahasa Inggris. Dukungan dari rumah akan mempercepat perkembangan yang sudah terlihat. Semangat terus, ${name}!`,
+        `Terima kasih atas kepercayaan Bapak/Ibu kepada kami. Kami akan terus mendampingi ${name} dengan penuh dedikasi. Mari bersama-sama kita bantu ${name} mencapai potensi terbaiknya. Terus semangat!`,
+        `Dengan dukungan yang konsisten dari rumah dan semangat yang sudah dimiliki, kami yakin ${name} akan mencapai hasil yang semakin membanggakan di periode berikutnya. Kami tidak sabar melihat perkembangan selanjutnya!`,
+        `Kami mengapresiasi kepercayaan keluarga kepada English Club. Bersama, kita akan terus mendorong ${name} untuk tumbuh percaya diri dan mencintai bahasa Inggris. Tetap semangat!`
+      ];
+      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+    } else {
+      const intros = [
+        `${name} adalah anak yang bersemangat dan kami sangat menikmati setiap sesi belajar bersamanya. `,
+        `Kami melihat potensi yang besar pada diri ${name} dan terus berusaha mengembangkannya di setiap pertemuan. `,
+        `Kehadiran ${name} di kelas selalu membawa energi yang positif, dan kami sangat menghargai semangatnya. `,
+        `${name} adalah murid yang menyenangkan untuk didampingi, dan kami berkomitmen penuh untuk mendukung perkembangannya. `
+      ];
+      const middles = [
+        `Saat ini, ${name} sedang dalam fase membangun fondasi yang kuat dalam belajar bahasa Inggris. Setiap anak memiliki ritme belajarnya masing-masing, dan kami dengan sabar mendampingi setiap langkah ${name} dengan pendekatan yang disesuaikan dengan kebutuhannya. `,
+        `Proses belajar bahasa baru memang membutuhkan waktu dan kesabaran, dan ${name} sudah menunjukkan langkah-langkah awal yang baik. Kami terus menggunakan metode yang menyenangkan agar ${name} semakin tertarik dan tidak merasa tertekan dalam belajar bahasa Inggris. `,
+        `Kami memahami bahwa setiap anak berkembang dengan kecepatan yang berbeda, dan kami sangat menghargai usaha yang telah ditunjukkan ${name}. Fokus kami saat ini adalah memastikan ${name} merasa nyaman dan percaya diri, karena itu adalah kunci utama dalam pembelajaran bahasa. `,
+        `${name} sudah menunjukkan kemajuan dalam hal keberanian untuk mencoba, dan itu adalah hal yang sangat kami apresiasi. Membangun kepercayaan diri dalam berbahasa adalah prioritas utama kami untuk ${name} saat ini. `
+      ];
+      const specifics = [
+        `Kami akan terus memantau perkembangan ${name} dan menyesuaikan metode pembelajaran agar semakin efektif. `,
+        `Dengan pendekatan yang tepat dan dukungan penuh dari semua pihak, kami yakin ${name} akan menunjukkan kemajuan yang signifikan. `,
+        `Setiap langkah kecil yang diambil ${name} adalah pencapaian nyata yang patut dirayakan bersama. `,
+        `Kami berkomitmen untuk terus mencari cara terbaik agar ${name} bisa berkembang optimal di setiap sesinya. `
+      ];
+      const closings = [
+        `Kami sangat mengharapkan keterlibatan aktif Bapak/Ibu di rumah — misalnya dengan mengajak ${name} mendengarkan lagu anak berbahasa Inggris atau menonton video edukatif bersama. Sinergi antara kelas dan rumah adalah kunci percepatan belajar ${name}. Kami selalu terbuka untuk berdiskusi lebih lanjut tentang perkembangan ${name}!`,
+        `Terima kasih atas kepercayaan dan kesabaran Bapak/Ibu. Kami berkomitmen untuk terus memberikan perhatian penuh kepada ${name} dan memastikan setiap sesi berlangsung dengan menyenangkan dan bermakna. Bersama, kita pasti bisa!`,
+        `Jangan ragu untuk menghubungi kami jika ada hal yang ingin didiskusikan mengenai perkembangan ${name}. Kami selalu senang berbagi informasi dan berkolaborasi demi kemajuan ${name} yang optimal. Semangat terus!`,
+        `Kami yakin dengan konsistensi kehadiran dan dukungan dari rumah, ${name} akan segera menunjukkan lompatan perkembangan yang membanggakan. Terima kasih telah mempercayakan pendidikan bahasa Inggris ${name} kepada kami!`
+      ];
+      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+    }
+  } else {
+    if (avgScore === 0) {
+      comment = `${name} baru bergabung di English Club dan kami sangat antusias menyambut kehadirannya. Di sesi-sesi awal ini, ${name} sedang dalam proses pengenalan materi, metode belajar, dan dinamika kelas. Kami sudah melihat antusias dan kemauan yang baik dari ${name} untuk mengikuti setiap kegiatan. Data penilaian lengkap akan tersedia setelah beberapa sesi evaluasi terlaksana — namun yang terpenting, ${name} sudah memulai perjalanan belajar ini dengan langkah yang tepat!`;
+    } else if (avgScore >= 85) {
+      const intros = [
+        `Kami dengan bangga melaporkan bahwa ${name} menunjukkan performa akademik yang sangat memuaskan selama periode ini. `,
+        `Proses belajar ${name} selama periode ini mencerminkan dedikasi, ketekunan, dan komitmen yang patut diapresiasi. `,
+        `${name} tampil luar biasa selama periode ini dan membuktikan bahwa kerja keras benar-benar membuahkan hasil. `,
+        `Selama periode ini, ${name} secara konsisten menunjukkan kemampuan dan etos belajar yang sangat tinggi. `
+      ];
+      const middles = [
+        `${name} aktif berpartisipasi di setiap sesi, tidak ragu mengajukan pertanyaan, dan selalu berusaha memahami materi secara mendalam. Kemampuan berbicara, mendengarkan, membaca, dan menulis dalam bahasa Inggris terus berkembang secara seimbang dan nyata dari waktu ke waktu. `,
+        `Apa yang paling kami kagumi dari ${name} adalah kemampuannya untuk tidak hanya memahami materi, tetapi juga menerapkannya secara aktif dalam percakapan dan latihan di kelas. Daya serap yang cepat dan keberanian untuk mencoba membuat setiap sesi menjadi sangat produktif. `,
+        `${name} selalu datang ke kelas dengan persiapan yang baik dan sikap belajar yang positif. Kemampuan berargumentasi, mengekspresikan pendapat, serta berkomunikasi dalam bahasa Inggris terus meningkat secara signifikan dan konsisten. `,
+        `Perkembangan ${name} tidak hanya terlihat dari angka penilaian, tetapi juga dari kepercayaan dirinya yang semakin kuat dalam menggunakan bahasa Inggris di berbagai konteks. Ini adalah pencapaian yang jauh lebih berharga dari sekadar nilai. `
+      ];
+      const specifics = [
+        `Hasil penilaian yang diraih ${name} periode ini sangat memuaskan dan mencerminkan proses belajar yang sungguh-sungguh. `,
+        `Nilai rata-rata yang diperoleh berada di level excellent, membuktikan konsistensi dan kualitas belajar yang luar biasa. `,
+        `Capaian akademik ${name} periode ini adalah yang terbaik dan menjadi tolok ukur yang membanggakan. `,
+        `Penilaian akhir periode ini mencerminkan pertumbuhan nyata yang telah berhasil diraih dengan kerja keras. `
+      ];
+      const closings = [
+        `Kami mengucapkan selamat dan penghargaan setinggi-tingginya kepada ${name} dan keluarga atas pencapaian yang luar biasa ini. Momentum positif ini kami harap dapat terus dipertahankan dan bahkan ditingkatkan di periode berikutnya. Terus semangat dan jangan berhenti bermimpi besar!`,
+        `Terima kasih atas kepercayaan dan dukungan penuh yang diberikan kepada kami. Pencapaian ${name} adalah kebanggaan bersama. Kami akan terus berkomitmen memberikan pembelajaran terbaik agar ${name} dapat mencapai potensi tertingginya. Keep up the amazing work!`,
+        `Kami sangat bangga dengan perjalanan belajar ${name} dan tidak sabar melihat pencapaian-pencapaian hebat berikutnya. Teruslah jaga semangat, rasa ingin tahu, dan konsistensi yang telah menjadi kekuatan utama ${name} selama ini. Kami selalu ada untuk mendukung!`,
+        `Dedikasi ${name} adalah inspirasi bagi kami sebagai tutor. Bersama orang tua yang suportif dan semangat belajar yang tinggi, kami yakin masa depan ${name} dalam penguasaan bahasa Inggris sangat cerah. Terus berjuang dan raih yang terbaik!`
+      ];
+      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+    } else if (avgScore >= 70) {
+      const intros = [
+        `${name} menunjukkan perkembangan yang baik dan konsisten selama mengikuti kelas di periode ini. `,
+        `Kami senang melaporkan bahwa ${name} terus menunjukkan kemajuan yang stabil dan menggembirakan selama periode ini. `,
+        `Selama periode ini, ${name} menampilkan sikap belajar yang positif dan selalu berusaha memberikan yang terbaik di setiap sesi. `,
+        `Performa ${name} selama periode ini berjalan dengan baik dan memperlihatkan progres yang nyata serta menjanjikan. `
+      ];
+      const middles = [
+        `${name} aktif dalam diskusi kelas dan tidak segan untuk mencoba menjawab pertanyaan maupun menggunakan bahasa Inggris dalam percakapan. Pemahaman terhadap materi yang diberikan terus berkembang dengan baik dari waktu ke waktu, dan kami melihat peningkatan yang nyata terutama dalam kemampuan komunikasi. `,
+        `Kemampuan ${name} dalam memahami dan menggunakan bahasa Inggris terus tumbuh secara konsisten. Di setiap pertemuan selalu ada kemajuan yang bisa kami catat — baik dari sisi pemahaman kosakata, kelancaran berbicara, maupun kemampuan merespons dalam konteks nyata. `,
+        `Salah satu kekuatan utama ${name} adalah keinginan untuk terus belajar dan tidak mudah menyerah saat menghadapi materi yang sulit. Sikap ini sangat kami apresiasi dan menjadi fondasi penting untuk perkembangan jangka panjang. Kemampuan bahasa Inggrisnya pun semakin terasa dalam interaksi sehari-hari di kelas. `,
+        `${name} menunjukkan kemampuan yang solid dalam mengikuti pembelajaran, dengan keterlibatan aktif yang selalu kami apresiasi. Proses belajar yang dijalani dengan tekun dan konsisten ini adalah investasi terbaik yang hasilnya akan semakin terasa ke depan. `
+      ];
+      const specifics = [
+        `Nilai yang diraih periode ini mencerminkan proses belajar yang serius dan penuh dedikasi. `,
+        `Hasil penilaian menunjukkan bahwa usaha dan konsistensi ${name} memberikan dampak yang nyata dan terukur. `,
+        `Capaian penilaian ${name} periode ini membuktikan bahwa langkah-langkah yang diambil sudah berada di jalur yang tepat. `,
+        `Penilaian akhir periode ini adalah cerminan dari kerja keras dan kesungguhan ${name} selama ini. `
+      ];
+      const closings = [
+        `Untuk mendukung perkembangan lebih lanjut, kami sangat menganjurkan agar ${name} terus berlatih secara mandiri di luar jam kelas — misalnya dengan menonton konten berbahasa Inggris, membaca, atau berlatih menulis secara rutin. Dengan kombinasi latihan di kelas dan di rumah, kami yakin hasilnya akan semakin luar biasa. Terus semangat!`,
+        `Kami berterima kasih atas kepercayaan dan dukungan Bapak/Ibu selama ini. Komitmen belajar ${name} yang konsisten adalah modal terbesar menuju pencapaian yang lebih tinggi. Kami akan terus berupaya memberikan materi dan metode terbaik yang sesuai dengan kebutuhan ${name}. Jangan ragu untuk menghubungi kami kapan saja!`,
+        `Kami sangat optimis bahwa dengan konsistensi yang sudah ditunjukkan, ${name} akan meraih hasil yang semakin membanggakan di periode-periode berikutnya. Dukungan dari rumah dalam bentuk latihan rutin akan sangat membantu mempercepat perkembangan ini. Tetap semangat!`,
+        `Terima kasih telah mempercayakan pendidikan bahasa Inggris ${name} kepada kami. Kami akan terus mendampingi dan mendorong ${name} untuk mencapai potensi terbaiknya. Pertahankan semangat ini dan teruslah berkembang!`
+      ];
+      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+    } else {
+      const intros = [
+        `${name} telah menunjukkan usaha yang sungguh-sungguh dalam mengikuti setiap sesi pembelajaran selama periode ini. `,
+        `Kami menghargai semangat dan kehadiran ${name} yang konsisten, serta kesediaan untuk terus mencoba meski materi terasa menantang. `,
+        `${name} terus berusaha dengan penuh kesungguhan, dan kami sebagai tutor sangat mengapresiasi setiap langkah yang sudah ditempuh. `,
+        `Selama periode ini, ${name} menunjukkan karakter belajar yang pantang menyerah, dan itu adalah modal terpenting dalam perjalanan belajar bahasa. `
+      ];
+      const middles = [
+        `Saat ini, ${name} sedang dalam fase membangun fondasi kemampuan bahasa Inggris yang kuat. Kami memahami bahwa setiap individu memiliki ritme dan gaya belajar yang berbeda, dan kami terus menyesuaikan pendekatan pembelajaran agar sesuai dengan kebutuhan spesifik ${name}. Progres memang tidak selalu terlihat dari angka semata, tetapi kami merasakan perkembangan nyata dalam hal kepercayaan diri dan kemauan ${name} untuk berpartisipasi. `,
+        `Beberapa area yang sedang kami fokuskan bersama ${name} adalah peningkatan pemahaman kosakata aktif dan keberanian untuk berkomunikasi dalam bahasa Inggris. Kami menggunakan pendekatan yang bertahap dan menyenangkan agar ${name} dapat membangun kepercayaan diri secara organik tanpa tekanan. Kami yakin bahwa dengan waktu dan dukungan yang tepat, perkembangan akan semakin terasa nyata. `,
+        `Kami terus mendampingi ${name} dengan penuh perhatian dan mencari metode yang paling efektif untuknya. Yang membuat kami optimis adalah semangat dan ketekunan yang tidak pernah padam dalam diri ${name} — dua hal yang jauh lebih penting daripada sekadar nilai. Fondasi yang dibangun saat ini akan menjadi kekuatan besar ke depannya. `,
+        `Perjalanan belajar bahasa Inggris memang membutuhkan proses, dan ${name} sedang melewati fase penting dalam perjalanan tersebut. Kami berkomitmen penuh untuk memastikan setiap sesi berjalan efektif, menyenangkan, dan bermakna bagi perkembangan ${name} secara keseluruhan. `
+      ];
+      const specifics = [
+        `Kami akan terus memonitor perkembangan ${name} secara berkala dan siap menyesuaikan strategi pembelajaran jika diperlukan. `,
+        `Dengan dedikasi yang sudah ditunjukkan, kami yakin hasil belajar ${name} akan terus meningkat secara bertahap namun pasti. `,
+        `Setiap langkah kemajuan yang diraih ${name}, sekecil apapun, adalah pencapaian nyata yang layak untuk dirayakan bersama. `,
+        `Kami berkomitmen untuk terus memberikan perhatian personal kepada ${name} demi memaksimalkan potensinya. `
+      ];
+      const closings = [
+        `Kami sangat mengharapkan dukungan aktif dari Bapak/Ibu di rumah, seperti mengajak ${name} berlatih kosakata sederhana, membaca buku berbahasa Inggris, atau menonton video edukatif bersama. Sinergi antara pembelajaran di kelas dan pembiasaan di rumah akan memberikan dampak yang sangat besar. Kami selalu terbuka untuk berdiskusi tentang strategi belajar terbaik untuk ${name}. Jangan ragu menghubungi kami kapan saja!`,
+        `Terima kasih atas kepercayaan Bapak/Ibu kepada kami. Kami memahami bahwa melihat perkembangan anak tidak selalu linier, dan kami berkomitmen untuk terus hadir sebagai mitra belajar yang dapat diandalkan. Bersama, kita pasti bisa membantu ${name} mencapai potensi terbaiknya. Semangat terus!`,
+        `Kami mengundang Bapak/Ibu untuk terus berkomunikasi dengan kami mengenai perkembangan ${name}. Dengan sinergi yang baik antara tutor dan orang tua, kami optimis ${name} akan segera menunjukkan lompatan perkembangan yang membanggakan. Terima kasih atas kepercayaan dan kesabaran yang luar biasa!`,
+        `Jangan ragu untuk menghubungi kami jika ingin mendiskusikan lebih lanjut mengenai perkembangan dan kebutuhan belajar ${name}. Kami berkomitmen memberikan pendampingan terbaik dan memastikan setiap sesi membawa manfaat nyata. Kami yakin, dengan kerja sama yang baik, ${name} akan segera berkembang pesat!`
+      ];
+      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+    }
+  }
+
+  if (attRate < 50 && attRate > 0) {
+    const attNotes = [
+      ` ⚠️ Catatan Penting: Tingkat kehadiran ${name} pada periode ini tercatat ${attDetail}. Perlu kami jelaskan bahwa angka ini dihitung khusus dari sesi ${packageLabel} yang dimiliki ${name} — bukan dari keseluruhan sesi kursus yang ada — sehingga sudah benar-benar mencerminkan kehadiran relatif terhadap paket yang sudah dibeli. Dengan lebih dari separuh sesi ${packageLabel} yang tidak dihadiri, kesinambungan materi menjadi terganggu dan berdampak langsung pada perkembangan belajar ${name}. Kami sangat mengharapkan agar kehadiran dapat ditingkatkan di periode berikutnya. Jangan ragu menghubungi kami jika ada kendala — kami terbuka untuk mencari solusi bersama.`,
+      ` ⚠️ Perhatian Khusus: Kami perlu menyampaikan bahwa kehadiran ${name} pada periode ini adalah ${attDetail}. Angka ini murni dihitung dari sesi ${packageLabel} ${name} saja, bukan total seluruh sesi kursus, sehingga sudah menyesuaikan paket yang diambil. Dengan lebih dari separuh sesi ${packageLabel} yang terlewat, potensi perkembangan ${name} belum dapat dimaksimalkan dan materi yang terlewat sulit untuk dikejar. Kami mengajak Bapak/Ibu untuk bersama-sama mencari solusi agar ${name} dapat hadir lebih rutin di periode berikutnya.`,
+      ` ⚠️ Catatan Kehadiran: Berdasarkan data periode ini, ${name} hadir sebanyak ${attDetail}. Persentase ini dihitung dari total sesi ${packageLabel} yang dimiliki ${name} — bukan dari keseluruhan jadwal kursus yang ada — jadi sudah menyesuaikan dengan paket yang diambil. Meski demikian, tingkat kehadiran di bawah 50% dari ${packageLabel} ini menjadi perhatian serius kami karena berdampak langsung pada kesinambungan belajar ${name}. Kami sangat berharap dapat melihat komitmen kehadiran yang lebih kuat di periode berikutnya dan siap mendukung sepenuhnya.`
+    ];
+    comment += pick(attNotes);
+  } else if (attRate >= 90 && attRate > 0) {
+    const attPraise = [
+      ` Kehadiran ${name} yang mencapai ${attDetail} pada periode ini sangat kami apresiasi — ini mencerminkan komitmen dan disiplin yang luar biasa dalam memanfaatkan ${packageLabel} secara optimal.`,
+      ` Kami juga mengapresiasi tingkat kehadiran ${name} yang sangat baik yaitu ${attDetail} — konsistensi memanfaatkan ${packageLabel} seperti ini adalah salah satu faktor terpenting dalam keberhasilan belajar bahasa.`
+    ];
+    comment += pick(attPraise);
   }
 
   return comment;
@@ -4561,13 +4657,48 @@ function MainApp() {
         });
       }
       const element = document.getElementById(elementId);
-      const canvas = await window.html2canvas(element, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-      const imgData = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `${filename}.png`;
-      link.href = imgData;
-      link.click();
-      showToast('PNG Downloaded!');
+      if (!element) throw new Error('Element not found: ' + elementId);
+
+      // FIX TUMPANG TINDIH: Clone elemen ke container bersih di luar modal
+      // agar html2canvas tidak terpengaruh oleh fixed/overflow-y-auto parent
+      // atau elemen dekoratif yang posisinya absolut di atas invoice.
+      const elW = element.scrollWidth || element.offsetWidth || 640;
+      const elH = element.scrollHeight || element.offsetHeight;
+      const clone = element.cloneNode(true) as HTMLElement;
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = [
+        'position:absolute',
+        'top:0',
+        'left:-9999px',
+        `width:${elW}px`,
+        'background:white',
+        'z-index:-1',
+        'overflow:visible',
+        'pointer-events:none',
+      ].join(';');
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      try {
+        const canvas = await window.html2canvas(clone, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          scrollX: 0,
+          scrollY: 0,
+          width: elW,
+          height: elH,
+          windowWidth: elW,
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `${filename}.png`;
+        link.href = imgData;
+        link.click();
+        showToast('PNG Downloaded!');
+      } finally {
+        document.body.removeChild(wrapper);
+      }
     } catch (err) {
       console.error(err);
       showToast('PNG Generation Failed. Try printing to PDF.', 'error');
@@ -4588,7 +4719,41 @@ function MainApp() {
         });
       }
       const element = document.getElementById(elementId);
-      const canvas = await window.html2canvas(element, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+      if (!element) throw new Error('Element not found: ' + elementId);
+
+      // FIX TUMPANG TINDIH: Clone ke container bersih (sama seperti downloadPNG)
+      const elW = element.scrollWidth || element.offsetWidth || 640;
+      const elH = element.scrollHeight || element.offsetHeight;
+      const clone = element.cloneNode(true) as HTMLElement;
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = [
+        'position:absolute',
+        'top:0',
+        'left:-9999px',
+        `width:${elW}px`,
+        'background:white',
+        'z-index:-1',
+        'overflow:visible',
+        'pointer-events:none',
+      ].join(';');
+      wrapper.appendChild(clone);
+      document.body.appendChild(wrapper);
+
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await window.html2canvas(clone, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          scrollX: 0,
+          scrollY: 0,
+          width: elW,
+          height: elH,
+          windowWidth: elW,
+        });
+      } finally {
+        document.body.removeChild(wrapper);
+      }
       
       canvas.toBlob(async (blob) => {
         const file = new File([blob], `${filename}.png`, { type: blob.type });
@@ -6430,8 +6595,8 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [sessionGroup, setSessionGroup] = useState(defaultSession);
-  const [tableData, setTableData] = useState({});
-  const [materialFilterSession, setMaterialFilterSession] = useState('All');
+  // tableData: { [studentId]: { [journalId]: score } }
+  const [tableData, setTableData] = useState<Record<string, Record<string, number | ''>>>({});
   const [randomModal, setRandomModal] = useState(false);
   const [randomTargetScore, setRandomTargetScore] = useState('85');
 
@@ -6444,126 +6609,172 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
       : ['Speaking', 'Writing', 'Reading', 'Listening'];
   }, [sessionGroup]);
 
+  // Reset tableData immediately when session/month/year changes to prevent stale data showing
+  const handleSessionChange = (val: string) => {
+    setTableData({});
+    setSessionGroup(val);
+  };
+  const handleMonthChange = (val: number) => {
+    setTableData({});
+    setMonth(val);
+  };
+  const handleYearChange = (val: number) => {
+    setTableData({});
+    setYear(val);
+  };
+
   const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
-  const allMeetingsThisMonth = useMemo(() => {
-    return db.journals.filter(j => (j.date || '').startsWith(monthPrefix)).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-  }, [db.journals, monthPrefix]);
 
-  const filteredMeetings = useMemo(() => {
-    if (materialFilterSession === 'All') return allMeetingsThisMonth;
-    return allMeetingsThisMonth.filter(j => j.sessionGroup === materialFilterSession);
-  }, [allMeetingsThisMonth, materialFilterSession]);
+  // Sesi/materi bulan ini untuk sessionGroup yang dipilih (dari journals)
+  const sessionsThisMonth = useMemo(() => {
+    return db.journals
+      .filter(j => {
+        const jg = (j.sessionGroup || '').toLowerCase().trim();
+        const sg = (sessionGroup || '').toLowerCase().trim();
+        return (jg === sg || jg.includes(sg) || sg.includes(jg)) && (j.date || '').startsWith(monthPrefix);
+      })
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  }, [db.journals, sessionGroup, monthPrefix]);
 
+  // Load existing per-session scores dari assessments.sessionScores
   useEffect(() => {
-    const initialData = {};
+    const initialData: Record<string, Record<string, number | ''>> = {};
     targetStudents.forEach((student) => {
-      const existing = db.assessments.find((a) => a.studentId === student.id && Number(a.month) === Number(month) && Number(a.year) === Number(year));
-      if (existing && existing.scores) {
-        initialData[student.id] = { ...existing.scores };
-      } else {
-        initialData[student.id] = {};
-        subjects.forEach((sub) => (initialData[student.id][sub] = ''));
-      }
+      const existing = db.assessments.find(
+        (a) => a.studentId === student.id && Number(a.month) === Number(month) && Number(a.year) === Number(year)
+      );
+      const savedSessionScores = existing?.sessionScores || {};
+      initialData[student.id] = {};
+      sessionsThisMonth.forEach((sess) => {
+        initialData[student.id][sess.id] = savedSessionScores[sess.id] !== undefined ? savedSessionScores[sess.id] : '';
+      });
     });
     setTableData(initialData);
-  }, [month, year, sessionGroup, targetStudents, db.assessments, subjects]);
+  }, [month, year, sessionGroup, targetStudents, db.assessments, sessionsThisMonth]);
 
-  const handleScoreChange = (studentId, field, val) => {
-    let num = val === '' ? '' : parseInt(val, 10);
+  const handleScoreChange = (studentId: string, sessionId: string, val: string) => {
+    let num: number | '' = val === '' ? '' : parseInt(val, 10);
     if (num !== '' && Number.isNaN(num as number)) return;
-    if (num > 100) num = 100;
-    if (num < 0) num = 0;
-    setTableData((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [field]: num } }));
+    if (num !== '' && (num as number) > 100) num = 100;
+    if (num !== '' && (num as number) < 0) num = 0;
+    setTableData((prev) => ({ ...prev, [studentId]: { ...prev[studentId], [sessionId]: num } }));
+  };
+
+  // Hitung rata-rata semua nilai materi → tiap skill divariasi kecil ±3 dari avg
+  // Seed dari studentId agar variasi konsisten (tidak berubah tiap render)
+  const calcSkillScores = (sessionScoresMap: Record<string, number | ''>, studentId: string = '') => {
+    const allScores = sessionsThisMonth
+      .map(s => sessionScoresMap[s.id])
+      .filter(v => v !== '' && v !== undefined && !isNaN(Number(v)))
+      .map(Number);
+    if (allScores.length === 0) return { scores: {}, average: 0 };
+
+    // Jika semua nilai 0 (tidak pernah hadir) → semua skill 0
+    const allZero = allScores.every(v => v === 0);
+    if (allZero) {
+      const scores: Record<string, number> = {};
+      subjects.forEach(sub => { scores[sub] = 0; });
+      return { scores, average: 0 };
+    }
+
+    // Hanya hitung rata-rata dari sesi yang hadir (nilai > 0)
+    const filledScores = allScores.filter(v => v > 0);
+    const average = Math.round(filledScores.reduce((a, b) => a + b, 0) / filledScores.length);
+
+    // Seeded pseudo-random dari studentId agar stabil antar render
+    const seeded = (idx: number) => {
+      const str = studentId + idx;
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+      }
+      return (Math.abs(hash) % 7) - 3; // range -3 sampai +3
+    };
+
+    // Generate variasi per skill, pastikan rata-rata skill = average
+    const N = subjects.length;
+    const rawVariations = subjects.map((_, i) => seeded(i));
+    const varAvg = Math.round(rawVariations.reduce((a, b) => a + b, 0) / N);
+    const scores: Record<string, number> = {};
+    subjects.forEach((sub, i) => {
+      const val = Math.min(100, Math.max(0, average + rawVariations[i] - varAvg));
+      scores[sub] = val;
+    });
+
+    return { scores, average };
   };
 
   const handleRandomFill = () => {
     const target = parseInt(randomTargetScore, 10);
     if (isNaN(target) || target < 0 || target > 100) {
-      showToast('Masukkan nilai akhir yang valid (0–100)', 'error');
+      showToast('Masukkan nilai target yang valid (0–100)', 'error');
       return;
     }
-    const N = subjects.length;
-    const SCORE_MIN = 80;
-    const SCORE_MAX = 86;
-    const newTableData: Record<string, any> = { ...tableData };
+    if (sessionsThisMonth.length === 0) {
+      showToast('Belum ada materi/jurnal untuk bulan ini', 'warning');
+      return;
+    }
+    const SCORE_MIN = Math.max(0, target - 3);
+    const SCORE_MAX = Math.min(100, target + 3);
+    const newTableData = { ...tableData };
     let zeroCount = 0;
 
-    // Hitung total pertemuan sesi ini di bulan yang dipilih (dari kalender)
-    // → dipakai sebagai kapasitas fallback jika siswa tidak punya scheduledDays
-    const sessionMeetingsThisMonth = (db.calendar || []).filter(
-      c => (c.date || '').startsWith(monthPrefix) && (c.sessionGroup === sessionGroup || c.name === sessionGroup)
-    ).length;
-
     targetStudents.forEach((student) => {
-      const scores: Record<string, number> = {};
+      // Buat map kehadiran per tanggal untuk siswa ini
+      const attendanceByDate: Record<string, string> = {};
+      (db.studentAttendance || [])
+        .filter(a => a.studentId === student.id && (a.date || '').startsWith(monthPrefix))
+        .forEach(a => { attendanceByDate[a.date] = a.status; });
 
-      // ── Realisasi hadir bulan ini ──────────────────────────────────────────
-      const presentCount = (db.studentAttendance || []).filter(
-        a =>
-          a.studentId === student.id &&
-          (a.date || '').startsWith(monthPrefix) &&
-          a.status === 'Present' &&
-          (a.sessionGroup === sessionGroup || !a.sessionGroup)
-      ).length;
+      // Tentukan sesi mana yang hadir dan mana yang tidak
+      const presentSessions = sessionsThisMonth.filter(s => attendanceByDate[s.date] === 'Present');
+      const absentSessions = sessionsThisMonth.filter(s => attendanceByDate[s.date] !== 'Present');
 
-      if (presentCount === 0) {
-        // Tidak pernah hadir → semua nilai 0
-        subjects.forEach((sub) => { scores[sub] = 0; });
+      const sessionScores: Record<string, number | ''> = {};
+
+      // Sesi tidak hadir → nilai 0
+      absentSessions.forEach(s => { sessionScores[s.id] = 0; });
+
+      if (presentSessions.length === 0) {
         zeroCount++;
       } else {
-        // ── Siswa hadir → gunakan range penuh tanpa pengurangan ──────────────
-        const safeMin = SCORE_MIN;
-        const safeMax = SCORE_MAX;
-
-        // ── Generate nilai acak dalam range efektif ──────────────────────────
+        // Acak nilai hanya untuk sesi yang hadir, rata-rata = target
+        const N = presentSessions.length;
         let generated: number[] = [];
         let attempts = 0;
-        const rangeSize = safeMax - safeMin;
-        const centerTarget = Math.round((safeMin + safeMax) / 2);
         do {
-          generated = subjects.map(() =>
-            rangeSize === 0
-              ? safeMax
-              : Math.floor(Math.random() * (rangeSize + 1)) + safeMin
+          generated = presentSessions.map(() =>
+            SCORE_MIN === SCORE_MAX ? SCORE_MAX : Math.floor(Math.random() * (SCORE_MAX - SCORE_MIN + 1)) + SCORE_MIN
           );
-          // Koreksi rata-rata menuju centerTarget
-          let remainder = centerTarget * N - generated.reduce((a, b) => a + b, 0);
+          let remainder = target * N - generated.reduce((a, b) => a + b, 0);
           let pass = 0;
-          while (remainder !== 0 && pass < N * 10) {
+          while (remainder !== 0 && pass < N * 20) {
             const i = pass % N;
             const adj = remainder > 0 ? 1 : -1;
             const newVal = generated[i] + adj;
-            if (newVal >= safeMin && newVal <= safeMax) {
-              generated[i] = newVal;
-              remainder -= adj;
-            }
+            if (newVal >= SCORE_MIN && newVal <= SCORE_MAX) { generated[i] = newVal; remainder -= adj; }
             pass++;
           }
           attempts++;
-        } while (generated.some(v => v < safeMin || v > safeMax) && attempts < 30);
+        } while (generated.some(v => v < SCORE_MIN || v > SCORE_MAX) && attempts < 30);
 
-        // Shuffle
-        for (let i = generated.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [generated[i], generated[j]] = [generated[j], generated[i]];
-        }
-        subjects.forEach((sub, idx) => { scores[sub] = generated[idx]; });
+        presentSessions.forEach((s, i) => { sessionScores[s.id] = generated[i]; });
       }
 
-      newTableData[student.id] = scores;
+      newTableData[student.id] = sessionScores;
     });
 
     setTableData(newTableData);
     setRandomModal(false);
-    const msg = zeroCount > 0
-      ? `✅ Selesai — ${zeroCount} siswa bernilai 0 (tidak hadir), ${targetStudents.length - zeroCount} siswa bernilai acak`
-      : `✅ Nilai acak berhasil diisi untuk ${targetStudents.length} siswa`;
-    showToast(msg, zeroCount > 0 ? 'warning' : 'success');
+    showToast(
+      zeroCount > 0
+        ? `✅ Selesai — ${zeroCount} siswa nilai 0 (tidak hadir), ${targetStudents.length - zeroCount} siswa terisi acak`
+        : `✅ Nilai acak per-materi berhasil diisi untuk ${targetStudents.length} siswa`,
+      zeroCount > 0 ? 'warning' : 'success'
+    );
   };
 
   const handleSaveAll = () => {
-    // Fix #8: lock periode — tutor tidak boleh mengubah nilai bulan yang sudah lewat.
-    // Admin tetap bisa edit kapan saja untuk keperluan koreksi.
     if (user?.role === 'tutor') {
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
@@ -6577,31 +6788,33 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
     let updatedCount = 0;
 
     targetStudents.forEach((student) => {
-      const studentScores = tableData[student.id];
-      if (!studentScores) return;
+      const sessionScoresMap = tableData[student.id];
+      if (!sessionScoresMap) return;
+      const hasAny = Object.values(sessionScoresMap).some(v => v !== '' && v !== undefined);
+      if (!hasAny) return;
 
-      const hasScores = subjects.some((sub) => studentScores[sub] !== '' && studentScores[sub] !== undefined);
-      if (!hasScores) return;
-
-      let total = 0, count = 0;
-      subjects.forEach((sub) => {
-        if (studentScores[sub] !== '' && studentScores[sub] !== undefined) {
-          total += Number(studentScores[sub]);
-          count++;
-        }
-      });
-      const average = count > 0 ? Math.round(total / count) : 0;
+      // Hitung scores per skill & average dari nilai per sesi
+      const { scores, average } = calcSkillScores(sessionScoresMap, student.id);
       const grade = average >= 90 ? 'A' : average >= 80 ? 'B' : average >= 70 ? 'C' : 'D';
 
-      const existingIdx = newAssessments.findIndex((a) => a.studentId === student.id && Number(a.month) === Number(month) && Number(a.year) === Number(year));
+      // sessionScores: simpan nilai mentah per jurnal id
+      const cleanedSessionScores: Record<string, number> = {};
+      sessionsThisMonth.forEach(s => {
+        const v = sessionScoresMap[s.id];
+        if (v !== '' && v !== undefined) cleanedSessionScores[s.id] = Number(v);
+      });
 
-      const cleanedScores = {};
-      subjects.forEach((sub) => cleanedScores[sub] = studentScores[sub] === '' ? '' : Number(studentScores[sub]));
-
+      const existingIdx = newAssessments.findIndex(
+        (a) => a.studentId === student.id && Number(a.month) === Number(month) && Number(a.year) === Number(year)
+      );
       const assessmentRecord = {
         id: existingIdx >= 0 ? newAssessments[existingIdx].id : generateId('ASS', 'assessments'),
-        studentId: student.id, studentName: student.name, level: student.level, class: student.class, month: String(month), year: String(year), sessionGroup: sessionGroup, scores: cleanedScores, average, grade,
-        updatedAt: getLocalTimestamp(), // FIX BUG 3: LWW butuh timestamp agar mergeByIds bisa memilih versi terbaru
+        studentId: student.id, studentName: student.name, level: student.level, class: student.class,
+        month: String(month), year: String(year), sessionGroup,
+        scores,           // { Reading: avg, Writing: avg, ... } — untuk radar chart
+        sessionScores: cleanedSessionScores, // { journalId: nilai } — nilai mentah per sesi
+        average, grade,
+        updatedAt: getLocalTimestamp(),
       };
 
       if (existingIdx >= 0) newAssessments[existingIdx] = assessmentRecord;
@@ -6611,7 +6824,7 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
 
     if (updatedCount > 0) {
       setDb((prev) => ({ ...prev, assessments: newAssessments }));
-      showToast(`Assessment saved successfully for ${updatedCount} students.`, 'success', `Assessment saved: ${updatedCount} students | ${sessionGroup} | ${String(month)}/${String(year)}`);
+      showToast(`Assessment saved for ${updatedCount} students.`, 'success', `Assessment saved: ${updatedCount} students | ${sessionGroup} | ${String(month)}/${String(year)}`);
     } else {
       showToast('No scores entered to save.', 'warning');
     }
@@ -6620,238 +6833,164 @@ function AssessmentsModule({ db, setDb, generateId, showToast, user }) {
   return (
     <>
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-white mb-1">Monthly Assessment</h2><p className="text-gray-400 text-sm">Spreadsheet-style mass grading. Select a period to grade or edit existing records.</p></div>
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-1">Monthly Assessment</h2>
+        <p className="text-gray-400 text-sm">Input nilai per-materi yang sudah diajarkan. Nilai skill bulanan dihitung otomatis dari rata-rata semua materi.</p>
+      </div>
+
+      {/* Period & Session selector */}
       <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center bg-[#0A0E17] p-4 sm:p-5 rounded-xl border border-gray-800 shadow-sm flex-wrap">
         <div className="w-full">
           <label className="block text-sm text-gray-400 mb-1.5">Month</label>
-          <select className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={month} onChange={e => setMonth(Number(e.target.value))}>
+          <select className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={month} onChange={e => handleMonthChange(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
         </div>
         <div className="w-full">
           <label className="block text-sm text-gray-400 mb-1.5">Year</label>
-          <input type="number" className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={year} onChange={e => setYear(Number(e.target.value))} />
+          <input type="number" className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={year} onChange={e => handleYearChange(Number(e.target.value))} />
         </div>
         <div className="w-full">
           <label className="block text-sm text-gray-400 mb-1.5">Session</label>
-          <select className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={sessionGroup} onChange={e => setSessionGroup(e.target.value)}>
+          <select className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={sessionGroup} onChange={e => handleSessionChange(e.target.value)}>
             {(user?.role === 'tutor' ? parseSessions(user.teachingSession) : SESSIONS).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="bg-[#151B26] border border-gray-800 rounded-xl shadow-sm overflow-hidden mb-6">
-        <div className="p-4 border-b border-gray-800 bg-[#0A0E17] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h3 className="text-white font-bold text-sm">Learning Materials (From Journals)</h3>
-          <select
-            className="bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-[#00D4FF]"
-            value={materialFilterSession}
-            onChange={e => setMaterialFilterSession(e.target.value)}
-          >
-            {user?.role === 'tutor' ? (
-               <>
-                 <option value="All">All My Sessions</option>
-                 {parseSessions(user.teachingSession).map(s => <option key={s} value={s}>{s}</option>)}
-               </>
-            ) : (
-               <>
-                 <option value="All">All Sessions</option>
-                 {SESSIONS.map(s => <option key={s} value={s}>{s}</option>)}
-               </>
-            )}
-          </select>
+      {/* Info: cara kalkulasi skill */}
+      {sessionsThisMonth.length > 0 && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3.5 text-xs text-blue-300 leading-relaxed">
+          <strong className="text-blue-200">ℹ️ Cara hitung nilai skill:</strong> Nilai {subjects.join(', ')} dihitung otomatis dari rata-rata nilai per-materi secara round-robin (materi ke-1→{subjects[0]}, ke-2→{subjects[1]}, dst.). Semakin banyak materi diisi, semakin akurat nilai skill-nya.
         </div>
-        <div className="p-4 max-h-48 overflow-y-auto custom-scrollbar bg-[#0B0F19]">
-          {filteredMeetings.length > 0 ? (
-            <ul className="space-y-3">
-              {filteredMeetings.map((m) => (
-                <li key={m.id} className="text-sm bg-[#151B26] p-3 rounded-lg border border-gray-800">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[#00D4FF] font-medium">{m.sessionGroup}</span>
-                    {/* FIX #12: Gunakan safeDateDisplay agar tidak ada UTC-1-day bug */}
-                    <span className="text-gray-500 text-xs">{safeDateDisplay(m.date, 'en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
-                  </div>
-                  <span className="text-gray-300 font-medium">Topic: </span><span className="text-white">{m.topic}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <EmptyState icon={BookOpen} title="No materials recorded" description="No Learning Journal entries for this month." className="py-6" />
-          )}
-        </div>
-      </div>
+      )}
 
+      {/* Grading Table per Materi */}
       <div className="bg-[#151B26] border border-gray-800 rounded-xl shadow-xl overflow-hidden">
-        <div className="p-4 border-b border-gray-800 bg-[#0A0E17] flex justify-between items-center"><h3 className="text-white font-bold">Grading Table: {sessionGroup}</h3><span className="text-gray-400 text-sm font-medium">{MONTHS[month - 1]} {year}</span></div>
-
-        <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse min-w-max">
-            <thead className="bg-[#0B0F19] border-b border-gray-800 text-gray-400 uppercase tracking-wider text-[11px] font-bold sticky top-0 z-10">
-              <tr>
-                <th className="py-3 px-4 text-center w-12 text-gray-400 font-medium text-sm">No.</th>
-                <th className="py-3 px-4 text-gray-400 font-medium text-sm whitespace-nowrap">Student Name</th>
-                <th className="py-3 px-4 text-gray-400 font-medium text-sm whitespace-nowrap">Class</th>
-                {subjects.map((s) => <th key={s} className="py-3 px-4 text-gray-400 font-medium text-sm text-center w-[100px]">{s}</th>)}
-                <th className="py-3 px-4 text-gray-400 font-medium text-sm text-center w-[80px]">Avg</th>
-                <th className="py-3 px-4 text-gray-400 font-medium text-sm text-center w-[80px]">Grade</th>
-                <th className="py-3 px-4 text-gray-400 font-medium text-sm whitespace-nowrap">Kehadiran</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800 bg-[#151B26]">
-              {targetStudents.map((student, index) => {
-                const studentScores = tableData[student.id] || {};
-                let total = 0, count = 0;
-                subjects.forEach((sub) => { if (studentScores[sub] !== '' && studentScores[sub] !== undefined) { total += Number(studentScores[sub]); count++; } });
-                const avg = count > 0 ? Math.round(total / count) : '-';
-                const grade = avg === '-' ? '-' : avg >= 90 ? 'A' : avg >= 80 ? 'B' : avg >= 70 ? 'C' : 'D';
-
-                // ── Hitung kehadiran & kapasitas paket siswa ──────────────────
-                const presentCount = (db.studentAttendance || []).filter(
-                  a => a.studentId === student.id &&
-                    (a.date || '').startsWith(monthPrefix) &&
-                    a.status === 'Present' &&
-                    (a.sessionGroup === sessionGroup || !a.sessionGroup)
-                ).length;
-
-                const scheduled = Array.isArray(student.scheduledDays) ? student.scheduledDays : [];
-                const isPartialPackage = scheduled.length === 1; // 1 hari/minggu = paket sebagian
-                const packageLabel = isPartialPackage ? 'Sebagian' : 'Penuh';
-
-                // Hitung kapasitas: jumlah hari scheduledDays di bulan ini
-                let packageCapacity = 0;
-                if (scheduled.length > 0) {
-                  const [y, m] = monthPrefix.split('-').map(Number);
-                  const daysInMonth = new Date(y, m, 0).getDate();
-                  for (let d = 1; d <= daysInMonth; d++) {
-                    const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                    if (scheduled.includes(getDayName(dateStr))) packageCapacity++;
-                  }
-                } else {
-                  // scheduledDays kosong → pakai total pertemuan sesi dari kalender
-                  packageCapacity = (db.calendar || []).filter(
-                    c => (c.date || '').startsWith(monthPrefix) && (c.sessionGroup === sessionGroup || c.name === sessionGroup)
-                  ).length;
-                }
-
-                const ratio = packageCapacity > 0 ? presentCount / packageCapacity : 0;
-                const pct = Math.round(ratio * 100);
-
-                // ── Badge & keterangan ────────────────────────────────────────
-                let attIcon = '✅';
-                let attColor = 'text-emerald-400';
-                let attNote = '';
-                if (presentCount === 0) {
-                  attIcon = '❌';
-                  attColor = 'text-rose-400';
-                  attNote = 'Tidak hadir — nilai 0';
-                } else if (ratio < 1) {
-                  attIcon = '⚠️';
-                  attColor = 'text-amber-400';
-                  attNote = `Hadir ${presentCount}/${packageCapacity} (${pct}%)`;
-                } else {
-                  attNote = `Hadir penuh ${presentCount}/${packageCapacity}`;
-                }
-
-                return (
-                  <tr key={student.id} className="hover:bg-[#0B0F19] transition-colors" style={{ height: '50px' }}>
-                    <td className="py-1 px-4 text-center text-gray-500 font-medium">{index + 1}</td>
-                    <td className="py-1 px-4 text-white font-medium whitespace-nowrap"><div className="flex items-center">{student.name} <NewBadge isNew={student.enrollmentStatus} billingStartMonth={student.billingStartMonth || null} /></div></td>
-                    <td className="py-1 px-4 text-gray-400 text-xs whitespace-nowrap">{student.class}</td>
-                    {subjects.map((sub) => (
-                      <td key={sub} className="py-1 px-4 text-center">
-                        <input type="number" min="0" max="100" placeholder="0-100" className="w-[80px] h-8 text-center bg-[#0B0F19] border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={studentScores[sub] !== undefined ? studentScores[sub] : ''} onChange={(e) => handleScoreChange(student.id, sub, e.target.value)} />
-                      </td>
-                    ))}
-                    <td className="py-1 px-4 text-center font-bold text-[#00D4FF]">{avg}</td>
-                    <td className="py-1 px-4 text-center font-bold text-gray-300">{grade}</td>
-                    <td className="py-1 px-4 whitespace-nowrap">
-                      <div className={`flex flex-col gap-0.5 text-[11px] font-medium ${attColor}`}>
-                        <span>{attIcon} {attNote}</span>
-                        <span className="text-gray-500 text-[10px]">Paket {packageLabel}</span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="p-4 border-b border-gray-800 bg-[#0A0E17] flex justify-between items-center flex-wrap gap-2">
+          <h3 className="text-white font-bold">Grading Table per Materi: {sessionGroup}</h3>
+          <span className="text-gray-400 text-sm font-medium">{MONTHS[month - 1]} {year} · {sessionsThisMonth.length} materi</span>
         </div>
+
+        {sessionsThisMonth.length === 0 ? (
+          <div className="p-8">
+            <EmptyState icon={BookOpen} title="Belum ada materi bulan ini" description="Tambahkan jurnal belajar terlebih dahulu agar kolom materi muncul di sini." className="py-4" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse min-w-max">
+              <thead className="bg-[#0B0F19] border-b border-gray-800 sticky top-0 z-10">
+                <tr>
+                  <th className="py-3 px-3 text-center w-10 text-gray-400 font-medium text-xs">No.</th>
+                  <th className="py-3 px-3 text-gray-400 font-medium text-xs whitespace-nowrap">Nama Siswa</th>
+                  {/* Kolom per materi */}
+                  {sessionsThisMonth.map((sess, i) => (
+                    <th key={sess.id} className="py-2 px-2 text-center min-w-[90px]">
+                      <div className="text-gray-400 font-semibold text-[10px] whitespace-nowrap">{safeDateDisplay(sess.date, 'en-GB', { day: '2-digit', month: 'short' })}</div>
+                      <div className="text-gray-600 text-[9px] font-normal truncate max-w-[88px]">{(sess.topic || '').substring(0, 20)}{(sess.topic || '').length > 20 ? '…' : ''}</div>
+                    </th>
+                  ))}
+                  {/* Kolom hasil per skill */}
+                  {subjects.map(sub => (
+                    <th key={`avg-${sub}`} className="py-3 px-2 text-center text-gray-500 font-medium text-[10px] whitespace-nowrap bg-[#0D1220] border-l border-gray-800/50">{sub}</th>
+                  ))}
+                  <th className="py-3 px-3 text-center text-gray-400 font-medium text-xs bg-[#0D1220] border-l border-gray-800/50">Avg</th>
+                  <th className="py-3 px-3 text-center text-gray-400 font-medium text-xs bg-[#0D1220]">Grade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800 bg-[#151B26]">
+                {targetStudents.map((student, index) => {
+                  const sessionScoresMap = tableData[student.id] || {};
+                  const { scores: skillScores, average } = calcSkillScores(sessionScoresMap, student.id);
+                  const grade = average > 0 ? (average >= 90 ? 'A' : average >= 80 ? 'B' : average >= 70 ? 'C' : 'D') : '-';
+
+                  return (
+                    <tr key={student.id} className="hover:bg-[#0B0F19] transition-colors">
+                      <td className="py-1.5 px-3 text-center text-gray-500 text-xs">{index + 1}</td>
+                      <td className="py-1.5 px-3 text-white font-medium text-sm whitespace-nowrap">
+                        <div className="flex items-center gap-1">{student.name}<NewBadge isNew={student.enrollmentStatus} billingStartMonth={student.billingStartMonth || null} /></div>
+                        <div className="text-gray-500 text-[10px]">{student.class}</div>
+                      </td>
+                      {/* Input nilai per materi */}
+                      {sessionsThisMonth.map((sess) => (
+                        <td key={sess.id} className="py-1.5 px-2 text-center">
+                          <input
+                            type="number" min="0" max="100" placeholder="—"
+                            className="w-[72px] h-8 text-center bg-[#0B0F19] border border-gray-700 rounded text-white text-sm focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all"
+                            value={sessionScoresMap[sess.id] !== undefined ? sessionScoresMap[sess.id] : ''}
+                            onChange={(e) => handleScoreChange(student.id, sess.id, e.target.value)}
+                          />
+                        </td>
+                      ))}
+                      {/* Hasil rata-rata per skill (read-only) */}
+                      {subjects.map(sub => (
+                        <td key={`r-${sub}`} className="py-1.5 px-2 text-center text-[#00D4FF] font-bold text-sm bg-[#0D1220] border-l border-gray-800/50">
+                          {skillScores[sub] ?? '—'}
+                        </td>
+                      ))}
+                      <td className="py-1.5 px-3 text-center font-black text-white text-sm bg-[#0D1220] border-l border-gray-800/50">{average || '—'}</td>
+                      <td className="py-1.5 px-3 text-center font-bold text-amber-400 text-sm bg-[#0D1220]">{grade}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         <div className="p-4 bg-[#0A0E17] border-t border-gray-800 flex gap-3">
           <Button
             onClick={() => setRandomModal(true)}
             variant="secondary"
             className="py-4 text-sm font-bold border-amber-500/30 text-amber-400 hover:bg-amber-500/10 whitespace-nowrap flex items-center gap-1.5"
-            disabled={targetStudents.length === 0}
+            disabled={targetStudents.length === 0 || sessionsThisMonth.length === 0}
           >
             <RefreshCw size={14} /> Nilai Acak
           </Button>
-          <Button onClick={handleSaveAll} className="flex-1 py-4 text-lg font-bold shadow-[0_0_20px_rgba(0,212,255,0.2)]" disabled={targetStudents.length === 0}>SAVE ALL ASSESSMENTS</Button>
+          <Button onClick={handleSaveAll} className="flex-1 py-4 text-lg font-bold shadow-[0_0_20px_rgba(0,212,255,0.2)]" disabled={targetStudents.length === 0 || sessionsThisMonth.length === 0}>
+            SAVE ALL ASSESSMENTS
+          </Button>
         </div>
       </div>
     </div>
 
-      {/* ── Modal Nilai Acak ─────────────────────────────────────────────────────── */}
-      {randomModal && ReactDOM.createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(0,0,0,0.80)' }}
-          onClick={() => setRandomModal(false)}
-        >
-          <div
-            className="bg-[#151B26] border border-amber-500/30 rounded-2xl shadow-2xl w-full max-w-sm"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="px-5 py-4 border-b border-gray-800">
-              <p className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1.5">
-                <RefreshCw size={13} /> Nilai Acak
-              </p>
-              <h3 className="text-white font-bold text-base">Generate Nilai Random</h3>
-              <p className="text-gray-400 text-xs mt-0.5">
-                Masukkan nilai akhir yang diinginkan — sistem akan mengacak nilai tiap mata pelajaran agar rata-ratanya mendekati target.
-              </p>
+    {/* ── Modal Nilai Acak ─────────────────────────────────────────────────────── */}
+    {randomModal && ReactDOM.createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.80)' }} onClick={() => setRandomModal(false)}>
+        <div className="bg-[#151B26] border border-amber-500/30 rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+          <div className="px-5 py-4 border-b border-gray-800">
+            <p className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1.5"><RefreshCw size={13} /> Nilai Acak</p>
+            <h3 className="text-white font-bold text-base">Generate Nilai per Materi</h3>
+            <p className="text-gray-400 text-xs mt-0.5">Isi nilai semua materi secara acak mendekati target rata-rata.</p>
+          </div>
+          <div className="px-5 py-4 space-y-4">
+            <div>
+              <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Rata-rata Target (0–100)</label>
+              <input
+                type="number" min="0" max="100"
+                value={randomTargetScore}
+                onChange={e => setRandomTargetScore(e.target.value)}
+                className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-3 text-white text-2xl font-black text-center focus:outline-none focus:border-amber-500 transition-colors"
+                placeholder="85"
+              />
             </div>
-            <div className="px-5 py-4 space-y-4">
-              <div>
-                <label className="text-[11px] text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">
-                  Nilai Akhir / Rata-rata Target (0–100)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={randomTargetScore}
-                  onChange={e => setRandomTargetScore(e.target.value)}
-                  className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-3 text-white text-2xl font-black text-center focus:outline-none focus:border-amber-500 transition-colors"
-                  placeholder="Contoh: 85"
-                />
-              </div>
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5">
-                <p className="text-xs text-amber-300 leading-relaxed">
-                  Kolom <strong>{subjects.join(', ')}</strong> untuk <strong>{targetStudents.length} siswa</strong> di sesi <strong>{sessionGroup}</strong> akan diisi nilai acak dengan rata-rata mendekati <strong className="text-amber-200 text-sm">{randomTargetScore || '?'}</strong>.
-                  <br /><span className="text-amber-400/70 mt-1 inline-block">⚠️ Nilai yang sudah ada akan ditimpa.</span>
-                </p>
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t border-gray-800 flex gap-3">
-              <button
-                onClick={() => setRandomModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm font-semibold hover:bg-gray-700/30 transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleRandomFill}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                disabled={targetStudents.length === 0}
-              >
-                <RefreshCw size={14} /> Generate Acak
-              </button>
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5">
+              <p className="text-xs text-amber-300 leading-relaxed">
+                <strong>{sessionsThisMonth.length} materi</strong> untuk <strong>{targetStudents.length} siswa</strong> di <strong>{sessionGroup}</strong> akan diisi nilai acak <strong className="text-amber-200">±3</strong> dari target <strong className="text-amber-200 text-sm">{randomTargetScore || '?'}</strong>. Nilai skill dihitung otomatis dari rata-rata materi.
+                <br /><span className="text-amber-400/70 mt-1 inline-block">⚠️ Nilai yang sudah ada akan ditimpa.</span>
+              </p>
             </div>
           </div>
-        </div>,
-        document.body
-      )}
-      {/* ─────────────────────────────────────────────────────────────────────────── */}
+          <div className="px-5 py-4 border-t border-gray-800 flex gap-3">
+            <button onClick={() => setRandomModal(false)} className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-400 text-sm font-semibold hover:bg-gray-700/30 transition-colors">Batal</button>
+            <button onClick={handleRandomFill} className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-bold transition-colors flex items-center justify-center gap-2" disabled={targetStudents.length === 0}>
+              <RefreshCw size={14} /> Generate Acak
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
     </>
   );
 }
@@ -8710,79 +8849,131 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en', downloadPNG
             </div>
           </div>
 
-          {/* Invoice card */}
-          <div id="billing-invoice-print" className="w-full max-w-2xl mx-auto bg-white rounded-none shadow-2xl overflow-hidden relative z-10 mb-12">
+          {/* Invoice card — 100% inline styles for reliable html2canvas PNG export */}
+          <div id="billing-invoice-print" style={{
+            width: '100%', maxWidth: '640px', margin: '0 auto', background: '#ffffff',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'Arial, sans-serif',
+            position: 'relative', zIndex: 10, marginBottom: '48px',
+          }}>
 
-            {/* Blue header — same as receipt */}
-            <div className="bg-[#1A56DB] text-white p-6 sm:p-8 flex justify-between items-start">
+            {/* ── HEADER ── */}
+            <div style={{
+              background: '#1A56DB', color: '#ffffff', padding: '28px 32px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+            }}>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight">PAYMENT INVOICE</h1>
-                <p className="text-blue-200 font-mono mt-1 text-sm">
+                <div style={{ fontSize: '26px', fontWeight: '900', letterSpacing: '-0.5px', lineHeight: 1 }}>
+                  PAYMENT INVOICE
+                </div>
+                <div style={{ fontSize: '12px', color: '#bfdbfe', marginTop: '6px', fontFamily: 'monospace' }}>
                   INV-{invoiceModal.student.id}-{new Date().toISOString().slice(0,10).replace(/-/g,'')}
-                </p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-white leading-tight">English Club Gresik</p>
-                <p className="text-blue-200 text-xs mt-1">Academic Suite</p>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '16px', fontWeight: '800', color: '#ffffff', lineHeight: 1 }}>English Club Gresik</div>
+                <div style={{ fontSize: '11px', color: '#bfdbfe', marginTop: '5px' }}>Academic Suite</div>
               </div>
             </div>
 
-            <div className="p-6 sm:p-8 pb-4">
-
-              {/* Total outstanding — centre hero, matching receipt's big amount */}
-              <div className="text-center mb-8 border-b border-slate-200 pb-8">
-                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                  Total Outstanding Balance
-                </p>
-                <p className="text-5xl font-black text-rose-600 tracking-tight">
-                  Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}
-                </p>
-                <p className="text-xs text-slate-400 mt-2">
-                  {invoiceModal.monthDetails.filter(m => m.outstanding > 0).length} unpaid month(s) · Due immediately
-                </p>
+            {/* ── HERO: TOTAL OUTSTANDING ── */}
+            <div style={{
+              textAlign: 'center', padding: '32px 32px 28px',
+              borderBottom: '1px solid #e2e8f0',
+            }}>
+              <div style={{
+                fontSize: '11px', fontWeight: '700', color: '#64748b',
+                letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '10px',
+              }}>
+                Total Outstanding Balance
               </div>
+              <div style={{
+                fontSize: '52px', fontWeight: '900', color: '#e11d48',
+                letterSpacing: '-1px', lineHeight: 1,
+              }}>
+                Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}
+              </div>
+              <div style={{
+                fontSize: '12px', color: '#94a3b8', marginTop: '16px', lineHeight: 1,
+              }}>
+                {invoiceModal.monthDetails.filter(m => m.outstanding > 0).length} unpaid month(s) · Due immediately
+              </div>
+            </div>
 
-              {/* STUDENT INFO */}
-              <div className="mb-6">
-                <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">STUDENT INFO</p>
-                <div className="bg-slate-50 border border-slate-200 p-5 shadow-sm">
-                  <p className="text-xl font-bold text-slate-800">{invoiceModal.student.name}</p>
-                  <p className="text-sm font-medium text-slate-500 mt-1">
+            <div style={{ padding: '24px 32px 16px' }}>
+
+              {/* ── STUDENT INFO ── */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{
+                  fontSize: '10px', fontWeight: '800', color: '#1A56DB',
+                  letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '8px',
+                }}>
+                  Student Info
+                </div>
+                <div style={{
+                  background: '#f8fafc', border: '1px solid #e2e8f0', padding: '16px 20px',
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: '#1e293b', lineHeight: 1.2 }}>
+                    {invoiceModal.student.name}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#64748b', marginTop: '6px' }}>
                     {invoiceModal.student.class} · {getStudentSession(invoiceModal.student)}
-                  </p>
+                  </div>
                 </div>
               </div>
 
-              {/* OUTSTANDING DETAILS */}
-              <div className="mb-6">
-                <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">OUTSTANDING DETAILS</p>
-                <div className="space-y-0 text-sm border border-slate-200">
-                  <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 py-2 px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                    <span className="flex-1">Period</span>
-                    <span className="w-28 text-right">Billed</span>
-                    <span className="w-28 text-right">Paid</span>
-                    <span className="w-28 text-right text-rose-600">Unpaid</span>
+              {/* ── OUTSTANDING DETAILS ── */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{
+                  fontSize: '10px', fontWeight: '800', color: '#1A56DB',
+                  letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '8px',
+                }}>
+                  Outstanding Details
+                </div>
+                <div style={{ border: '1px solid #e2e8f0' }}>
+                  {/* Table header */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', background: '#f1f5f9',
+                    borderBottom: '1px solid #e2e8f0', padding: '8px 16px',
+                  }}>
+                    <div style={{ flex: 1, fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Period</div>
+                    <div style={{ width: '96px', textAlign: 'right', fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Billed</div>
+                    <div style={{ width: '80px', textAlign: 'right', fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Paid</div>
+                    <div style={{ width: '96px', textAlign: 'right', fontSize: '10px', fontWeight: '700', color: '#e11d48', textTransform: 'uppercase' }}>Unpaid</div>
                   </div>
+                  {/* Rows */}
                   {invoiceModal.monthDetails.filter(m => m.outstanding > 0).map(({ yr, mo, target, paid, outstanding }, i) => (
-                    <div key={i} className={`flex justify-between items-center border-b border-slate-100 py-3 px-3 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}>
-                      <span className="flex-1 font-medium text-slate-700">{MONTHS[mo - 1]} {yr}</span>
-                      <span className="w-28 text-right text-slate-500">Rp {target.toLocaleString('id-ID')}</span>
-                      <span className="w-28 text-right text-emerald-600 font-semibold">Rp {paid.toLocaleString('id-ID')}</span>
-                      <span className="w-28 text-right text-rose-600 font-black">Rp {outstanding.toLocaleString('id-ID')}</span>
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center',
+                      background: i % 2 === 0 ? '#ffffff' : '#f8fafc',
+                      borderBottom: '1px solid #f1f5f9', padding: '12px 16px',
+                    }}>
+                      <div style={{ flex: 1, fontSize: '13px', fontWeight: '500', color: '#334155' }}>{MONTHS[mo - 1]} {yr}</div>
+                      <div style={{ width: '96px', textAlign: 'right', fontSize: '13px', color: '#64748b' }}>Rp {target.toLocaleString('id-ID')}</div>
+                      <div style={{ width: '80px', textAlign: 'right', fontSize: '13px', color: '#059669', fontWeight: '600' }}>Rp {paid.toLocaleString('id-ID')}</div>
+                      <div style={{ width: '96px', textAlign: 'right', fontSize: '13px', color: '#e11d48', fontWeight: '800' }}>Rp {outstanding.toLocaleString('id-ID')}</div>
                     </div>
                   ))}
-                  <div className="flex justify-between items-center bg-rose-50 border-t-2 border-rose-200 py-3 px-3">
-                    <span className="flex-1 text-sm font-black text-rose-700 uppercase tracking-wide">Total Due</span>
-                    <span className="text-lg font-black text-rose-700">Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}</span>
+                  {/* Total row */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    background: '#fff1f2', borderTop: '2px solid #fecdd3', padding: '12px 16px',
+                  }}>
+                    <div style={{ fontSize: '13px', fontWeight: '900', color: '#be123c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Due</div>
+                    <div style={{ fontSize: '17px', fontWeight: '900', color: '#be123c' }}>Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}</div>
                   </div>
                 </div>
               </div>
 
-              {/* ATTENDANCE PER BILLED MONTH */}
+              {/* ── ATTENDANCE RECORD ── */}
               {invoiceModal.monthDetails.filter(m => m.outstanding > 0).some(m => (m.attRecords || []).length > 0) && (
-                <div className="mb-6">
-                  <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">ATTENDANCE RECORD</p>
-                  <div className="space-y-3">
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{
+                    fontSize: '10px', fontWeight: '800', color: '#1A56DB',
+                    letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '8px',
+                  }}>
+                    Attendance Record
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {invoiceModal.monthDetails.filter(m => m.outstanding > 0).map(({ yr, mo, attRecords }, i) => {
                       const DAY_SHORT = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
                       const allDates = (attRecords || [])
@@ -8796,31 +8987,58 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en', downloadPNG
                         .filter(Boolean)
                         .sort((a, b) => a.day - b.day);
                       const presentCount = allDates.filter(a => a.status === 'Present').length;
-                      const absentCount = allDates.filter(a => a.status !== 'Present').length;
+                      const absentCount  = allDates.filter(a => a.status !== 'Present').length;
                       return (
-                        <div key={i} className="bg-slate-50 border border-slate-200 px-4 py-3">
-                          <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
-                            {MONTHS[mo - 1]} {yr}
-                            <span className="ml-2 text-emerald-600">✓ {presentCount} hadir</span>
-                            {absentCount > 0 && <span className="ml-2 text-rose-500">✗ {absentCount} tidak hadir</span>}
-                          </p>
+                        <div key={i} style={{
+                          background: '#f8fafc', border: '1px solid #e2e8f0', padding: '14px 16px',
+                        }}>
+                          {/* Month label + summary */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              {MONTHS[mo - 1]} {yr}
+                            </span>
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#059669' }}>
+                              ✓ {presentCount} HADIR
+                            </span>
+                            {absentCount > 0 && (
+                              <span style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626' }}>
+                                ✗ {absentCount} TIDAK HADIR
+                              </span>
+                            )}
+                          </div>
+                          {/* Date chips — lineHeight = fontSize, padding simetris, tanpa fixed height */}
                           {allDates.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5">
+                            <div style={{ display: 'block', fontSize: '0', lineHeight: '0' }}>
                               {allDates.map(({ day, dayLabel, status }, idx) => {
                                 const isPresent = status === 'Present';
                                 return (
-                                  <span key={idx} className={`inline-block text-xs font-bold px-2 py-0.5 rounded border ${
-                                    isPresent
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                                      : 'bg-rose-50 text-rose-600 border-rose-300'
-                                  }`}>
+                                  <span key={idx} style={{
+                                    display: 'inline-block',
+                                    minWidth: '56px',
+                                    paddingTop: '3px',
+                                    paddingBottom: '8px',
+                                    paddingLeft: '10px',
+                                    paddingRight: '10px',
+                                    margin: '0 5px 6px 0',
+                                    border: `1px solid ${isPresent ? '#6ee7b7' : '#fca5a5'}`,
+                                    borderRadius: '4px',
+                                    backgroundColor: isPresent ? '#ecfdf5' : '#fff1f2',
+                                    color: isPresent ? '#047857' : '#dc2626',
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    lineHeight: '11px',
+                                    textAlign: 'center',
+                                    whiteSpace: 'nowrap',
+                                    boxSizing: 'content-box',
+                                    verticalAlign: 'middle',
+                                  }}>
                                     {dayLabel} {String(day).padStart(2, '0')}
                                   </span>
                                 );
                               })}
                             </div>
                           ) : (
-                            <p className="text-xs text-slate-400 italic">No attendance recorded</p>
+                            <div style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>No attendance recorded</div>
                           )}
                         </div>
                       );
@@ -8829,53 +9047,74 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en', downloadPNG
                 </div>
               )}
 
-              {/* PAYMENT INSTRUCTIONS */}
-              <div className="mb-6">
-                <p className="text-[11px] text-[#1A56DB] font-bold uppercase tracking-wider mb-2 px-2">PAYMENT INSTRUCTIONS</p>
-                <div className="space-y-0 text-sm">
-                  <div className="border-b border-slate-100 py-3 px-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-slate-600">Bank Transfer</span>
-                      <span className="font-semibold text-slate-800">BNI</span>
-                    </div>
-                    <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Bank</span>
-                        <span className="font-bold text-slate-800">BNI (Bank Negara Indonesia)</span>
+              {/* ── PAYMENT INSTRUCTIONS ── */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{
+                  fontSize: '10px', fontWeight: '800', color: '#1A56DB',
+                  letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '8px',
+                }}>
+                  Payment Instructions
+                </div>
+                {/* Bank Transfer row */}
+                <div style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: '12px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: '#475569' }}>Bank Transfer</span>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>BNI</span>
+                  </div>
+                  <div style={{
+                    background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px',
+                    padding: '14px 16px',
+                  }}>
+                    {[
+                      { label: 'Bank',         value: 'BNI (Bank Negara Indonesia)', bold: true,  color: '#1e293b', size: '13px' },
+                      { label: 'Account No.',  value: '0951837774',                  bold: true,  color: '#0f172a', size: '16px' },
+                      { label: 'Account Name', value: 'Akhmad Akma Rifqi',           bold: true,  color: '#1e293b', size: '13px' },
+                    ].map(({ label, value, bold, color, size }) => (
+                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>{label}</span>
+                        <span style={{ fontSize: size, fontWeight: bold ? '800' : '400', color }}>{value}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Account No.</span>
-                        <span className="font-black text-slate-900 tracking-widest text-base">0951837774</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Account Name</span>
-                        <span className="font-bold text-slate-800">Akhmad Akma Rifqi</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Amount</span>
-                        <span className="font-black text-rose-600">Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}</span>
-                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b' }}>Amount</span>
+                      <span style={{ fontSize: '14px', fontWeight: '900', color: '#e11d48' }}>
+                        Rp {invoiceModal.totalOutstanding.toLocaleString('id-ID')}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center py-3 px-2">
-                    <span className="font-medium text-slate-600">Status</span>
-                    <span className="text-lg font-black text-rose-600">UNPAID</span>
-                  </div>
+                </div>
+                {/* Status */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '500', color: '#475569' }}>Status</span>
+                  <span style={{ fontSize: '16px', fontWeight: '900', color: '#e11d48', letterSpacing: '1px' }}>UNPAID</span>
                 </div>
               </div>
 
-              <div className="text-center mt-10 mb-4">
-                <p className="text-sm font-medium text-slate-600 italic">Please settle this invoice at your earliest convenience.</p>
-                <p className="text-xs font-bold text-slate-500 mt-1">— English Club Gresik</p>
+              {/* ── CLOSING NOTE ── */}
+              <div style={{ textAlign: 'center', marginTop: '32px', marginBottom: '16px' }}>
+                <div style={{ fontSize: '13px', fontWeight: '500', color: '#475569', fontStyle: 'italic' }}>
+                  Please settle this invoice at your earliest convenience.
+                </div>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginTop: '6px' }}>
+                  — English Club Gresik
+                </div>
               </div>
             </div>
 
-            {/* Blue footer — identical to receipt */}
-            <div className="bg-[#1A56DB] p-6 sm:p-8 text-center">
-              <p className="text-xs text-blue-100 font-medium mb-1">English Club Gresik • WA: 0897-327-11-12</p>
-              <p className="text-[11px] text-blue-200 mb-3">Taman Anggrek Blok AB 05, Kedanyang, Kebomas, Gresik</p>
-              <div className="border-t border-blue-400/30 pt-3">
-                <p className="text-[11px] text-blue-200">This document serves as an official payment invoice</p>
+            {/* ── FOOTER ── */}
+            <div style={{
+              background: '#1A56DB', padding: '24px 32px', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '12px', color: '#bfdbfe', fontWeight: '600', marginBottom: '4px' }}>
+                English Club Gresik • WA: 0897-327-11-12
+              </div>
+              <div style={{ fontSize: '11px', color: '#93c5fd', marginBottom: '14px' }}>
+                Taman Anggrek Blok AB 05, Kedanyang, Kebomas, Gresik
+              </div>
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '12px' }}>
+                <div style={{ fontSize: '10px', color: '#93c5fd' }}>
+                  This document serves as an official payment invoice
+                </div>
               </div>
             </div>
 
@@ -8940,8 +9179,51 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
   const student = view === 'studentProfile' ? db.students.find((s) => s.id === selectedId) : null;
 
   useEffect(() => {
-    if (student) setCurrentTeacherComment(student.teacherComment || '');
-  }, [student]);
+    if (!student) return;
+    // Hitung data periode yang sedang ditampilkan
+    const _startMonthStr = startDate.substring(0, 7);
+    const _endMonthStr = endDate.substring(0, 7);
+    // Gunakan filter yang sama persis dengan renderStudentProfile
+    const _att = db.studentAttendance.filter(
+      (a) => a.studentId === student.id && a.date >= startDate && a.date <= endDate &&
+             isAttendanceValidForStudent(a, student) && a.status !== 'Not in Package'
+    );
+    const _presentCount = _att.filter((a) => a.status === 'Present').length;
+    const _attRate = _att.length ? Math.round((_presentCount / _att.length) * 100) : 0;
+    const _assessments = db.assessments.filter((a) => {
+      if (a.studentId !== student.id) return false;
+      const d = `${a.year}-${String(a.month).padStart(2, '0')}`;
+      return d >= _startMonthStr && d <= _endMonthStr;
+    });
+    const _avgScore = _assessments.length
+      ? Math.round(_assessments.reduce((sum, a) => sum + a.average, 0) / _assessments.length)
+      : 0;
+
+    // Fallback: jika isAttendanceValidForStudent terlalu ketat (sessionGroup mismatch),
+    // cek juga kehadiran tanpa filter sessionGroup sebagai safety net
+    const _attAny = db.studentAttendance.filter(
+      (a) => a.studentId === student.id && a.date >= startDate && a.date <= endDate &&
+             a.status !== 'Not in Package'
+    );
+    // hasData: WAJIB ada kehadiran DAN penilaian — kalau assessment kosong jangan generate
+    const hasData = (_att.length > 0 || _attAny.length > 0) && _assessments.length > 0;
+
+    // Pakai komentar tersimpan HANYA jika admin sudah edit & save manual untuk periode ini
+    if (student.teacherCommentManualSaved && student.teacherCommentPeriod === _startMonthStr && student.teacherComment) {
+      setCurrentTeacherComment(student.teacherComment);
+    } else if (hasData) {
+      // Gunakan _att jika ada, fallback ke _attAny kalau sessionGroup mismatch
+      const _finalAtt = _att.length > 0 ? _att : _attAny;
+      const _finalPresent = _finalAtt.filter((a) => a.status === 'Present').length;
+      const _finalRate = _finalAtt.length ? Math.round((_finalPresent / _finalAtt.length) * 100) : 0;
+      // Auto-generate sesuai data periode aktif
+      setCurrentTeacherComment(
+        generateAutoComment(student, _finalRate, _avgScore, _assessments, _finalPresent, _finalAtt.length)
+      );
+    } else {
+      setCurrentTeacherComment('');
+    }
+  }, [student?.id, startDate, endDate, db.studentAttendance, db.assessments]);
 
   // --- MOVED HOOKS TO TOP LEVEL ---
   const filteredStudents = useMemo(() => {
@@ -9202,7 +9484,11 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
     const totalPaidSum = payments.reduce((sum, p) => sum + Number(p.amount), 0);
     const latestTutor = journals.length > 0 ? journals[journals.length-1].tutorName : "System";
 
-    const autoGeneratedComment = generateAutoComment(student, attRate, avgScore, assessments);
+    const autoGeneratedComment = assessments.length > 0
+      ? generateAutoComment(student, attRate, avgScore, assessments, presentCount, att.length)
+      : '';
+    // finalCommentDisplay: pakai currentTeacherComment (sudah di-set useEffect sesuai kondisi),
+    // fallback ke autoGeneratedComment hanya kalau textarea belum terisi sama sekali
     const finalCommentDisplay = currentTeacherComment || autoGeneratedComment;
 
     const handleGenerateCommentBtn = () => {
@@ -9211,10 +9497,19 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
     };
 
     const handleSaveCommentBtn = () => {
+      const _savedPeriod = startDate.substring(0, 7);
       setDb(p => ({
         ...p,
         // BUGFIX (BUG 8): updatedAt wajib agar LWW tidak menimpa comment guru dengan versi cloud lama
-        students: p.students.map(s => s.id === student.id ? {...s, teacherComment: currentTeacherComment, updatedAt: getLocalTimestamp()} : s)
+        // teacherCommentManualSaved & teacherCommentPeriod: penanda bahwa komentar ini sudah diedit
+        // manual oleh admin/tutor untuk periode tertentu, sehingga tidak di-overwrite auto-generate.
+        students: p.students.map(s => s.id === student.id ? {
+          ...s,
+          teacherComment: currentTeacherComment,
+          teacherCommentManualSaved: true,
+          teacherCommentPeriod: _savedPeriod,
+          updatedAt: getLocalTimestamp()
+        } : s)
       }));
       showToast('Teacher comment saved to profile');
     };
@@ -9417,38 +9712,45 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                   new Date(a.date).getTime() - new Date(b.date).getTime()
                 );
 
+                // Ambil sessionScores dari assessment yang tersimpan (hasil input nyata)
+                const savedSessionScores: Record<string, number> = latestAss?.sessionScores || {};
+                const reportSubjectList = isKindergarten
+                  ? ['Reading', 'Writing', 'Math', 'English']
+                  : ['Speaking', 'Writing', 'Reading', 'Listening'];
+
                 const combinedSessions = sortedAtt.map((attEntry, idx) => {
                     const journalEntry = journals.find(j => j.date === attEntry.date && j.scheduleId === attEntry.scheduleId)
                       || journals.find(j => j.date === attEntry.date);
                     const status = attEntry.status || "—";
-                    const sessionNum = idx + 1;
-                    // Calculate streak: how many consecutive Present sessions up to this point
-                    const streak = (() => {
-                      let s = 0;
-                      for (let i = idx; i >= 0; i--) {
-                        if (sortedAtt[i].status === 'Present') s++; else break;
-                      }
-                      return s;
-                    })();
+
+                    // Cari nilai dari sessionScores berdasarkan journalEntry.id
+                    const buildScoreNote = () => {
+                      if (!journalEntry?.id) return null;
+                      const score = savedSessionScores[journalEntry.id];
+                      if (score === undefined || score === null) return null;
+                      // Tampilkan skill yang relevan untuk sesi ini (round-robin)
+                      const sessionsOrdered = journals
+                        .filter(j => {
+                          const jg = (j.sessionGroup || '').toLowerCase().trim();
+                          const sg = (studentSession || '').toLowerCase().trim();
+                          return (jg === sg || jg.includes(sg) || sg.includes(jg)) &&
+                            j.date >= startDate && j.date <= endDate;
+                        })
+                        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+                      const jIdx = sessionsOrdered.findIndex(j => j.id === journalEntry.id);
+                      const skill = jIdx >= 0 ? reportSubjectList[jIdx % reportSubjectList.length] : reportSubjectList[0];
+                      return `${score}`;
+                    };
 
                     const autoNote = (() => {
                       if (status === 'Present') {
-                        if (sessionNum === 1) return "First session — student attended and engaged well.";
-                        if (streak >= 5) return `Excellent consistency — ${streak} sessions in a row with full attendance.`;
-                        if (streak >= 3) return `Good streak — attended ${streak} consecutive sessions.`;
-                        const notes = [
-                          "Attended and followed lesson activities.",
-                          "Active participation noted during the session.",
-                          "Session completed; student was present and attentive.",
-                          "Student followed all learning materials for this session.",
-                          "Good attendance — lesson was conducted as scheduled.",
-                        ];
-                        return notes[sessionNum % notes.length];
+                        const scoreNote = buildScoreNote();
+                        return scoreNote || "Attended — score not yet entered.";
                       }
-                      if (status === 'Sick') return "Student was absent due to illness. Material may need a brief review next session.";
-                      if (status === 'Excused') return "Absence was excused. Student is advised to review session material independently.";
-                      if (status === 'Absent') return "Student was absent without notice. Follow-up with parent/guardian recommended.";
-                      return "Attendance status unrecorded for this session.";
+                      if (status === 'Sick') return "Absent — score not recorded (illness).";
+                      if (status === 'Excused') return "Absent — score not recorded (excused).";
+                      if (status === 'Absent') return "Absent — score not recorded.";
+                      return "Attendance status unrecorded.";
                     })();
 
                     return {
@@ -9468,7 +9770,7 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                             <th className="py-2.5 px-4 font-semibold w-24">Date</th>
                             <th className="py-2.5 px-4 font-semibold">Material / Topic</th>
                             <th className="py-2.5 px-4 font-semibold text-center w-24">Status</th>
-                            <th className="py-2.5 px-4 font-semibold text-right hidden sm:table-cell print:table-cell">Note</th>
+                            <th className="py-2.5 px-4 font-semibold text-right hidden sm:table-cell print:table-cell">Score / Note</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200">
@@ -9482,7 +9784,7 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                                     {session.status !== '—' ? session.status : '—'}
                                  </span>
                               </td>
-                              <td className="py-2.5 px-4 text-right text-slate-400 italic text-[11px] hidden sm:table-cell print:table-cell truncate max-w-[180px]">{session.note}</td>
+                              <td className="py-2.5 px-4 text-right text-slate-500 text-[10.5px] hidden sm:table-cell print:table-cell">{session.note}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -11852,7 +12154,7 @@ function StudentReadOnlyAssessmentModule({ db, user, language = 'en' }) {
                 <td className="p-4 text-center font-bold text-white text-lg">{a.grade}</td>
                 <td className="p-4 text-center text-gray-400 text-xs">
                    {Object.entries(a.scores || {}).map(([sub, score]) => (
-                      <span key={sub} className="block">{`${sub}: ${score}`}</span>
+                      <span key={sub} className="block">{`${score}`}</span>
                    ))}
                 </td>
               </tr>
@@ -12131,7 +12433,7 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
          ? "Komentar akademik belum tersedia karena penilaian untuk periode ini belum diselesaikan oleh tutor." 
          : "Academic comments are not available yet as assessments for this period have not been completed by the tutor.";
   } else {
-     const autoGeneratedComment = generateAutoComment(student, attRate, avgScore, assessments);
+     const autoGeneratedComment = generateAutoComment(student, attRate, avgScore, assessments, presentCount, att.length);
      finalCommentDisplay = student.teacherComment || autoGeneratedComment;
   }
 
@@ -12297,36 +12599,39 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
                 new Date(a.date).getTime() - new Date(b.date).getTime()
               );
 
+              // Ambil sessionScores dari assessment yang tersimpan (hasil input nyata)
+              const savedSessionScores2: Record<string, number> = latestAss?.sessionScores || {};
+              const reportSubjectList2 = isKindergarten
+                ? ['Reading', 'Writing', 'Math', 'English']
+                : ['Speaking', 'Writing', 'Reading', 'Listening'];
+              // Urutan jurnal untuk mapping round-robin skill
+              const orderedJournals2 = journals
+                .slice()
+                .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
               const combinedSessions = sortedAtt.map((attEntry, idx) => {
                   const journalEntry = journals.find(j => j.date === attEntry.date && j.scheduleId === attEntry.scheduleId)
                     || journals.find(j => j.date === attEntry.date);
                   const status = attEntry.status || "—";
-                  const sessionNum = idx + 1;
-                  const streak = (() => {
-                    let s = 0;
-                    for (let i = idx; i >= 0; i--) {
-                      if (sortedAtt[i].status === 'Present') s++; else break;
-                    }
-                    return s;
-                  })();
+
+                  const buildScoreNote2 = () => {
+                    if (!journalEntry?.id) return null;
+                    const score = savedSessionScores2[journalEntry.id];
+                    if (score === undefined || score === null) return null;
+                    const jIdx = orderedJournals2.findIndex(j => j.id === journalEntry.id);
+                    const skill = jIdx >= 0 ? reportSubjectList2[jIdx % reportSubjectList2.length] : reportSubjectList2[0];
+                    return `${skill}: ${score}`;
+                  };
+
                   const autoNote = (() => {
                     if (status === 'Present') {
-                      if (sessionNum === 1) return "First session — student attended and engaged well.";
-                      if (streak >= 5) return `Excellent consistency — ${streak} sessions in a row with full attendance.`;
-                      if (streak >= 3) return `Good streak — attended ${streak} consecutive sessions.`;
-                      const notes = [
-                        "Attended and followed lesson activities.",
-                        "Active participation noted during the session.",
-                        "Session completed; student was present and attentive.",
-                        "Student followed all learning materials for this session.",
-                        "Good attendance — lesson was conducted as scheduled.",
-                      ];
-                      return notes[sessionNum % notes.length];
+                      const scoreNote = buildScoreNote2();
+                      return scoreNote || "Attended — score not yet entered.";
                     }
-                    if (status === 'Sick') return "Student was absent due to illness. Material may need a brief review next session.";
-                    if (status === 'Excused') return "Absence was excused. Student is advised to review session material independently.";
-                    if (status === 'Absent') return "Student was absent without notice. Follow-up with parent/guardian recommended.";
-                    return "Attendance status unrecorded for this session.";
+                    if (status === 'Sick') return "Absent — score not recorded (illness).";
+                    if (status === 'Excused') return "Absent — score not recorded (excused).";
+                    if (status === 'Absent') return "Absent — score not recorded.";
+                    return "Attendance status unrecorded.";
                   })();
                   return {
                       date: attEntry.date,
@@ -12345,7 +12650,7 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
                           <th className="py-2.5 px-4 font-semibold w-24">Date</th>
                           <th className="py-2.5 px-4 font-semibold">Material / Topic</th>
                           <th className="py-2.5 px-4 font-semibold text-center w-24">Status</th>
-                          <th className="py-2.5 px-4 font-semibold text-right hidden sm:table-cell print:table-cell">Note</th>
+                          <th className="py-2.5 px-4 font-semibold text-right hidden sm:table-cell print:table-cell">Score / Note</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
@@ -12359,7 +12664,7 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
                                   {session.status !== '—' ? session.status : '—'}
                                </span>
                             </td>
-                            <td className="py-2.5 px-4 text-right text-slate-400 italic text-[11px] hidden sm:table-cell print:table-cell truncate max-w-[180px]">{session.note}</td>
+                            <td className="py-2.5 px-4 text-right text-slate-500 text-[10.5px] hidden sm:table-cell print:table-cell">{session.note}</td>
                           </tr>
                         ))}
                       </tbody>
