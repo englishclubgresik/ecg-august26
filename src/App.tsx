@@ -564,8 +564,8 @@ const sortStudentsLogically = (students) => {
 // ------------------------------------
 
 // AUTO-GENERATE TEACHER COMMENTS ALGORITHM
-const generateAutoComment = (student, attRate, avgScore, assessments, presentCount = 0, totalSessions = 0) => {
-  if (!student) return "No student data available.";
+const generateAutoComment = (student, attRate, avgScore, assessments, presentCount = 0, totalSessions = 0, language = 'id') => {
+  if (!student) return language === 'en' ? "No student data available." : "Data siswa tidak tersedia.";
   const sClass = student.class || '';
   const sLevel = student.level || '';
   const isKids = ['Kindergarten', 'PAUD', 'TK A', 'TK B'].includes(sLevel) || sClass.includes('TK') || sClass.includes('PAUD');
@@ -573,13 +573,150 @@ const generateAutoComment = (student, attRate, avgScore, assessments, presentCou
   const attLabel = attRate > 0 ? `${Math.round(attRate)}%` : null;
   // Apakah siswa ambil paket separuh (scheduledDays diisi) atau paket penuh (kosong)?
   const isHalfPackage = Array.isArray(student.scheduledDays) && student.scheduledDays.length > 0;
-  const packageLabel = isHalfPackage ? 'Paket Selektif' : 'Paket Lengkap';
-  // Label detail kehadiran: "X dari Y sesi (paket penuh/separuh, XX%)"
+  const packageLabel = language === 'en'
+    ? (isHalfPackage ? 'Selective Package' : 'Full Package')
+    : (isHalfPackage ? 'Paket Selektif' : 'Paket Lengkap');
+  // Label detail kehadiran: "X dari Y sesi (paket, XX%)"
   const attDetail = (totalSessions > 0)
-    ? `${presentCount} dari ${totalSessions} sesi (${packageLabel}, ${Math.round(attRate)}%)`
+    ? (language === 'en'
+        ? `${presentCount} of ${totalSessions} sessions (${packageLabel}, ${Math.round(attRate)}%)`
+        : `${presentCount} dari ${totalSessions} sesi (${packageLabel}, ${Math.round(attRate)}%)`)
     : attLabel;
 
   const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  // ── ENGLISH VERSION ──────────────────────────────────────────────────────────
+  if (language === 'en') {
+    if (attRate === 0) {
+      const sessionCtx = totalSessions > 0 ? ` out of ${totalSessions} ${packageLabel} sessions available this period` : ` this period`;
+      return pick([
+        `Our records show that ${name} has not attended any learning sessions${sessionCtx}. We understand there may be various obstacles, but we want to express our genuine concern — each missed session means important material not delivered, and the gap grows harder to close over time. We warmly invite you to contact us so we can discuss a solution and get ${name} back on track. We are fully committed to supporting ${name}'s progress.`,
+        `We would like to respectfully inform you that ${name} has no attendance recorded${sessionCtx}. Consistent attendance is the cornerstone of language development, and we are concerned this may affect ${name}'s progress significantly. Please feel free to reach out to us at any time — we are open to finding the best arrangement to support ${name}.`,
+        `We wish to highlight that ${name}'s attendance record shows no sessions attended${sessionCtx}. We believe this may be due to circumstances we are not yet aware of, and we would very much like to discuss how we can help. Please contact us so we can work together to ensure ${name} gets back to learning as soon as possible.`
+      ]);
+    }
+
+    let enComment = "";
+    if (isKids) {
+      if (avgScore === 0) {
+        enComment = `${name} has just joined English Club and is currently in the process of settling in with their classmates and tutor. We are delighted to welcome ${name} and have already noticed great enthusiasm and curiosity from the very first session. The adjustment period is an important part of the learning journey, and we will make sure ${name} feels comfortable and confident at every session. We look forward to seeing ${name}'s progress unfold!`;
+      } else if (avgScore >= 85) {
+        enComment = pick([
+          `${name} has shown outstanding and truly impressive progress this period. `,
+          `We are thrilled to report that ${name} has performed consistently excellent in every learning session. `,
+          `${name}'s development this period has genuinely made us proud as tutors. `,
+          `${name} is one of the students who displays the highest enthusiasm for learning in the group. `
+        ]) + pick([
+          `English language skills are developing at a remarkable pace — ${name} can already understand instructions, respond to questions, and interact using an increasingly rich vocabulary. Every session is attended with full enthusiasm, and ${name} never hesitates to try new things. `,
+          `At every meeting, ${name} arrives with great energy and immediately engages actively in class activities. The ability to absorb new vocabulary and use it in conversational contexts grows noticeably from week to week. `,
+          `${name}'s confidence in speaking, singing, and participating in English language games is something we truly admire. Progress is visible not just in grades but in how ${name} communicates more confidently in English every day. `,
+        ]) + pick([
+          `The average score achieved reflects real hard work and dedication. `,
+          `This period's assessment results are very satisfying and reflect a genuine commitment to learning. `,
+        ]) + pick([
+          `Congratulations to ${name} and family on this wonderful achievement! Keep up the great spirit — we are confident ${name} will continue to excel!`,
+          `Thank you for your trust and support. Together, we will continue to help ${name} grow into a confident English communicator. Keep it up, ${name}!`,
+        ]);
+      } else if (avgScore >= 70) {
+        enComment = pick([
+          `${name} has shown good and consistent progress throughout this period. `,
+          `We are pleased to report that ${name} continues to show steady and encouraging improvement. `,
+        ]) + pick([
+          `${name} is active in class discussions and is not hesitant to try answering questions or using English in conversation. Understanding of the material delivered continues to grow well over time. `,
+          `${name}'s ability to understand and use English continues to grow consistently. At every meeting there is always progress to note — in vocabulary, fluency, and the ability to respond in real contexts. `,
+        ]) + pick([
+          `The score achieved this period reflects a serious and dedicated learning process. `,
+          `Assessment results show that ${name}'s effort and consistency are producing real, measurable progress. `,
+        ]) + pick([
+          `To further support ${name}'s development, we highly recommend continued practice outside class — watching English content, reading, or writing regularly. With practice both in class and at home, the results will be even greater. Keep it up!`,
+          `Thank you for your ongoing trust and support. ${name}'s consistent commitment to learning is the greatest asset for reaching higher achievements. We will continue to provide the best approach for ${name}'s needs!`,
+        ]);
+      } else {
+        enComment = pick([
+          `${name} has shown genuine effort in attending every learning session this period. `,
+          `We appreciate ${name}'s consistent attendance and willingness to keep trying even when the material feels challenging. `,
+        ]) + pick([
+          `${name} is currently in the phase of building a strong English language foundation. We understand that every individual has a different pace and learning style, and we continuously adapt our approach to best fit ${name}'s specific needs. `,
+          `We are focusing with ${name} on building active vocabulary and the confidence to communicate in English. We use a gradual and enjoyable approach so ${name} can build confidence organically. `,
+        ]) + pick([
+          `We will continue to monitor ${name}'s development regularly and are ready to adjust our teaching strategy as needed. `,
+          `With the dedication already shown, we are confident that ${name}'s results will continue to improve steadily and surely. `,
+        ]) + pick([
+          `We greatly encourage active support at home — such as practising simple vocabulary, reading English books, or watching educational videos together. The combination of classroom learning and home practice makes a huge difference. Please feel free to contact us anytime!`,
+          `Thank you for trusting us with ${name}'s education. We are committed to being a reliable learning partner and will ensure every session is effective and meaningful for ${name}'s overall development. Together, we will get there!`,
+        ]);
+      }
+    } else {
+      if (avgScore === 0) {
+        enComment = `${name} has recently joined English Club and is currently in the early stages of getting acquainted with the learning materials, methods, and classroom dynamics. We have already seen enthusiasm and a positive attitude in engaging with the sessions. Full assessment data will be available after a few evaluation sessions — but most importantly, ${name} has started this learning journey on the right foot!`;
+      } else if (avgScore >= 85) {
+        enComment = pick([
+          `${name}'s performance this period has been truly exceptional and highly commendable. `,
+          `We are extremely pleased to report that ${name} has achieved outstanding results this period, reflecting excellent dedication and effort. `,
+          `${name} has demonstrated impressive academic achievement this period, and we couldn't be more proud. `,
+          `This period, ${name} has shown the kind of commitment and ability that inspires everyone around them. `
+        ]) + pick([
+          `${name} demonstrates a strong command of English across all skill areas — speaking with confidence, writing with clarity, and comprehending spoken and written material with ease. The progress has been remarkable and very rewarding to witness as tutors. `,
+          `Every session with ${name} is a pleasure — they come prepared, engage actively, and consistently push to achieve more. The growth in fluency and accuracy this period has been outstanding. `,
+        ]) + pick([
+          `The scores achieved this period are a direct reflection of ${name}'s consistent hard work and dedication. `,
+          `Academic achievement this period places ${name} among the top performers and is something to be truly proud of. `,
+        ]) + pick([
+          `We extend our warmest congratulations to ${name} and family. Please maintain this wonderful momentum — we are excited to see what ${name} will achieve next!`,
+          `Thank you for your trust and ongoing support. ${name}'s dedication is an inspiration to us as tutors. Keep striving and aiming higher!`,
+          `We are very proud of ${name}'s learning journey and cannot wait to see the next great achievements ahead. Keep up the enthusiasm, curiosity, and consistency that have been ${name}'s greatest strengths!`,
+        ]);
+      } else if (avgScore >= 70) {
+        enComment = pick([
+          `${name} has shown good and consistent progress this period. `,
+          `We are pleased to report that ${name} continues to demonstrate steady and encouraging improvement throughout this period. `,
+          `During this period, ${name} has displayed a positive learning attitude and always strives to give their best in every session. `,
+          `${name}'s performance this period has been solid, showing real and promising progress. `
+        ]) + pick([
+          `${name} is active in class discussions and demonstrates the ability to communicate in English with growing confidence. Understanding of the material continues to develop well across all skill areas. `,
+          `${name}'s ability to understand and use English continues to grow consistently. At every meeting there is always visible progress — in vocabulary, fluency, and the ability to respond in real-life contexts. `,
+          `One of ${name}'s key strengths is the desire to keep learning and not giving up when faced with challenging material. This attitude is something we deeply appreciate and forms an important foundation for long-term development. `,
+        ]) + pick([
+          `The scores achieved this period reflect a serious and dedicated learning process. `,
+          `Assessment results show that ${name}'s effort and consistency are producing real, measurable impact. `,
+        ]) + pick([
+          `To further support ${name}'s development, we highly recommend continued practice outside class — watching English content, reading, or writing regularly. With practice both in class and at home, results will be even greater. Keep it up!`,
+          `Thank you for your ongoing trust and support. ${name}'s consistent commitment to learning is the greatest asset on the path to higher achievement. We will keep providing the best approaches for ${name}'s needs. Feel free to reach out anytime!`,
+        ]);
+      } else {
+        enComment = pick([
+          `${name} has shown sincere effort in attending and engaging with every learning session this period. `,
+          `We appreciate ${name}'s consistent attendance and willingness to keep trying even when the material feels challenging. `,
+          `${name} continues to work with full dedication, and as tutors we deeply appreciate every step taken. `,
+          `Throughout this period, ${name} has demonstrated a never-give-up learning attitude, which is the most important asset on any language learning journey. `
+        ]) + pick([
+          `${name} is currently in the phase of building a strong English language foundation. We understand that every learner has a unique pace and style, and we continue to adapt our approach to best fit ${name}'s specific needs. Progress is not always reflected in numbers alone — we can see real development in ${name}'s confidence and willingness to participate. `,
+          `We are focusing with ${name} on building active vocabulary and the confidence to communicate in English. We use a gradual, enjoyable approach so ${name} can build confidence organically, without pressure. We are confident that with time and the right support, progress will become increasingly visible. `,
+        ]) + pick([
+          `We will continue to monitor ${name}'s development regularly and are ready to adjust our strategy as needed. `,
+          `With the dedication already shown, we are confident that ${name}'s results will continue to improve steadily. `,
+        ]) + pick([
+          `We greatly encourage active support at home — practising simple vocabulary, reading English books together, or watching educational videos. The synergy between classroom learning and home practice will have a huge positive impact. Please feel free to contact us anytime to discuss the best learning strategy for ${name}!`,
+          `Thank you for trusting us with ${name}'s education. We understand that progress is not always linear, and we remain committed to being a reliable learning partner. Together, we will help ${name} reach their fullest potential. Keep going!`,
+        ]);
+      }
+    }
+
+    if (attRate < 50 && attRate > 0) {
+      enComment += pick([
+        ` ⚠️ Important Note: ${name}'s attendance this period is recorded at ${attDetail}. This figure is calculated solely from ${name}'s ${packageLabel} sessions — not from the total course schedule — so it accurately reflects attendance relative to the purchased package. With more than half of the ${packageLabel} sessions missed, continuity of learning is affected and the material missed becomes increasingly difficult to recover. We sincerely hope to see stronger attendance commitment next period. Please reach out if there are any difficulties — we are open to finding solutions together.`,
+        ` ⚠️ Attendance Note: ${name}'s attendance this period stands at ${attDetail}. This is calculated purely from ${name}'s ${packageLabel} sessions, adjusted to the package purchased. With more than half of these sessions missed, ${name}'s potential development has not been fully realised and catching up on missed material becomes challenging. We invite you to work with us to find a solution so ${name} can attend more regularly next period.`,
+      ]);
+    } else if (attRate >= 90 && attRate > 0) {
+      enComment += pick([
+        ` ${name}'s attendance this period, at ${attDetail}, is greatly appreciated — it reflects outstanding commitment and discipline in making the most of the ${packageLabel}.`,
+        ` We also commend ${name}'s excellent attendance rate of ${attDetail} — this level of consistency with the ${packageLabel} is one of the most important factors in successful language learning.`,
+      ]);
+    }
+    return enComment;
+  }
+  // ── END ENGLISH VERSION ──────────────────────────────────────────────────────
+
   let comment = "";
 
   // Siswa yang sama sekali tidak pernah hadir — tangani khusus di semua level
@@ -1663,7 +1800,10 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
   const currentYearStr = String(currentTime.getFullYear());
 
   const myAttAll = db.studentAttendance.filter(a => a.studentId === user.studentId);
-  const myAttThisMonth = myAttAll.filter(a => a.date.startsWith(currentMonthPrefix));
+  // FIX: exclude 'Not in Package' agar totalSesi tidak menggelembung untuk siswa paket selektif
+  const myAttThisMonth = myAttAll.filter(a =>
+    a.date.startsWith(currentMonthPrefix) && a.status !== 'Not in Package'
+  );
   const totalSessionsThisMonth = myAttThisMonth.length;
   const presentThisMonth = myAttThisMonth.filter(a => a.status === 'Present').length;
   const attRateThisMonth = totalSessionsThisMonth > 0 ? Math.round((presentThisMonth / totalSessionsThisMonth) * 100) : 0;
@@ -9584,26 +9724,49 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
 
           <div className="relative z-10">
             {/* 1. PREMIUM HEADER */}
-            <div className="flex justify-between items-center border-b border-slate-200 pb-4 mb-5 print:mt-4">
-              <div className="flex items-center gap-5">
-                <img src={LOGO_URL} className="h-16 object-contain" alt="Logo" />
-              </div>
-              <div className="text-right">
-                <h1 className="text-[26px] font-bold text-slate-900 tracking-tight uppercase leading-none">Monthly Academic Progress Report</h1>
-                <h2 className="text-[11px] font-medium text-slate-500 mt-2 uppercase tracking-[0.8px]">English Club Gresik • Report Period: {safeDateDisplay(startDate, 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} - {safeDateDisplay(endDate, 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</h2>
+            <div className="mb-4 print:mt-2">
+              {/* Top accent bar */}
+              <div className="h-1 w-full bg-gradient-to-r from-[#1A56DB] via-[#3B82F6] to-[#93C5FD] rounded-full mb-4" />
+              <div className="flex justify-between items-center pb-3 border-b border-slate-200">
+                <div className="flex items-center gap-4">
+                  <img src={LOGO_URL} className="h-14 object-contain" alt="Logo" />
+                  <div className="border-l border-slate-200 pl-4">
+                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[1px]">English Club Gresik</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Perumahan Taman Anggrek Blok AB 05, Kedanyang, Kebomas, Gresik</p>
+                    <p className="text-[10px] text-slate-400">www.englishclub.my.id</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <h1 className="text-[22px] font-black text-slate-900 tracking-tight uppercase leading-none">Monthly Academic</h1>
+                  <h1 className="text-[22px] font-black text-blue-600 tracking-tight uppercase leading-none">Progress Report</h1>
+                  <div className="flex items-center justify-end gap-2 mt-1.5">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-[0.6px]">Period:</span>
+                    <span className="text-[11px] font-semibold text-slate-700">{safeDateDisplay(startDate, 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} – {safeDateDisplay(endDate, 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* 2. STUDENT PROFILE & DASHBOARD SUMMARY CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-12 print:grid-cols-12 gap-3 mb-4 break-inside-avoid">
               {/* Profile Card */}
-              <div className="md:col-span-5 print:col-span-5 bg-[#F8FAFC] border border-slate-200 rounded-[10px] p-4">
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Student Profile</p>
-                <h4 className="text-lg font-bold text-slate-900 mb-0.5">{student.name}</h4>
-                <p className="text-[11px] font-mono text-slate-500 mb-3">{student.id}</p>
-                <div className="flex gap-6 text-[11px]">
-                  <div><span className="text-slate-400 font-medium text-[11px] uppercase tracking-[0.5px] block mb-0.5">Class Level</span><span className="font-semibold text-slate-900">{student.level} - {student.class}</span></div>
-                  <div><span className="text-slate-400 font-medium text-[11px] uppercase tracking-[0.5px] block mb-0.5">Session</span><span className="font-semibold text-slate-900">{studentSession}</span></div>
+              <div className="md:col-span-5 print:col-span-5 bg-gradient-to-br from-[#EFF6FF] to-[#F8FAFC] border border-blue-100 rounded-[10px] p-4">
+                <p className="text-[9px] font-black text-blue-500 uppercase tracking-[1px] mb-2">Student Profile</p>
+                <h4 className="text-[17px] font-black text-slate-900 leading-tight mb-0.5">{student.name}</h4>
+                <p className="text-[10px] text-slate-400 mb-3">Student ID: <span className="font-semibold text-slate-600">{student.id}</span></p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
+                  <div>
+                    <span className="text-[9px] text-slate-400 uppercase tracking-[0.5px] block">Class Level</span>
+                    <span className="font-bold text-slate-800">{student.level}</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-slate-400 uppercase tracking-[0.5px] block">Class</span>
+                    <span className="font-bold text-slate-800">{student.class}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-[0.5px] block">Session Group</span>
+                    <span className="font-bold text-slate-800">{studentSession}</span>
+                  </div>
                 </div>
               </div>
 
@@ -9651,12 +9814,31 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
             </div>
 
             {/* 3. ACADEMIC ADVISOR COMMENTS */}
-            <div className="mb-5 break-inside-avoid">
+            <div className="mb-4 break-inside-avoid">
                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Academic Advisor Comments</p>
-               <div className="bg-[#F8FAFC] border-l-4 border-blue-600 p-[16px] rounded-[10px]">
-                  <p className={`text-[11px] leading-relaxed text-slate-800 ${(!assessments.length) ? 'italic text-slate-500' : 'font-medium'}`}>
-                     {assessments.length ? `"${finalCommentDisplay}"` : "No comments recorded for this period."}
-                  </p>
+               <div className="bg-[#F8FAFC] border-l-4 border-blue-600 rounded-[10px] overflow-hidden">
+                  {assessments.length ? (
+                    <div className="grid grid-cols-2 print:grid-cols-2 divide-x divide-slate-200">
+                      <div className="p-3">
+                        <p className="text-[9px] font-bold text-blue-500 uppercase tracking-[0.6px] mb-1">English</p>
+                        <p className="text-[10.5px] leading-snug text-slate-800 font-medium italic">
+                          &ldquo;{finalCommentDisplay}&rdquo;
+                        </p>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.6px] mb-1">Bahasa Indonesia</p>
+                        <p className="text-[10.5px] leading-snug text-slate-600 italic">
+                          &ldquo;{generateAutoComment(student, attRate, avgScore, assessments, presentCount, att.length, 'id')}&rdquo;
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3">
+                      <p className="text-[10.5px] leading-snug italic text-slate-500">
+                        No comments recorded for this period. / Komentar belum tersedia untuk periode ini.
+                      </p>
+                    </div>
+                  )}
                </div>
             </div>
 
@@ -9699,7 +9881,7 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
             </div>
 
             {/* 5. SESSION DETAIL & ATTENDANCE LOG */}
-            <div className="mb-6 break-inside-avoid">
+            <div className="mb-4 break-inside-avoid">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Session Detail & Attendance Log</p>
               {(() => {
                 // FIX: Anchor ke attendance siswa saja (bukan union dengan journal).
@@ -9714,9 +9896,6 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
 
                 // Ambil sessionScores dari assessment yang tersimpan (hasil input nyata)
                 const savedSessionScores: Record<string, number> = latestAss?.sessionScores || {};
-                const reportSubjectList = isKindergarten
-                  ? ['Reading', 'Writing', 'Math', 'English']
-                  : ['Speaking', 'Writing', 'Reading', 'Listening'];
 
                 const combinedSessions = sortedAtt.map((attEntry, idx) => {
                     const journalEntry = journals.find(j => j.date === attEntry.date && j.scheduleId === attEntry.scheduleId)
@@ -9728,17 +9907,6 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                       if (!journalEntry?.id) return null;
                       const score = savedSessionScores[journalEntry.id];
                       if (score === undefined || score === null) return null;
-                      // Tampilkan skill yang relevan untuk sesi ini (round-robin)
-                      const sessionsOrdered = journals
-                        .filter(j => {
-                          const jg = (j.sessionGroup || '').toLowerCase().trim();
-                          const sg = (studentSession || '').toLowerCase().trim();
-                          return (jg === sg || jg.includes(sg) || sg.includes(jg)) &&
-                            j.date >= startDate && j.date <= endDate;
-                        })
-                        .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-                      const jIdx = sessionsOrdered.findIndex(j => j.id === journalEntry.id);
-                      const skill = jIdx >= 0 ? reportSubjectList[jIdx % reportSubjectList.length] : reportSubjectList[0];
                       return `${score}`;
                     };
 
@@ -9780,11 +9948,17 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                               <td className="py-2.5 px-4 whitespace-nowrap font-semibold text-slate-900">{new Date(session.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                               <td className={`py-2.5 px-4 ${session.topic === 'No lesson record entered' ? 'text-slate-400 italic' : 'text-slate-700'}`}>{session.topic}</td>
                               <td className="py-2.5 px-4 text-center">
-                                 <span className="font-bold text-[11px] tracking-wider uppercase">
-                                    {session.status !== '—' ? session.status : '—'}
+                                 <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
+                                   session.status === 'Present'  ? 'bg-emerald-100 text-emerald-700' :
+                                   session.status === 'Sick'     ? 'bg-amber-100 text-amber-700' :
+                                   session.status === 'Excused'  ? 'bg-blue-100 text-blue-700' :
+                                   session.status === 'Absent'   ? 'bg-red-100 text-red-700' :
+                                   'bg-slate-100 text-slate-500'
+                                 }`}>
+                                   {session.status !== '—' ? session.status : '—'}
                                  </span>
                               </td>
-                              <td className="py-2.5 px-4 text-right text-slate-500 text-[10.5px] hidden sm:table-cell print:table-cell">{session.note}</td>
+                              <td className="py-2.5 px-4 text-right text-slate-500 text-[10px] hidden sm:table-cell print:table-cell">{session.note}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -9800,23 +9974,32 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
             </div>
 
             {/* 6. SIGNATURE SECTION */}
-            <div className="flex justify-between items-end break-inside-avoid text-[11px] signature-section mb-6">
-               <div></div>
-               <div className="text-right w-48">
-                 <p className="text-slate-500 mb-8 font-medium">Gresik, {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                 <div className="border-t border-slate-300 pt-1.5 inline-block w-full">
-                     <p className="font-bold text-slate-900 tracking-wide">Akhmad Akmal Rifqi</p>
-                     <p className="text-slate-500">Academic Advisor</p>
+            <div className="flex justify-between items-end break-inside-avoid text-[11px] signature-section mb-3">
+               {/* Left: stamp/note area */}
+               <div className="text-[10px] text-slate-400 space-y-1">
+                 <p className="font-semibold text-slate-500 uppercase tracking-[0.6px] text-[9px]">Official Document</p>
+                 <p>This report is issued by English Club Gresik</p>
+                 <p>and reflects the student's academic progress</p>
+                 <p>for the stated reporting period.</p>
+               </div>
+               <div className="text-right">
+                 <p className="text-slate-500 mb-6 text-[11px]">Gresik, {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                 <div className="border-t-2 border-slate-800 pt-1.5 inline-block w-44">
+                     <p className="font-black text-slate-900 tracking-wide text-[12px]">Akhmad Akmal Rifqi</p>
+                     <p className="text-slate-500 text-[10px]">Academic Advisor</p>
+                     <p className="text-[9px] text-blue-600 font-semibold mt-0.5">English Club Gresik</p>
                  </div>
-                 <p className="text-[11px] font-medium text-slate-400 mt-1 flex items-center justify-end gap-1"><CheckCircle2 size={10}/> Verified by ECG Academic Suite</p>
                </div>
             </div>
 
             {/* 7. PREMIUM FOOTER */}
-            <div className="border-t border-slate-200 pt-3 text-[11px] text-slate-400 flex justify-between items-center hidden print:flex uppercase tracking-wide">
-               <span>English Club Gresik Premium Report</span>
-               <span>Generated automatically</span>
-               <span>www.englishclub.my.id</span>
+            <div className="mt-2">
+              <div className="h-px w-full bg-gradient-to-r from-[#1A56DB] via-[#3B82F6] to-[#93C5FD] mb-2 hidden print:block" />
+              <div className="text-[9.5px] text-slate-400 flex justify-between items-center hidden print:flex">
+                <span className="font-semibold text-slate-500">English Club Gresik — Academic Division</span>
+                <span>Issued &amp; Certified by Academic Division</span>
+                <span className="font-semibold text-blue-500">www.englishclub.my.id</span>
+              </div>
             </div>
           </div>
         </div>
@@ -11999,6 +12182,8 @@ function StudentReadOnlyAttendanceModule({ db, user, language = 'en' }) {
 
   const myAtt = db.studentAttendance.filter(a => {
     if (a.studentId !== user.studentId) return false;
+    // Sembunyikan 'Not in Package' — siswa tidak perlu melihat entri hari tak terjadwal
+    if (a.status === 'Not in Package') return false;
     if (filterMonth !== 'All') {
        const prefix = `${filterYear}-${String(filterMonth).padStart(2, '0')}`;
        return a.date.startsWith(prefix);
@@ -12154,7 +12339,7 @@ function StudentReadOnlyAssessmentModule({ db, user, language = 'en' }) {
                 <td className="p-4 text-center font-bold text-white text-lg">{a.grade}</td>
                 <td className="p-4 text-center text-gray-400 text-xs">
                    {Object.entries(a.scores || {}).map(([sub, score]) => (
-                      <span key={sub} className="block">{`${score}`}</span>
+                      <span key={sub} className="block">{`${sub}: ${score}`}</span>
                    ))}
                 </td>
               </tr>
@@ -12379,7 +12564,14 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
 
   const reportPrefix = `${reportYear}-${String(reportMonth).padStart(2, '0')}`;
   
-  const att = db.studentAttendance.filter((a) => a.studentId === student.id && a.date.startsWith(reportPrefix));
+  // FIX: exclude 'Not in Package' dan gunakan isAttendanceValidForStudent
+  // agar persentase kehadiran konsisten dengan perhitungan admin
+  const att = db.studentAttendance.filter((a) =>
+    a.studentId === student.id &&
+    a.date.startsWith(reportPrefix) &&
+    isAttendanceValidForStudent(a, student) &&
+    a.status !== 'Not in Package'
+  );
   const presentCount = att.filter((a) => a.status === 'Present').length;
   const sickCount = att.filter((a) => a.status === 'Sick').length;
   const excusedCount = att.filter((a) => a.status === 'Excused').length;
@@ -12426,15 +12618,17 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
   ];
 
   const hasAssessments = assessments.length > 0;
-  let finalCommentDisplay = "";
+  let finalCommentEN = "";
+  let finalCommentID = "";
 
   if (!hasAssessments) {
-     finalCommentDisplay = language === 'id' 
-         ? "Komentar akademik belum tersedia karena penilaian untuk periode ini belum diselesaikan oleh tutor." 
-         : "Academic comments are not available yet as assessments for this period have not been completed by the tutor.";
+     finalCommentEN = "Academic comments are not available yet as assessments for this period have not been completed by the tutor.";
+     finalCommentID = "Komentar akademik belum tersedia karena penilaian untuk periode ini belum diselesaikan oleh tutor.";
   } else {
-     const autoGeneratedComment = generateAutoComment(student, attRate, avgScore, assessments, presentCount, att.length);
-     finalCommentDisplay = student.teacherComment || autoGeneratedComment;
+     const autoCommentEN = generateAutoComment(student, attRate, avgScore, assessments, presentCount, att.length, 'en');
+     const autoCommentID = generateAutoComment(student, attRate, avgScore, assessments, presentCount, att.length, 'id');
+     finalCommentEN = student.teacherComment || autoCommentEN;
+     finalCommentID = autoCommentID;
   }
 
   const handlePrintStudentReport = () => {
@@ -12476,26 +12670,49 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
         <div className="relative z-10">
           
           {/* 1. PREMIUM HEADER */}
-          <div className="flex justify-between items-center border-b border-slate-200 pb-4 mb-5 print:mt-4">
-            <div className="flex items-center gap-5">
-              <img src={LOGO_URL} className="h-16 object-contain" alt="Logo" />
-            </div>
-            <div className="text-right">
-              <h1 className="text-[26px] font-bold text-slate-900 tracking-tight uppercase leading-none">Monthly Academic Progress Report</h1>
-              <h2 className="text-[11px] font-medium text-slate-500 mt-2 uppercase tracking-[0.8px]">English Club Gresik • Report Period: {MONTHS[reportMonth - 1]} {reportYear}</h2>
+          <div className="mb-4 print:mt-2">
+            {/* Top accent bar */}
+            <div className="h-1 w-full bg-gradient-to-r from-[#1A56DB] via-[#3B82F6] to-[#93C5FD] rounded-full mb-4" />
+            <div className="flex justify-between items-center pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-4">
+                <img src={LOGO_URL} className="h-14 object-contain" alt="Logo" />
+                <div className="border-l border-slate-200 pl-4">
+                  <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[1px]">English Club Gresik</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Perumahan Taman Anggrek Blok AB 05, Kedanyang, Kebomas, Gresik</p>
+                  <p className="text-[10px] text-slate-400">www.englishclub.my.id</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <h1 className="text-[22px] font-black text-slate-900 tracking-tight uppercase leading-none">Monthly Academic</h1>
+                <h1 className="text-[22px] font-black text-blue-600 tracking-tight uppercase leading-none">Progress Report</h1>
+                <div className="flex items-center justify-end gap-2 mt-1.5">
+                  <span className="text-[10px] text-slate-400 uppercase tracking-[0.6px]">Period:</span>
+                  <span className="text-[11px] font-semibold text-slate-700">{MONTHS[reportMonth - 1]} {reportYear}</span>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* 2. STUDENT PROFILE & DASHBOARD SUMMARY CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-12 print:grid-cols-12 gap-3 mb-4 break-inside-avoid">
             {/* Profile Card */}
-            <div className="md:col-span-5 print:col-span-5 bg-[#F8FAFC] border border-slate-200 rounded-[10px] p-4">
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Student Profile</p>
-              <h4 className="text-lg font-bold text-slate-900 mb-0.5">{student.name}</h4>
-              <p className="text-[11px] font-mono text-slate-500 mb-3">{student.id}</p>
-              <div className="flex gap-6 text-[11px]">
-                <div><span className="text-slate-400 font-medium text-[11px] uppercase tracking-[0.5px] block mb-0.5">Class Level</span><span className="font-semibold text-slate-900">{student.level} - {student.class}</span></div>
-                <div><span className="text-slate-400 font-medium text-[11px] uppercase tracking-[0.5px] block mb-0.5">Session</span><span className="font-semibold text-slate-900">{studentSession}</span></div>
+            <div className="md:col-span-5 print:col-span-5 bg-gradient-to-br from-[#EFF6FF] to-[#F8FAFC] border border-blue-100 rounded-[10px] p-4">
+              <p className="text-[9px] font-black text-blue-500 uppercase tracking-[1px] mb-2">Student Profile</p>
+              <h4 className="text-[17px] font-black text-slate-900 leading-tight mb-0.5">{student.name}</h4>
+              <p className="text-[10px] text-slate-400 mb-3">Student ID: <span className="font-semibold text-slate-600">{student.id}</span></p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[10px]">
+                <div>
+                  <span className="text-[9px] text-slate-400 uppercase tracking-[0.5px] block">Class Level</span>
+                  <span className="font-bold text-slate-800">{student.level}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-slate-400 uppercase tracking-[0.5px] block">Class</span>
+                  <span className="font-bold text-slate-800">{student.class}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-[9px] text-slate-400 uppercase tracking-[0.5px] block">Session Group</span>
+                  <span className="font-bold text-slate-800">{studentSession}</span>
+                </div>
               </div>
             </div>
 
@@ -12543,12 +12760,23 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
           </div>
 
           {/* 3. ACADEMIC ADVISOR COMMENTS */}
-          <div className="mb-5 break-inside-avoid">
+          <div className="mb-4 break-inside-avoid">
              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Academic Advisor Comments</p>
-             <div className="bg-[#F8FAFC] border-l-4 border-blue-600 p-[16px] rounded-[10px]">
-                <p className={`text-[11px] leading-relaxed text-slate-800 ${(!assessments.length) ? 'italic text-slate-500' : 'font-medium'}`}>
-                   {assessments.length ? `"${finalCommentDisplay}"` : "No comments recorded for this period."}
-                </p>
+             <div className="bg-[#F8FAFC] border-l-4 border-blue-600 rounded-[10px] overflow-hidden">
+               <div className="grid grid-cols-2 print:grid-cols-2 divide-x divide-slate-200">
+                 <div className="p-3">
+                   <p className="text-[9px] font-bold text-blue-500 uppercase tracking-[0.6px] mb-1">English</p>
+                   <p className={`text-[10.5px] leading-snug font-medium italic ${hasAssessments ? 'text-slate-800' : 'text-slate-500'}`}>
+                     &ldquo;{finalCommentEN}&rdquo;
+                   </p>
+                 </div>
+                 <div className="p-3">
+                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.6px] mb-1">Bahasa Indonesia</p>
+                   <p className={`text-[10.5px] leading-snug italic ${hasAssessments ? 'text-slate-600' : 'text-slate-500'}`}>
+                     &ldquo;{finalCommentID}&rdquo;
+                   </p>
+                 </div>
+               </div>
              </div>
           </div>
 
@@ -12591,7 +12819,7 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
           </div>
 
           {/* 5. SESSION DETAIL & ATTENDANCE LOG */}
-          <div className="mb-6 break-inside-avoid">
+          <div className="mb-4 break-inside-avoid">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Session Detail & Attendance Log</p>
             {(() => {
               // FIX: Anchor ke attendance siswa saja (bukan union dengan journal).
@@ -12601,13 +12829,6 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
 
               // Ambil sessionScores dari assessment yang tersimpan (hasil input nyata)
               const savedSessionScores2: Record<string, number> = latestAss?.sessionScores || {};
-              const reportSubjectList2 = isKindergarten
-                ? ['Reading', 'Writing', 'Math', 'English']
-                : ['Speaking', 'Writing', 'Reading', 'Listening'];
-              // Urutan jurnal untuk mapping round-robin skill
-              const orderedJournals2 = journals
-                .slice()
-                .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
 
               const combinedSessions = sortedAtt.map((attEntry, idx) => {
                   const journalEntry = journals.find(j => j.date === attEntry.date && j.scheduleId === attEntry.scheduleId)
@@ -12618,9 +12839,7 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
                     if (!journalEntry?.id) return null;
                     const score = savedSessionScores2[journalEntry.id];
                     if (score === undefined || score === null) return null;
-                    const jIdx = orderedJournals2.findIndex(j => j.id === journalEntry.id);
-                    const skill = jIdx >= 0 ? reportSubjectList2[jIdx % reportSubjectList2.length] : reportSubjectList2[0];
-                    return `${skill}: ${score}`;
+                    return `${score}`;
                   };
 
                   const autoNote = (() => {
@@ -12660,11 +12879,17 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
                             <td className="py-2.5 px-4 whitespace-nowrap font-semibold text-slate-900">{new Date(session.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                             <td className={`py-2.5 px-4 ${session.topic === 'No lesson record entered' ? 'text-slate-400 italic' : 'text-slate-700'}`}>{session.topic}</td>
                             <td className="py-2.5 px-4 text-center">
-                               <span className="font-bold text-[11px] tracking-wider uppercase">
-                                  {session.status !== '—' ? session.status : '—'}
+                               <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide ${
+                                 session.status === 'Present'  ? 'bg-emerald-100 text-emerald-700' :
+                                 session.status === 'Sick'     ? 'bg-amber-100 text-amber-700' :
+                                 session.status === 'Excused'  ? 'bg-blue-100 text-blue-700' :
+                                 session.status === 'Absent'   ? 'bg-red-100 text-red-700' :
+                                 'bg-slate-100 text-slate-500'
+                               }`}>
+                                 {session.status !== '—' ? session.status : '—'}
                                </span>
                             </td>
-                            <td className="py-2.5 px-4 text-right text-slate-500 text-[10.5px] hidden sm:table-cell print:table-cell">{session.note}</td>
+                            <td className="py-2.5 px-4 text-right text-slate-500 text-[10px] hidden sm:table-cell print:table-cell">{session.note}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -12680,23 +12905,32 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
           </div>
 
           {/* 6. SIGNATURE SECTION */}
-          <div className="flex justify-between items-end break-inside-avoid text-[11px] signature-section mb-6">
-             <div></div>
-             <div className="text-right w-48">
-               <p className="text-slate-500 mb-8 font-medium">Gresik, {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-               <div className="border-t border-slate-300 pt-1.5 inline-block w-full">
-                   <p className="font-bold text-slate-900 tracking-wide">Akhmad Akmal Rifqi</p>
-                   <p className="text-slate-500">Academic Advisor</p>
+          <div className="flex justify-between items-end break-inside-avoid text-[11px] signature-section mb-3">
+             {/* Left: stamp/note area */}
+             <div className="text-[10px] text-slate-400 space-y-1">
+               <p className="font-semibold text-slate-500 uppercase tracking-[0.6px] text-[9px]">Official Document</p>
+               <p>This report is issued by English Club Gresik</p>
+               <p>and reflects the student's academic progress</p>
+               <p>for the stated reporting period.</p>
+             </div>
+             <div className="text-right">
+               <p className="text-slate-500 mb-6 text-[11px]">Gresik, {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+               <div className="border-t-2 border-slate-800 pt-1.5 inline-block w-44">
+                   <p className="font-black text-slate-900 tracking-wide text-[12px]">Akhmad Akmal Rifqi</p>
+                   <p className="text-slate-500 text-[10px]">Academic Advisor</p>
+                   <p className="text-[9px] text-blue-600 font-semibold mt-0.5">English Club Gresik</p>
                </div>
-               <p className="text-[11px] font-medium text-slate-400 mt-1 flex items-center justify-end gap-1"><CheckCircle2 size={10}/> Verified by ECG Academic Suite</p>
              </div>
           </div>
 
           {/* 7. PREMIUM FOOTER */}
-          <div className="border-t border-slate-200 pt-3 text-[11px] text-slate-400 flex justify-between items-center hidden print:flex uppercase tracking-wide">
-             <span>English Club Gresik Premium Report</span>
-             <span>Generated automatically</span>
-             <span>www.englishclub.my.id</span>
+          <div className="mt-2">
+            <div className="h-px w-full bg-gradient-to-r from-[#1A56DB] via-[#3B82F6] to-[#93C5FD] mb-2 hidden print:block" />
+            <div className="text-[9.5px] text-slate-400 flex justify-between items-center hidden print:flex">
+              <span className="font-semibold text-slate-500">English Club Gresik — Academic Division</span>
+              <span>Issued &amp; Certified by Academic Division</span>
+              <span className="font-semibold text-blue-500">www.englishclub.my.id</span>
+            </div>
           </div>
         </div>
       </div>
@@ -14967,7 +15201,7 @@ if (typeof document !== 'undefined' && !document.getElementById('ecg-styles')) {
     @media print {
       @page {
         size: A4 portrait;
-        margin: 5mm; 
+        margin: 4mm; 
       }
       body { 
         background: white !important; 
@@ -14980,13 +15214,43 @@ if (typeof document !== 'undefined' && !document.getElementById('ecg-styles')) {
         letter-spacing: normal !important; /* FIX #2: BROKEN LETTER SPACING */
       }
       
-      /* Smart PDF Compression Rules to Force 1 Page (FIX #1 & #4) */
-      #report-print, #slip-print {
+      /* ── STUDENT ACADEMIC REPORT: force 1 page ── */
+      /* Scale down the entire print area to fit A4 in one page */
+      #report-print {
         width: 100%;
-        zoom: 0.92; /* Safer scaling than transform for print layouts */
+        zoom: 0.82;
+        transform-origin: top left;
       }
+
+      /* Receipt / slip: keep original zoom */
+      #slip-print {
+        width: 100%;
+        zoom: 0.92;
+      }
+
+      /* Tighten all section gaps inside the report */
+      #report-print .mb-5 { margin-bottom: 0.35rem !important; }
+      #report-print .mb-4 { margin-bottom: 0.3rem !important; }
+      #report-print .mb-6 { margin-bottom: 0.4rem !important; }
+      #report-print .pb-4 { padding-bottom: 0.2rem !important; }
+      #report-print .pt-4, #report-print .pt-3 { padding-top: 0.2rem !important; }
+      #report-print .gap-3 { gap: 0.2rem !important; }
+      #report-print .gap-2 { gap: 0.15rem !important; }
+      #report-print .p-4 { padding: 0.45rem !important; }
+      #report-print .p-3 { padding: 0.35rem !important; }
+      #report-print .p-2\.5 { padding: 0.3rem !important; }
+      #report-print .p-1\.5 { padding: 0.2rem !important; }
+      /* Tighten table rows */
+      #report-print td, #report-print th { padding: 0.18rem 0.3rem !important; }
+      /* Header logo smaller */
+      #report-print img.h-16 { height: 48px !important; }
+      /* Title font smaller */
+      #report-print h1 { font-size: 20px !important; }
+      /* Signature section tight */
+      #report-print .signature-section { margin-top: 0 !important; }
+      #report-print .mb-8 { margin-bottom: 0.3rem !important; }
       
-      /* Aggressively reduce gaps for print to fit on 1 page */
+      /* Aggressively reduce gaps for other print areas */
       .mb-8 { margin-bottom: 0.5rem !important; }
       .mb-6 { margin-bottom: 0.5rem !important; }
       .mt-8 { margin-top: 0.5rem !important; }
