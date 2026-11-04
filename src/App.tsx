@@ -131,6 +131,18 @@ const getDayName = (dateStr: string): string => {
   return days[new Date(y, m - 1, d).getDay()];
 };
 
+// Helper: Kembalikan tanggal mulai kursus siswa (YYYY-MM-DD).
+// Satu field billingStartMonth berlaku sekaligus untuk tagihan & rapor.
+// Jika diisi dalam format YYYY-MM, dianggap tanggal 1 bulan tersebut.
+const getStudentAssessmentStart = (student: any): string | null => {
+  if (!student) return null;
+  const raw = student.billingStartMonth || null;
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  if (/^\d{4}-\d{2}$/.test(raw)) return `${raw}-01`;
+  return null;
+};
+
 // Helper: Returns true if the student is scheduled to attend on the day of dateStr.
 // If scheduledDays is empty/unset → no restriction (attends every day = true).
 // If scheduledDays is set (e.g. ['Saturday']), only that day returns true.
@@ -5609,10 +5621,10 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, cascadeD
               <Input label="Gender" type="select" options={['Male', 'Female']} value={formData.gender} onChange={(v) => setFormData({ ...formData, gender: v })} required />
               <Input label="Enrollment Status" type="select" options={['New', 'Returning']} value={formData.enrollmentStatus} onChange={(v) => setFormData({ ...formData, enrollmentStatus: v })} required />
             </div>
-            {/* BILLING START MONTH — hanya tampil jika siswa baru atau admin mengatur */}
+            {/* TANGGAL MULAI KURSUS — mengontrol tagihan & rapor sekaligus */}
             <div className="mb-4 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
               <label className="block text-sm text-amber-400 font-semibold mb-1 flex items-center gap-2">
-                <CalendarIcon size={14} /> Tanggal Mulai Tagih <span className="text-gray-500 font-normal">(Opsional)</span>
+                <CalendarIcon size={14} /> Tanggal Mulai Kursus <span className="text-gray-500 font-normal">(Opsional)</span>
               </label>
               <input
                 type="date"
@@ -5621,7 +5633,7 @@ function StudentsModule({ db, setDb, generateId, showToast, softDelete, cascadeD
                 onChange={(e) => setFormData({ ...formData, billingStartMonth: e.target.value })}
               />
               <p className="text-[11px] text-gray-500 mt-1.5 leading-tight">
-                Isi tanggal pertama masuk kursus. Sesi sebelum tanggal ini <strong className="text-amber-400">tidak dihitung</strong> dalam tagihan, termasuk sesi di bulan yang sama.
+                Isi tanggal pertama siswa masuk kursus. Data sebelum tanggal ini <strong className="text-amber-400">tidak dihitung</strong> dalam tagihan maupun rapor — termasuk absensi di bulan yang sama jika bergabung di tengah bulan.
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -9474,6 +9486,11 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                     <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} />
                   </div>
                   <p className="font-mono text-[11px] text-gray-500">{s.id} · {s.class} · <Badge status={s.status} /></p>
+                  {s.billingStartMonth && (
+                    <p className="text-[10px] text-amber-400 mt-0.5 flex items-center gap-1">
+                      <CalendarIcon size={9} /> Mulai kursus: {getStudentAssessmentStart(s)}
+                    </p>
+                  )}
                 </div>
                 <Button className="shrink-0 bg-yellow-500 text-yellow-900 hover:bg-yellow-400 font-bold text-xs px-3 py-1.5 h-auto" icon={Eye} onClick={() => openProfile(s.id, 'student')}>View</Button>
               </div>
@@ -9500,7 +9517,16 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                     <tr key={s.id} className="hover:bg-[#0B0F19]">
                       <td className="p-4 text-center text-gray-500 font-medium">{startIndex + index + 1}</td>
                       <td className="p-4 text-center font-mono text-gray-400">{s.id}</td>
-                      <td className="p-4 text-center text-white"><div className="flex items-center justify-center">{s.name} <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} /></div></td>
+                      <td className="p-4 text-center text-white">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <div className="flex items-center gap-1">{s.name} <NewBadge isNew={s.enrollmentStatus} billingStartMonth={s.billingStartMonth || null} /></div>
+                          {s.billingStartMonth && (
+                            <span className="text-[9px] text-amber-400 flex items-center gap-0.5">
+                              <CalendarIcon size={8} /> Mulai kursus {getStudentAssessmentStart(s)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-4 text-center text-gray-300">{s.class}</td>
                       <td className="p-4 text-center"><Badge status={s.status} /></td>
                       <td className="p-4 flex justify-center"><Button className="bg-yellow-500 text-yellow-900 hover:bg-yellow-400 font-bold shadow-md hover:shadow-lg transition-all" icon={Eye} onClick={() => openProfile(s.id, 'student')}>VIEW HISTORY & REPORTS</Button></td>
@@ -9569,17 +9595,30 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
     
     // Fix 4: Only count attendance from student's current effective session (respects override)
     // 'Not in Package' records are excluded from all stats — they are not absences.
-    const att = db.studentAttendance.filter((a) => a.studentId === student.id && a.date >= startDate && a.date <= endDate && isAttendanceValidForStudent(a, student) && a.status !== 'Not in Package');
+    // FITUR BARU: Filter berdasarkan assessmentStartMonth (atau billingStartMonth sebagai fallback)
+    // agar siswa baru yang datanya sudah diinput sebelum bergabung tidak memiliki absensi/penilaian kosong.
+    const _assessStart = getStudentAssessmentStart(student);
+    const _effectiveStartDate = _assessStart && _assessStart > startDate ? _assessStart : startDate;
+    const att = db.studentAttendance.filter((a) =>
+      a.studentId === student.id &&
+      a.date >= _effectiveStartDate &&
+      a.date <= endDate &&
+      isAttendanceValidForStudent(a, student) &&
+      a.status !== 'Not in Package'
+    );
     const presentCount = att.filter((a) => a.status === 'Present').length;
     const sickCount = att.filter((a) => a.status === 'Sick').length;
     const excusedCount = att.filter((a) => a.status === 'Excused').length;
     const absentCount = att.filter((a) => a.status === 'Absent').length;
     const attRate = att.length ? Math.round((presentCount / att.length) * 100) : 0;
     
+    // FITUR BARU: Filter assessment berdasarkan assessmentStartMonth juga
+    const _assessStartMonthStr = _assessStart ? _assessStart.substring(0, 7) : null;
+    const _effectiveStartMonthStr = _assessStartMonthStr && _assessStartMonthStr > startMonthStr ? _assessStartMonthStr : startMonthStr;
     const assessments = db.assessments.filter((a) => {
        if (a.studentId !== student.id) return false;
        const assessDateStr = `${a.year}-${String(a.month).padStart(2, '0')}`;
-       return assessDateStr >= startMonthStr && assessDateStr <= endMonthStr;
+       return assessDateStr >= _effectiveStartMonthStr && assessDateStr <= endMonthStr;
     });
     const avgScore = assessments.length ? Math.round(assessments.reduce((sum, a) => sum + a.average, 0) / assessments.length) : 0;
     
@@ -9700,6 +9739,20 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
               <Button onClick={handlePrintStudentReport} icon={Printer}>Print Premium PDF</Button>
             </div>
           </div>
+
+          {/* FITUR BARU: Notifikasi jika billingStartMonth memotong periode rapor */}
+          {_assessStart && _assessStart > startDate && (
+            <div className="mb-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 flex items-start gap-2">
+              <CalendarIcon size={15} className="text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs text-amber-300 font-semibold">Data Rapor Dimulai dari {_assessStart}</p>
+                <p className="text-[11px] text-gray-500 leading-snug mt-0.5">
+                  Siswa ini memiliki tanggal mulai kursus <strong className="text-amber-400">{_assessStart}</strong>. Absensi &amp; penilaian sebelum tanggal tersebut <strong className="text-amber-400">tidak dihitung</strong> dalam rapor ini, meski periode rapor dimulai dari {startDate}.
+                  Untuk mengubah, edit profil siswa di field <em>Tanggal Mulai Kursus</em>.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="mb-8 bg-[#151B26] p-5 rounded-xl border border-gray-800 shadow-xl">
               <h3 className="text-white font-bold mb-3 flex items-center gap-2"><MessageSquare size={18} className="text-[#00D4FF]" /> Report Teacher Comments Editor</h3>
@@ -10400,6 +10453,118 @@ function TutorsModule({ db, setDb, generateId, showToast, softDelete, cascadeDel
   );
 }
 
+// ── JOURNAL AUTO-GENERATOR ───────────────────────────────────────────────────
+// Menghasilkan Class Activities & Follow Up secara acak berdasarkan topic.
+// Setiap call menghasilkan teks berbeda agar jurnal tidak terlihat copy-paste.
+const generateJournalContent = (topic: string): { activities: string; followUp: string } => {
+  if (!topic.trim()) return { activities: '', followUp: '' };
+
+  const t = topic.trim();
+
+  // Helpers
+  const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+  const pickN = <T,>(arr: T[], n: number): T[] => {
+    const shuffled = [...arr].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, n);
+  };
+
+  // ── Komponen kalimat pembuka ──────────────────────────────────────────────
+  const openers = [
+    `The session opened with an engaging warm-up activity that helped students shift their focus into English learning mode.`,
+    `Class began with a brief review of previous material to ensure strong foundational understanding before introducing the new topic.`,
+    `The tutor kicked off the session with an interactive question-and-answer segment to activate students' prior knowledge related to the topic.`,
+    `Students were welcomed with a fun vocabulary warm-up game designed to build enthusiasm and confidence before the main lesson.`,
+    `The lesson commenced with a lively discussion prompt that immediately captured students' attention and set the stage for today's material.`,
+  ];
+
+  // ── Aktivitas inti yang bisa dikombinasi ──────────────────────────────────
+  const coreActivities = [
+    `The main focus of today's session was <TOPIC>. The tutor introduced key vocabulary and expressions related to the topic through visual aids, example sentences, and repetition drills to ensure students could recognize and use them confidently.`,
+    `Students explored the theme of <TOPIC> through a structured presentation followed by guided practice. The tutor carefully broke down each component, providing clear explanations and contextual examples to deepen comprehension.`,
+    `A thorough discussion on <TOPIC> was conducted, during which students were encouraged to ask questions, share their thoughts, and connect the material to their everyday experiences. This made the learning process more meaningful and memorable.`,
+    `The tutor facilitated an in-depth exploration of <TOPIC>, combining teacher-led instruction with student-centered activities. Key concepts were highlighted, and students practiced using new language structures in a variety of contexts.`,
+    `Today's lesson centered on <TOPIC>. Through a mix of direct instruction and collaborative activities, students had multiple opportunities to encounter, practice, and internalize the target language.`,
+  ];
+
+  // ── Aktivitas pendukung / metode ─────────────────────────────────────────
+  const supportActivities = [
+    [
+      `Role-play activities were incorporated to give students hands-on practice in using the target language naturally and spontaneously.`,
+      `Students participated in pair work exercises, taking turns using new vocabulary and sentence structures in realistic conversational contexts.`,
+      `A group discussion activity challenged students to express their opinions and ideas using the language patterns introduced during the session.`,
+    ],
+    [
+      `Listening exercises were used to reinforce comprehension and expose students to authentic use of the vocabulary covered in today's topic.`,
+      `Students engaged in a creative writing task where they applied the lesson's key language in short paragraphs or sentences of their own.`,
+      `The tutor used visual storytelling and picture prompts to help students make connections between the topic and real-life scenarios.`,
+    ],
+    [
+      `A pronunciation drill was conducted to build students' confidence in speaking clearly and accurately on the topic.`,
+      `Students practiced through a structured game that made repetition enjoyable while reinforcing the core language points of the lesson.`,
+      `Peer-to-peer interaction was encouraged through a short presentation activity where each student briefly shared their understanding of the topic.`,
+    ],
+  ];
+
+  // ── Penutup sesi ─────────────────────────────────────────────────────────
+  const closings = [
+    `The session concluded with a quick recap where students summarized what they had learned. The tutor provided positive reinforcement and constructive feedback to consolidate understanding.`,
+    `To wrap up, the class participated in a mini review quiz that tested retention of key vocabulary and concepts from the lesson. Students showed strong engagement throughout.`,
+    `The tutor closed the session with an open-ended reflection question, encouraging students to think about how they can apply today's material in real-life situations outside the classroom.`,
+    `Class ended with individual oral responses, allowing the tutor to assess each student's grasp of the topic and provide immediate, targeted feedback.`,
+    `The lesson wrapped up with a brief written response task, giving students the chance to demonstrate their understanding and practice the language skills developed throughout the session.`,
+  ];
+
+  // ── Follow Up / Notes ─────────────────────────────────────────────────────
+  const homeworkOptions = [
+    `Students are encouraged to review today's vocabulary on <TOPIC> and use at least three new words or expressions in a sentence of their own before the next session.`,
+    `As a follow-up task, students should practice speaking about <TOPIC> at home — either by recording themselves, talking to a family member in English, or writing a short reflection.`,
+    `Students are asked to find one example of <TOPIC> from a book, video, or conversation they encounter this week and be ready to share it in the next class.`,
+    `For homework, students should write 3–5 sentences related to <TOPIC> and bring them to the next session for review and discussion.`,
+    `Students are encouraged to review the lesson notes on <TOPIC> and practice using the key expressions introduced today in everyday conversations.`,
+  ];
+
+  const nextSessionNotes = [
+    `Next session will build on today's material by introducing more complex applications and extending students' ability to communicate on this topic with greater fluency.`,
+    `The tutor plans to begin the next session with a review quiz on today's topic to reinforce retention, before moving on to the next theme.`,
+    `Upcoming sessions will continue to develop students' skills related to this topic, with an emphasis on speaking fluency and accurate use of vocabulary.`,
+    `The tutor will introduce a related topic in the next session that complements what was covered today, helping students build a broader communicative repertoire.`,
+    `Next class will include a brief revision activity followed by new material that expands on the foundation established in today's lesson.`,
+  ];
+
+  const progressNotes = [
+    `Overall, students demonstrated strong participation and a positive attitude toward the material.`,
+    `Students showed good progress in their ability to engage with the topic, and the tutor notes improving confidence in using English.`,
+    `The class responded enthusiastically to today's lesson, with most students actively contributing to discussions and activities.`,
+    `Students are making consistent progress. The tutor will continue to monitor individual development and provide personalized support as needed.`,
+    `Participation was high and the learning atmosphere was positive and productive throughout the session.`,
+  ];
+
+  // ── Build Activities ──────────────────────────────────────────────────────
+  const supportGroup = pick(supportActivities);
+  const [sup1, sup2] = pickN(supportGroup, 2);
+
+  const activitiesText = [
+    pick(openers),
+    '',
+    pick(coreActivities).replace(/<TOPIC>/g, `"${t}"`),
+    '',
+    sup1,
+    sup2,
+    '',
+    pick(closings),
+  ].join('\n').trim();
+
+  // ── Build Follow Up ───────────────────────────────────────────────────────
+  const followUpText = [
+    pick(homeworkOptions).replace(/<TOPIC>/g, `"${t}"`),
+    pick(nextSessionNotes),
+    pick(progressNotes),
+  ].join(' ');
+
+  return { activities: activitiesText, followUp: followUpText };
+};
+// ── END JOURNAL AUTO-GENERATOR ───────────────────────────────────────────────
+
 function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) {
   const [formData, setFormData] = useState({ id: '', scheduleId: '', date: getTodayDateLocal(), sessionGroup: SESSIONS[0], topic: '', activities: '', followUp: '' });
   const [isAdding, setIsAdding] = useState(false);
@@ -10626,17 +10791,94 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
                 <Input label="Session" type="text" value={formData.sessionGroup} disabled />
               </div>
             )}
-            <div className="mb-4">
-              <Input label="Topic / Material" value={formData.topic} onChange={v => setFormData({...formData, topic: v})} required />
+            {/* Topic input — satu-satunya field yang diisi admin */}
+            <div className="mb-5">
+              <label className="block text-sm text-gray-400 mb-1.5 font-semibold">
+                Topic / Material <span className="text-red-400">*</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 bg-[#0B0F19] border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#00D4FF] transition-colors placeholder-gray-600"
+                  value={formData.topic}
+                  required
+                  placeholder="e.g. Greetings & Introductions, Past Tense Verbs, Animals..."
+                  onChange={e => {
+                    const newTopic = e.target.value;
+                    setFormData(prev => ({ ...prev, topic: newTopic }));
+                  }}
+                  onBlur={e => {
+                    // Auto-generate saat user selesai mengetik topic (onBlur)
+                    const val = e.target.value.trim();
+                    if (val && !formData.activities) {
+                      const gen = generateJournalContent(val);
+                      setFormData(prev => ({ ...prev, topic: val, activities: gen.activities, followUp: gen.followUp }));
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  title="Generate / Regenerate otomatis berdasarkan topic"
+                  onClick={() => {
+                    if (!formData.topic.trim()) {
+                      showToast('Isi Topic / Material terlebih dahulu', 'warning');
+                      return;
+                    }
+                    const gen = generateJournalContent(formData.topic.trim());
+                    setFormData(prev => ({ ...prev, activities: gen.activities, followUp: gen.followUp }));
+                    showToast('Journal content generated ✓', 'success');
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-lg bg-purple-500/15 border border-purple-500/40 text-purple-300 hover:bg-purple-500/25 hover:text-purple-200 transition-all text-sm font-semibold shrink-0"
+                >
+                  <RefreshCw size={14} />
+                  Generate
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-600 mt-1.5 leading-tight">
+                Ketik topik lalu klik <strong className="text-purple-400">Generate</strong> — Class Activities &amp; Follow Up akan terisi otomatis. Klik lagi untuk kata-kata berbeda.
+              </p>
             </div>
+
+            {/* Class Activities — auto-generated, bisa diedit manual */}
             <div className="mb-4">
-              <label className="block text-sm text-gray-400 mb-1.5">Class Activities <span className="text-red-400">*</span></label>
-              <textarea className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors text-sm" rows={3} value={formData.activities} onChange={e => setFormData({...formData, activities: e.target.value})} required placeholder="Describe the activities done in class..." />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm text-gray-400 font-semibold">
+                  Class Activities <span className="text-red-400">*</span>
+                </label>
+                {formData.activities && (
+                  <span className="text-[10px] text-purple-400 font-semibold flex items-center gap-1">
+                    <Zap size={9} /> Auto-generated · bisa diedit
+                  </span>
+                )}
+              </div>
+              <textarea
+                className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors text-sm leading-relaxed"
+                rows={7}
+                value={formData.activities}
+                onChange={e => setFormData({...formData, activities: e.target.value})}
+                required
+                placeholder="Klik Generate di atas untuk mengisi otomatis, atau ketik manual..."
+              />
             </div>
+
+            {/* Follow Up — auto-generated, bisa diedit manual */}
             <div className="mb-6">
-              <label className="block text-sm text-gray-400 mb-1.5">Follow Up / Notes</label>
-              <textarea className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors text-sm" rows={2} value={formData.followUp} onChange={e => setFormData({...formData, followUp: e.target.value})} placeholder="Homework, special notes, or plans for the next session..." />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm text-gray-400 font-semibold">Follow Up / Notes</label>
+                {formData.followUp && (
+                  <span className="text-[10px] text-purple-400 font-semibold flex items-center gap-1">
+                    <Zap size={9} /> Auto-generated · bisa diedit
+                  </span>
+                )}
+              </div>
+              <textarea
+                className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-3 text-white focus:border-[#00D4FF] focus:outline-none transition-colors text-sm leading-relaxed"
+                rows={4}
+                value={formData.followUp}
+                onChange={e => setFormData({...formData, followUp: e.target.value})}
+                placeholder="Klik Generate di atas untuk mengisi otomatis, atau ketik manual..."
+              />
             </div>
+
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
               <Button variant="secondary" onClick={() => setIsAdding(false)}>Cancel</Button>
               <Button type="submit" icon={formData.id ? Edit2 : Plus}>{formData.id ? 'Update Journal' : 'Save Journal'}</Button>
