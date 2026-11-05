@@ -965,7 +965,7 @@ const Button = ({
   disabled = false,
 }: any) => {
   const baseStyle =
-    'flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed';
+    'flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed select-none';
   const variants = {
     primary:
       'bg-[#00D4FF] text-[#0B0F19] hover:bg-[#00b8e6] shadow-[0_0_15px_rgba(0,212,255,0.3)]',
@@ -1002,7 +1002,7 @@ const Input = ({
   max,
 }: any) => {
   const baseClass =
-    'w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all disabled:opacity-50';
+    'w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-3 text-base text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all disabled:opacity-50';
   return (
     <div className={`w-full ${className}`}>
       {label && (
@@ -1126,15 +1126,15 @@ const NewBadge = ({ isNew, billingStartMonth = null }: { isNew?: string, billing
 const CustomModal = ({ isOpen, onClose, title, children, zIndexClass = 'z-50' }) => {
   if (!isOpen) return null;
   return (
-    <div className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animation-fade-in print:hidden`}>
-      <div className="bg-[#151B26] border border-gray-700 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#0A0E17]">
+    <div className={`fixed inset-0 ${zIndexClass} flex sm:items-center items-end justify-center sm:p-4 bg-black/60 backdrop-blur-sm animation-fade-in print:hidden`}>
+      <div className="bg-[#151B26] border border-gray-700 rounded-t-2xl sm:rounded-xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-env(keyboard-inset-height,0px)-4rem)] sm:max-h-[90vh]">
+        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#0A0E17] shrink-0">
           <h3 className="text-lg font-bold text-white">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <button onClick={onClose} className="text-gray-400 hover:text-white p-1 min-h-[44px] min-w-[44px] flex items-center justify-center">
             <X size={20} />
           </button>
         </div>
-        <div className="p-5 pb-8 overflow-y-auto">{children}</div>
+        <div className="p-5 pb-safe overflow-y-auto" style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom, 0px))' }}>{children}</div>
       </div>
     </div>
   );
@@ -1433,7 +1433,7 @@ function LoginScreen({ onLogin, isDbLoaded = true, language = 'en', setLanguage 
 }
 
 const KPICard = ({ title, value, subtext, icon: Icon, colorClass, onClick }: any) => (
-    <Card onClick={onClick} className="cursor-pointer hover:-translate-y-1 transition-transform border-t-4 border-t-[#00D4FF] h-full">
+    <Card onClick={onClick} className="cursor-pointer active:scale-95 transition-transform border-t-4 border-t-[#00D4FF] h-full">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-gray-400 text-xs sm:text-sm font-medium mb-1 truncate" title={title}>{title}</p>
@@ -1953,13 +1953,13 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
            </div>
 
            <div className="relative z-10 w-full md:w-auto flex flex-row md:flex-col gap-2 min-w-[180px]">
-              <Button onClick={() => setActiveTab('calendar')} className="flex-1 md:flex-none w-full min-h-[42px] shadow-[0_0_20px_rgba(0,212,255,0.25)] text-sm font-bold rounded-xl hover:scale-105 transition-transform" icon={CalendarIcon}>{language === 'id' ? 'Gabung Kelas' : 'Join Class'}</Button>
+              <Button onClick={() => setActiveTab('calendar')} className="flex-1 md:flex-none w-full min-h-[42px] shadow-[0_0_20px_rgba(0,212,255,0.25)] text-sm font-bold rounded-xl active:scale-95 transition-transform" icon={CalendarIcon}>{language === 'id' ? 'Gabung Kelas' : 'Join Class'}</Button>
               <Button onClick={() => setActiveTab('my_assessments')} variant="secondary" className="flex-1 md:flex-none w-full min-h-[42px] text-sm font-bold rounded-xl border-[#00D4FF]/30 hover:bg-[#00D4FF]/10 text-[#00D4FF]" icon={FileText}>{language === 'id' ? 'Lihat Tugas' : 'View Assignments'}</Button>
            </div>
         </div>
 
         {/* QUICK STATS CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
            <KPICard title={language === 'id' ? 'Kehadiran' : 'Attendance'} value={`${attRateThisMonth}%`} subtext={`${presentThisMonth} ${language === 'id' ? 'sesi dihadiri' : 'sessions attended'}`} icon={UserCheck} colorClass={attRateThisMonth >= 80 ? "bg-emerald-500" : "bg-amber-500"} onClick={() => setActiveTab('my_attendance')} />
            <KPICard title={language === 'id' ? 'Tugas' : 'Assignments'} value={pendingAss} subtext={pendingAss > 0 ? (language === 'id' ? "Batas waktu bulan ini" : "Due this month") : (language === 'id' ? "Semua selesai!" : "All caught up!")} icon={CheckSquare} colorClass={pendingAss === 0 ? "bg-emerald-500" : "bg-rose-500"} onClick={() => setActiveTab('my_assessments')} />
            <KPICard title={language === 'id' ? 'Jurnal Belajar' : 'Learning Journal'} value={journalEntriesThisMonth} subtext={language === 'id' ? 'Total entri' : "Total entries"} icon={BookOpen} colorClass="bg-purple-500" onClick={() => setActiveTab('my_journals')} />
@@ -1972,7 +1972,7 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><Activity size={22} className="text-[#00D4FF]" /> {language === 'id' ? 'Activities Hari Ini' : "Today's Activity"}</h3>
            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {/* Next Class */}
-              <Card className="bg-[#151B26]/80 backdrop-blur-md border-t-4 border-t-emerald-400 p-4 sm:p-5 hover:-translate-y-1 transition-transform shadow-lg flex flex-col">
+              <Card className="bg-[#151B26]/80 backdrop-blur-md border-t-4 border-t-emerald-400 p-4 sm:p-5 active:scale-95 transition-transform shadow-lg flex flex-col">
                  <div className="flex justify-between items-start mb-4">
                     <div className="p-2.5 bg-emerald-500/10 rounded-xl"><CalendarIcon size={22} className="text-emerald-400"/></div>
                     <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full uppercase tracking-widest">{language === 'id' ? 'Selanjutnya' : 'Up Next'}</span>
@@ -1983,7 +1983,7 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
               </Card>
 
               {/* Assignments Due */}
-              <Card className="bg-[#151B26]/80 backdrop-blur-md border-t-4 border-t-rose-400 p-4 sm:p-5 hover:-translate-y-1 transition-transform shadow-lg flex flex-col">
+              <Card className="bg-[#151B26]/80 backdrop-blur-md border-t-4 border-t-rose-400 p-4 sm:p-5 active:scale-95 transition-transform shadow-lg flex flex-col">
                  <div className="flex justify-between items-start mb-4">
                     <div className="p-2.5 bg-rose-500/10 rounded-xl"><CheckSquare size={22} className="text-rose-400"/></div>
                     {pendingAss > 0 && <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full uppercase tracking-widest">{language === 'id' ? 'Perlu Tindakan' : 'Action Needed'}</span>}
@@ -1994,7 +1994,7 @@ const StudentDashboard = ({ db, user, setActiveTab, today, isCloudConnected, lan
               </Card>
 
               {/* Journal Reminder */}
-              <Card className="bg-[#151B26]/80 backdrop-blur-md border-t-4 border-t-purple-400 p-4 sm:p-5 hover:-translate-y-1 transition-transform shadow-lg flex flex-col">
+              <Card className="bg-[#151B26]/80 backdrop-blur-md border-t-4 border-t-purple-400 p-4 sm:p-5 active:scale-95 transition-transform shadow-lg flex flex-col">
                  <div className="flex justify-between items-start mb-4">
                     <div className="p-2.5 bg-purple-500/10 rounded-xl"><BookOpen size={22} className="text-purple-400"/></div>
                  </div>
@@ -2169,7 +2169,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
 
       {/* Total Revenue Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-         <Card className="bg-gradient-to-br from-amber-500/10 to-[#151B26] border-amber-500/20 hover:-translate-y-1 transition-transform cursor-pointer p-5 sm:p-6" onClick={() => setActiveTab('payments')}>
+         <Card className="bg-gradient-to-br from-amber-500/10 to-[#151B26] border-amber-500/20 active:scale-95 transition-transform cursor-pointer p-5 sm:p-6" onClick={() => setActiveTab('payments')}>
            <div className="flex items-center gap-4">
               <div className="p-3 sm:p-4 bg-amber-500/20 rounded-xl shrink-0"><DollarSign size={24} className="text-amber-400"/></div>
               <div className="min-w-0 flex-1">
@@ -2179,7 +2179,7 @@ const AdminDashboard = ({ db, setDb, user, setActiveTab, today, isCloudConnected
               </div>
            </div>
          </Card>
-         <Card className="bg-gradient-to-br from-blue-500/10 to-[#151B26] border-blue-500/20 hover:-translate-y-1 transition-transform cursor-pointer p-5 sm:p-6" onClick={() => setActiveTab('payments')}>
+         <Card className="bg-gradient-to-br from-blue-500/10 to-[#151B26] border-blue-500/20 active:scale-95 transition-transform cursor-pointer p-5 sm:p-6" onClick={() => setActiveTab('payments')}>
            <div className="flex items-center gap-4">
               <div className="p-3 sm:p-4 bg-blue-500/20 rounded-xl shrink-0"><CheckCircle2 size={24} className="text-blue-400"/></div>
               <div className="min-w-0 flex-1">
@@ -3197,13 +3197,15 @@ function MainApp() {
   });
   
   const [isSidebarOpen, setSidebarOpen] = useState(true);
+  // Fix 2: Tab history stack untuk tombol Back yang benar (bukan selalu ke dashboard)
+  const tabHistoryRef = useRef<string[]>([]);
 
   useEffect(() => {
     if (currentUser && !currentUser.mustChangePassword) {
       setSidebarOpen(true);
     }
   }, [currentUser?.mustChangePassword]);
-  const [toast, setToast] = useState(null);
+  // Fix 3: toast state dihapus — diganti sonner sepenuhnya
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const [isDbLoaded, setIsDbLoaded] = useState(false);
@@ -3308,8 +3310,7 @@ function MainApp() {
 
   // NEW: Ref untuk timer double-click tombol back (Exit App)
   const exitToastTimeout = useRef(null);
-  // PERBAIKAN: Ref untuk memastikan Toast notifikasi tidak bertabrakan hilangnya
-  const toastTimeoutRef = useRef(null);
+  // Fix 3: toastTimeoutRef dihapus — sudah tidak dibutuhkan setelah migrasi ke sonner
   // NEW: Ref untuk debounce sync ke cloud (mencegah race condition saat input beruntun)
   const syncDebounceTimer = useRef(null);
   // PATCH: daftar operasi delete yang harus dikomit ke Spreadsheet.
@@ -3607,17 +3608,14 @@ function MainApp() {
        }
     }
 
-    // Bersihkan timer lama jika ada notifikasi baru yang masuk
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    
-    // PERBAIKAN: Tambahkan ID unik (Date.now()) agar React memaksa memuat ulang animasi UI-nya
-    setToast({ id: Date.now(), msg: finalMsg, type });
-    
-    // Mulai timer baru
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast(null);
-      toastTimeoutRef.current = null;
-    }, 3000);
+    // Fix 3: Unifikasi ke sonner — hapus custom toast state
+    if (type === 'error') {
+      sonnerToast.error(finalMsg);
+    } else if (type === 'warning') {
+      sonnerToast.warning(finalMsg);
+    } else {
+      sonnerToast.success(finalMsg);
+    }
   };
 
   // =====================================================================
@@ -3662,20 +3660,13 @@ function MainApp() {
           setActiveTab('dashboard');
           window.location.hash = '';
           
-          if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-          setToast(null);
           return;
         } else {
           // KETUKAN PERTAMA: Tahan di dashboard dan munculkan peringatan
           // (PushState mengembalikan posisi URL ke dashboard untuk membatalkan back default)
           window.history.pushState(null, '', '#dashboard');
           
-          if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-          setToast({ id: Date.now(), msg: 'Press back again to exit', type: 'warning' });
-          toastTimeoutRef.current = setTimeout(() => {
-            setToast(null);
-            toastTimeoutRef.current = null;
-          }, 3000);
+          sonnerToast.warning(language === 'id' ? 'Tekan kembali lagi untuk keluar' : 'Press back again to exit');
           
           exitToastTimeout.current = setTimeout(() => {
             exitToastTimeout.current = null;
@@ -5055,6 +5046,26 @@ function MainApp() {
     return counts;
   }, [currentUser, db]);
 
+  // Fix 2: navigateTo — push ke history lalu pindah tab
+  const navigateTo = (tabId: string) => {
+    if (tabId !== activeTab) {
+      tabHistoryRef.current = [...tabHistoryRef.current, activeTab];
+    }
+    setActiveTab(tabId);
+  };
+
+  // Fix 2: goBack — pop history atau fallback ke dashboard
+  const goBack = () => {
+    const history = tabHistoryRef.current;
+    if (history.length > 0) {
+      const prev = history[history.length - 1];
+      tabHistoryRef.current = history.slice(0, -1);
+      setActiveTab(prev);
+    } else {
+      setActiveTab('dashboard');
+    }
+  };
+
   if (!currentUser) return <LoginScreen onLogin={handleLogin} isDbLoaded={isDbLoaded} language={language} setLanguage={setLanguage} />;
 
   // FORCE PASSWORD CHANGE JIKA DIMINTA
@@ -5063,34 +5074,43 @@ function MainApp() {
   }
 
   // NAVIGATION: Menambahkan akses menu khusus student
+  // group: label section di sidebar (null = tidak ada divider di atas item ini)
   const NAVIGATION = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'tutor', 'student'] },
-    { id: 'announcements', label: 'Announcements', icon: Bell, roles: ['admin', 'tutor', 'student'] },
-    { id: 'students', label: 'Students Directory', icon: Users, roles: ['admin', 'tutor'] },
-    { id: 'tutors', label: 'Tutors Directory', icon: Briefcase, roles: ['admin'] },
-    { id: 'calendar', label: 'Academic Calendar', icon: CalendarIcon, roles: ['admin', 'tutor', 'student'] },
-    { id: 'tutor_attendance', label: 'Tutor Check-In', icon: Activity, roles: ['admin', 'tutor'] },
-    { id: 'student_attendance', label: 'Student Attendance', icon: UserCheck, roles: ['admin', 'tutor'] },
-    { id: 'my_attendance', label: 'My Attendance', icon: UserCheck, roles: ['student'] }, // Khusus Student
-    { id: 'journals', label: 'Learning Journals', icon: BookOpen, roles: ['admin', 'tutor'] },
-    { id: 'my_journals', label: 'My Learning Journal', icon: BookOpen, roles: ['student'] }, // Khusus Student
-    { id: 'materials', label: 'Materials & Tasks', icon: LinkIcon, roles: ['admin', 'tutor'] },
-    { id: 'my_materials', label: 'My Materials', icon: LinkIcon, roles: ['student'] }, // Khusus Student
-    { id: 'speaking_challenge', label: 'Daily Speaking', icon: Mic, roles: ['admin', 'tutor', 'student'] }, // Daily Challenge (All Roles)
-    { id: 'my_quests', label: 'My Quests & Badges', icon: Trophy, roles: ['student'] }, // Gamifikasi Khusus Student
-    { id: 'assessments', label: 'Monthly Assessment', icon: CheckSquare, roles: ['admin', 'tutor'] },
-    { id: 'my_assessments', label: 'My Assessment', icon: Award, roles: ['student'] }, // Khusus Student
-    { id: 'payments', label: 'Payments', icon: DollarSign, roles: ['admin'] },
-    { id: 'billing_recap', label: 'Billing Recap', icon: Inbox, roles: ['admin'] },
-    { id: 'my_payments', label: 'My Payment Status', icon: DollarSign, roles: ['student'] }, // Khusus Student
-    { id: 'payroll', label: 'Payroll', icon: FileText, roles: ['admin'] },
-    { id: 'history', label: 'History & Reports', icon: BarChart3, roles: ['admin', 'tutor'] },
-    { id: 'my_report', label: 'My Academic Report', icon: FileText, roles: ['student'] }, // Rapor Khusus Student
-    { id: 'settings', label: 'User Management', icon: Settings, roles: ['admin'] },
-    { id: 'account_settings', label: 'My Profile', icon: User, roles: ['tutor', 'student'] }, // Tutor & Student ganti pass
-    { id: 'system_logs', label: 'System Logs', icon: Terminal, roles: ['admin'] },
-    { id: 'recycle_bin', label: 'Recycle Bin', icon: ArchiveRestore, roles: ['admin'] },
-    { id: 'export', label: 'Data Export', icon: Database, roles: ['admin'] },
+    { id: 'dashboard',          label: 'Dashboard',           icon: LayoutDashboard, roles: ['admin', 'tutor', 'student'], group: null },
+    { id: 'announcements',      label: 'Announcements',       icon: Bell,            roles: ['admin', 'tutor', 'student'], group: null },
+
+    // ── AKADEMIK ──
+    { id: 'students',           label: 'Students Directory',  icon: Users,           roles: ['admin', 'tutor'],           group: 'Academic' },
+    { id: 'tutors',             label: 'Tutors Directory',    icon: Briefcase,       roles: ['admin'],                    group: null },
+    { id: 'calendar',           label: 'Academic Calendar',   icon: CalendarIcon,    roles: ['admin', 'tutor', 'student'], group: null },
+    { id: 'tutor_attendance',   label: 'Tutor Check-In',      icon: Activity,        roles: ['admin', 'tutor'],           group: null },
+    { id: 'student_attendance', label: 'Student Attendance',  icon: UserCheck,       roles: ['admin', 'tutor'],           group: null },
+    { id: 'my_attendance',      label: 'My Attendance',       icon: UserCheck,       roles: ['student'],                  group: null },
+    { id: 'journals',           label: 'Learning Journals',   icon: BookOpen,        roles: ['admin', 'tutor'],           group: null },
+    { id: 'my_journals',        label: 'My Learning Journal', icon: BookOpen,        roles: ['student'],                  group: null },
+    { id: 'materials',          label: 'Materials & Tasks',   icon: LinkIcon,        roles: ['admin', 'tutor'],           group: null },
+    { id: 'my_materials',       label: 'My Materials',        icon: LinkIcon,        roles: ['student'],                  group: null },
+    { id: 'speaking_challenge', label: 'Daily Speaking',      icon: Mic,             roles: ['admin', 'tutor', 'student'], group: null },
+    { id: 'my_quests',          label: 'My Quests & Badges',  icon: Trophy,          roles: ['student'],                  group: null },
+    { id: 'assessments',        label: 'Monthly Assessment',  icon: CheckSquare,     roles: ['admin', 'tutor'],           group: null },
+    { id: 'my_assessments',     label: 'My Assessment',       icon: Award,           roles: ['student'],                  group: null },
+    { id: 'my_report',          label: 'My Academic Report',  icon: FileText,        roles: ['student'],                  group: null },
+
+    // ── KEUANGAN ──
+    { id: 'payments',           label: 'Payments',            icon: DollarSign,      roles: ['admin'],                    group: 'Finance' },
+    { id: 'billing_recap',      label: 'Billing Recap',       icon: Inbox,           roles: ['admin'],                    group: null },
+    { id: 'my_payments',        label: 'My Payment Status',   icon: DollarSign,      roles: ['student'],                  group: 'Finance' },
+    { id: 'payroll',            label: 'Payroll',             icon: FileText,        roles: ['admin'],                    group: null },
+
+    // ── LAPORAN ──
+    { id: 'history',            label: 'History & Reports',   icon: BarChart3,       roles: ['admin', 'tutor'],           group: 'Reports' },
+
+    // ── ADMIN ──
+    { id: 'settings',           label: 'User Management',     icon: Settings,        roles: ['admin'],                    group: 'Admin' },
+    { id: 'account_settings',   label: 'My Profile',          icon: User,            roles: ['tutor', 'student'],         group: 'Admin' },
+    { id: 'system_logs',        label: 'System Logs',         icon: Terminal,        roles: ['admin'],                    group: null },
+    { id: 'recycle_bin',        label: 'Recycle Bin',         icon: ArchiveRestore,  roles: ['admin'],                    group: null },
+    { id: 'export',             label: 'Data Export',         icon: Database,        roles: ['admin'],                    group: null },
   ];
 
   const renderContent = () => {
@@ -5240,15 +5260,6 @@ function MainApp() {
         }}
       />
 
-      {toast && (
-        <div key={toast.id} className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-2xl flex items-center gap-2 animation-fade-in print:hidden ${
-            toast.type === 'error' ? 'bg-red-500' : toast.type === 'warning' ? 'bg-yellow-500 text-[#0B0F19]' : 'bg-[#00D4FF] text-[#0B0F19] font-semibold'
-        }`}>
-          {toast.type === 'error' ? <XCircle size={20} /> : toast.type === 'warning' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
-          {toast.msg}
-        </div>
-      )}
-
       <CustomModal isOpen={!!logoutConfirm} onClose={() => setLogoutConfirm(false)} title={language === 'id' ? 'Keluar' : 'Log Out'}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center border border-red-500/20 flex-shrink-0">
@@ -5269,6 +5280,15 @@ function MainApp() {
           <Button className="bg-red-500 hover:bg-red-600 text-white border-none shadow-none" onClick={confirmDialog?.onConfirm}>Confirm</Button>
         </div>
       </CustomModal>
+
+      {/* Sidebar backdrop — tap outside to close on mobile */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden print:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <div className={`fixed inset-y-0 left-0 z-40 w-64 bg-[#0A0E17] border-r border-gray-800 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 print:hidden flex flex-col`}>
         <div className="p-6 flex items-center justify-between">
@@ -5310,22 +5330,49 @@ function MainApp() {
               'Recycle Bin': 'Tempat Sampah'
             };
             const getNavLabel = (label) => language === 'en' ? label : (NAV_LABEL_DICT_ID[label] || label);
-            return NAVIGATION.filter((nav) => nav.roles.includes(currentUser.role)).map((nav) => {
+            const NAV_GROUP_LABEL_ID = { Academic: 'Akademik', Finance: 'Keuangan', Reports: 'Laporan', Admin: 'Admin' };
+            const getGroupLabel = (g) => language === 'en' ? g : (NAV_GROUP_LABEL_ID[g] || g);
+            const filteredNav = NAVIGATION.filter((nav) => nav.roles.includes(currentUser.role));
+            return filteredNav.map((nav, idx) => {
             const badge = badgeCounts[nav.id] || 0;
+            // Fix 1: Tampilkan divider + label group jika item pertama dalam group baru
+            const prevNav = filteredNav[idx - 1];
+            const showGroupDivider = nav.group && (!prevNav || prevNav.group !== nav.group);
 
             return (
+              <React.Fragment key={nav.id}>
+                {showGroupDivider && (
+                  <div className="px-4 pt-4 pb-1">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-600">
+                      {getGroupLabel(nav.group)}
+                    </span>
+                    <div className="h-px bg-gray-800 mt-1" />
+                  </div>
+                )}
               <button
                 key={nav.id}
                 onClick={() => {
                   if (moduleDirtyRef.current && nav.id !== activeTab) {
-                    if (!window.confirm('You have unsaved attendance data. Leave this page?\n\nUnsaved changes will be lost.')) return;
-                    moduleDirtyRef.current = false;
+                    requestConfirm(
+                      language === 'id' ? 'Data Belum Tersimpan' : 'Unsaved Changes',
+                      language === 'id'
+                        ? 'Ada data absensi yang belum disimpan. Yakin ingin meninggalkan halaman ini? Perubahan akan hilang.'
+                        : 'You have unsaved attendance data. Leave this page? Unsaved changes will be lost.',
+                      () => {
+                        moduleDirtyRef.current = false;
+                        navigateTo(nav.id);
+                        if (window.innerWidth < 768) setSidebarOpen(false);
+                      }
+                    );
+                    return;
                   }
-                  setActiveTab(nav.id);
+                  navigateTo(nav.id);
                   if (window.innerWidth < 768) setSidebarOpen(false);
                 }}
-                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-colors ${
-                  activeTab === nav.id ? 'bg-[#151B26] text-[#00D4FF] border-l-2 border-[#00D4FF] shadow-[inset_0_0_15px_rgba(0,212,255,0.05)]' : 'text-gray-400 hover:bg-[#151B26] hover:text-white'
+                className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all ${
+                  activeTab === nav.id
+                    ? 'bg-[#00D4FF]/10 text-[#00D4FF] border-l-4 border-[#00D4FF] shadow-[inset_0_0_20px_rgba(0,212,255,0.08)] font-semibold'
+                    : 'text-gray-400 hover:bg-[#151B26] hover:text-white border-l-4 border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -5338,6 +5385,7 @@ function MainApp() {
                   </span>
                 )}
               </button>
+              </React.Fragment>
             );
           });
           })()}
@@ -5354,10 +5402,10 @@ function MainApp() {
           {/* ── CONNECTION MONITOR PANEL ── */}
           <div className="mb-3">
             <button
-              onClick={() => setActiveTab('connection-monitor')}
+              onClick={() => navigateTo('connection-monitor')}
               className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors text-xs font-bold ${
                 activeTab === 'connection-monitor'
-                  ? 'bg-[#151B26] text-[#00D4FF] border-l-2 border-[#00D4FF]'
+                  ? 'bg-[#151B26] text-[#00D4FF] border-l-4 border-[#00D4FF]'
                   : isCloudConnected ? 'text-emerald-400 hover:bg-[#151B26]' : 'text-red-400 hover:bg-[#151B26] animate-pulse'
               }`}
             >
@@ -5375,10 +5423,6 @@ function MainApp() {
             </button>
           </div>
 
-          <Button variant="ghost" className="w-full justify-start text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors mb-2" icon={RefreshCw} onClick={refreshBeforeEdit}>
-            {language === 'id' ? 'Sinkronkan Data' : 'Sync Data'}
-          </Button>
-          
           <div className="relative mb-4">
              <button 
                 onClick={() => setShowAccountMenu(!showAccountMenu)} 
@@ -5436,7 +5480,9 @@ function MainApp() {
         </div>
       </div>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-20 md:pt-12 relative custom-scrollbar">
+      {/* pt-16 = kompensasi mobile sticky header h-16 (64px); md:pt-12 untuk desktop */}
+      {/* pb-20 md:pb-0 = kompensasi bottom nav student di mobile */}
+      <main className={`flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-12 relative custom-scrollbar ${currentUser?.role === 'student' ? 'pb-20 md:pb-0' : ''}`}>
           
           {/* DESKTOP CLOUD AUTO-SAVE INDICATOR */}
           <div className="hidden md:flex absolute top-6 right-8 z-50 print:hidden pointer-events-none">
@@ -5451,16 +5497,42 @@ function MainApp() {
                    <span className="font-bold text-sm text-[#00D4FF] tracking-wide uppercase">{language === 'id' ? 'Menu Utama' : 'Main Menu'}</span>
                 </button>
              ) : (
-                <button onClick={() => setActiveTab('dashboard')} className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors flex items-center gap-2">
+                <button onClick={goBack} className="p-2 -ml-2 text-gray-400 hover:text-white transition-colors flex items-center gap-2 min-h-[44px]">
                    <ArrowLeft size={22} />
                    <span className="text-sm font-bold tracking-wide">{language === 'id' ? 'Kembali' : 'Back'}</span>
                 </button>
              )}
+
+             {/* CENTER: Active page title */}
+             {activeTab !== 'dashboard' && (() => {
+               const NAV_LABEL_DICT_ID_HDR = {
+                 'Announcements': 'Pengumuman', 'Students Directory': 'Direktori Siswa',
+                 'Tutors Directory': 'Direktori Tutor', 'Academic Calendar': 'Kalender Akademik',
+                 'Tutor Check-In': 'Absensi Tutor', 'Student Attendance': 'Kehadiran Siswa',
+                 'My Attendance': 'Kehadiran Saya', 'Learning Journals': 'Jurnal Belajar',
+                 'My Learning Journal': 'Jurnal Belajar', 'Monthly Assessment': 'Penilaian Bulanan',
+                 'My Assessment': 'Penilaian Saya', 'Materials & Tasks': 'Materi & Tugas',
+                 'My Materials': 'Materi Saya', 'Daily Speaking': 'Tantangan Harian',
+                 'My Quests & Badges': 'Misi & Lencana', 'My Academic Report': 'Rapor Akademik',
+                 'Payments': 'Pembayaran', 'My Payment Status': 'Status Pembayaran',
+                 'Payroll': 'Penggajian', 'History & Reports': 'Riwayat & Laporan',
+                 'User Management': 'Manajemen Pengguna', 'My Profile': 'Profil Saya',
+                 'System Logs': 'Log Sistem', 'Recycle Bin': 'Tempat Sampah',
+               };
+               const navItem = NAVIGATION.find(n => n.id === activeTab);
+               const rawLabel = navItem?.label || '';
+               const label = language === 'en' ? rawLabel : (NAV_LABEL_DICT_ID_HDR[rawLabel] || rawLabel);
+               return (
+                 <span className="absolute left-1/2 -translate-x-1/2 text-sm font-bold text-white truncate max-w-[40%] pointer-events-none">
+                   {label}
+                 </span>
+               );
+             })()}
              
              {/* KANAN: Sync Indicator & Refresh Button */}
              <div className="flex items-center gap-2">
                 <CloudAutoSaveIndicator status={syncStatus} language={language} lastSyncedAt={lastSyncedAt} lastSavedLabel={lastSavedLabel} onRetry={refreshBeforeEdit} />
-                <button onClick={refreshBeforeEdit} className="p-2 text-blue-400 hover:text-blue-300 transition-colors" title="Sync Data">
+                <button onClick={refreshBeforeEdit} className="p-2 text-blue-400 hover:text-blue-300 transition-colors min-h-[44px]" title="Sync Data">
                    <RefreshCw size={20} />
                 </button>
              </div>
@@ -5468,17 +5540,14 @@ function MainApp() {
 
           {/* DESKTOP BACK BUTTON (Only when not on dashboard) */}
           {activeTab !== 'dashboard' && (
-            <div className="hidden md:flex sticky top-[-32px] z-40 bg-[#0B0F19]/95 backdrop-blur-md pt-8 pb-4 -mt-8 mb-6 border-b border-gray-800/80 print:hidden w-full max-w-7xl mx-auto justify-between items-center">
+            <div className="hidden md:flex sticky top-[-32px] z-40 bg-[#0B0F19]/95 backdrop-blur-md pt-8 pb-4 -mt-8 mb-6 border-b border-gray-800/80 print:hidden w-full max-w-7xl mx-auto justify-start items-center">
               <Button
                 variant="secondary"
-                onClick={() => setActiveTab('dashboard')}
+                onClick={goBack}
                 icon={ArrowLeft}
                 className="w-auto min-h-[44px] flex items-center justify-center bg-[#151B26] hover:bg-[#1E293B] border border-gray-700 hover:border-[#00D4FF]/60 text-gray-200 hover:text-white transition-all shadow-md rounded-xl px-6 font-semibold tracking-wide"
               >
-                {language === 'id' ? 'Kembali ke Beranda' : 'Back to Dashboard'}
-              </Button>
-              <Button onClick={refreshBeforeEdit} variant="secondary" icon={RefreshCw} className="border-blue-500/30 hover:border-blue-500 hover:bg-blue-500/10 text-blue-400 shadow-md">
-                {language === 'id' ? 'Sinkronkan Data' : 'Sync Latest Data'}
+                {language === 'id' ? 'Kembali' : 'Back'}
               </Button>
             </div>
           )}
@@ -5487,6 +5556,41 @@ function MainApp() {
             {renderContent()}
           </div>
         </main>
+
+        {/* BOTTOM NAVIGATION — student role only, mobile only */}
+        {currentUser?.role === 'student' && (
+          <nav
+            className="fixed bottom-0 left-0 right-0 z-30 md:hidden print:hidden bg-[#0A0E17]/95 backdrop-blur-xl border-t border-gray-800/80 shadow-[0_-4px_24px_rgba(0,0,0,0.4)]"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          >
+            <div className="flex items-stretch justify-around h-16">
+              {[
+                { id: 'dashboard',    icon: LayoutDashboard, labelEn: 'Home',      labelId: 'Beranda'  },
+                { id: 'calendar',     icon: CalendarIcon,    labelEn: 'Calendar',  labelId: 'Jadwal'   },
+                { id: 'my_materials', icon: LinkIcon,        labelEn: 'Materials', labelId: 'Materi'   },
+                { id: 'my_quests',    icon: Trophy,          labelEn: 'Quests',    labelId: 'Misi'     },
+                { id: 'account_settings', icon: User,        labelEn: 'Profile',   labelId: 'Profil'   },
+              ].map(({ id, icon: NavIcon, labelEn, labelId }) => {
+                const isActive = activeTab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => navigateTo(id)}
+                    className={`flex flex-col items-center justify-center flex-1 gap-0.5 min-h-[56px] select-none active:scale-95 transition-transform ${
+                      isActive ? 'text-[#00D4FF]' : 'text-gray-500'
+                    }`}
+                  >
+                    <NavIcon size={22} className={isActive ? 'drop-shadow-[0_0_6px_rgba(0,212,255,0.6)]' : ''} />
+                    <span className={`text-[10px] font-bold tracking-wide ${isActive ? 'text-[#00D4FF]' : 'text-gray-500'}`}>
+                      {language === 'id' ? labelId : labelEn}
+                    </span>
+                    {isActive && <span className="absolute bottom-0 w-6 h-0.5 bg-[#00D4FF] rounded-full" />}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        )}
       </div>
   );
 }
@@ -7440,7 +7544,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
       {viewingStudentId && !selectedInvoice && (
         <CustomModal isOpen={true} onClose={() => setViewingStudentId(null)} title={`Receipts for ${activeStudents.find(s => s.id === viewingStudentId)?.name || 'Student'}`}>
            <div className="space-y-4">
-              <table className="w-full text-left text-sm">
+              <div className="overflow-x-auto -mx-1 custom-scrollbar"><table className="w-full text-left text-sm">
                  <thead className="bg-[#0B0F19] border-b border-gray-800 text-gray-400 uppercase tracking-wider text-[11px] font-bold">
                     <tr>
                        <th className="p-3 text-center w-12 text-gray-400">No.</th>
@@ -7464,7 +7568,7 @@ function PaymentsModule({ db, setDb, generateId, showToast, handlePrint, handleS
                        </tr>
                     ))}
                  </tbody>
-              </table>
+              </table></div>
            </div>
         </CustomModal>
       )}
@@ -9220,7 +9324,7 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en', downloadPNG
                     {[
                       { label: 'Bank',         value: 'BNI (Bank Negara Indonesia)', bold: true,  color: '#1e293b', size: '13px' },
                       { label: 'Account No.',  value: '0951837774',                  bold: true,  color: '#0f172a', size: '16px' },
-                      { label: 'Account Name', value: 'Akhmad Akma Rifqi',           bold: true,  color: '#1e293b', size: '13px' },
+                      { label: 'Account Name', value: 'Akhmad Akmal Rifqi',           bold: true,  color: '#1e293b', size: '13px' },
                     ].map(({ label, value, bold, color, size }) => (
                       <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                         <span style={{ fontSize: '12px', color: '#64748b' }}>{label}</span>
@@ -11350,7 +11454,7 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
              <input type="number" className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-[#00D4FF] focus:ring-1 focus:ring-[#00D4FF] transition-all" value={year} onChange={e => setYear(Number(e.target.value))} />
            </div>
          </div>
-         <table className="w-full text-left text-sm">
+         <div className="overflow-x-auto -mx-4 px-4 custom-scrollbar"><table className="w-full text-left text-sm">
             <thead className="bg-[#0B0F19] border-b border-gray-800 text-gray-400 uppercase tracking-wider text-[11px] font-bold">
                <tr>
                   <th className="p-4 text-center w-12 text-gray-400">No.</th>
@@ -11415,7 +11519,7 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
                ))}
                {paginatedPayroll.length === 0 && <tr><td colSpan={9}><EmptyState icon={DollarSign} title="No payroll generated" description="No payroll records for this month yet." /></td></tr>}
             </tbody>
-         </table>
+         </table></div>
          {/* Pagination Footer */}
          <div className="p-4 bg-[#0A0E17] border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-400">
              <div className="flex items-center gap-2">
@@ -11445,6 +11549,102 @@ function PayrollModule({ db, setDb, generateId, showToast, handlePrint, handleSh
 function CalendarModule({ db, setDb, generateId, user, showToast, softDelete }) {
   const [formData, setFormData] = useState({ id: '', date: getTodayDateLocal(), startTime: '15:00', endTime: '16:30', sessionGroup: SESSIONS[0], tutor: '', type: 'Regular Class', notes: '' });
   const [isAdding, setIsAdding] = useState(false);
+
+  // ── COPY FROM PREVIOUS MONTH ──────────────────────────────────────────────
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copyPreview, setCopyPreview] = useState<any[]>([]);
+  const [copySkipped, setCopySkipped] = useState<any[]>([]);
+
+  // Kembalikan tanggal (YYYY-MM-DD) di bulan `year`/`month` yang jatuh pada
+  // hari yang sama DAN minggu ke-N yang sama dengan `srcDate`.
+  // Misal: Sabtu ke-2 Oktober → Sabtu ke-2 November.
+  // Kembalikan null kalau minggu ke-N tidak ada di bulan tujuan.
+  const mapDateToTargetMonth = (srcDate: string, targetYear: number, targetMonth: number): string | null => {
+    const [sy, sm, sd] = srcDate.split('-').map(Number);
+    const srcDow = new Date(sy, sm - 1, sd).getDay();       // 0=Sun … 6=Sat
+    const weekIndex = Math.floor((sd - 1) / 7);              // 0-based: 0=1st, 1=2nd …
+
+    // Cari hari pertama di bulan tujuan yang hari-dalam-minggunya sama
+    const firstOfMonth = new Date(targetYear, targetMonth - 1, 1);
+    const firstDow = firstOfMonth.getDay();
+    let firstOccurrence = 1 + ((srcDow - firstDow + 7) % 7);
+    const targetDay = firstOccurrence + weekIndex * 7;
+
+    // Periksa apakah tanggal itu masih dalam bulan tujuan
+    const daysInTarget = new Date(targetYear, targetMonth, 0).getDate();
+    if (targetDay > daysInTarget) return null;
+
+    return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
+  };
+
+  const handleOpenCopyModal = () => {
+    // Bulan sumber = bulan yang sedang di-filter (default: bulan sebelum filterMonth/filterYear)
+    let srcMonth = filterMonth === 'All' ? new Date().getMonth() + 1 : Number(filterMonth);
+    let srcYear  = Number(filterYear);
+
+    // Hitung bulan sumber (satu bulan sebelum bulan yang sedang ditampilkan)
+    if (srcMonth === 1) { srcMonth = 12; srcYear -= 1; }
+    else { srcMonth -= 1; }
+
+    const tgtMonth = filterMonth === 'All' ? new Date().getMonth() + 1 : Number(filterMonth);
+    const tgtYear  = Number(filterYear);
+
+    // Ambil semua jadwal Regular Class bulan sumber, group by sessionGroup
+    const srcEvents = db.calendar.filter(c => {
+      const prefix = `${srcYear}-${String(srcMonth).padStart(2, '0')}`;
+      return c.date.startsWith(prefix) && c.type === 'Regular Class';
+    });
+
+    // Group by sessionGroup, sort by date, ambil maks 8 per group
+    const groups: Record<string, any[]> = {};
+    srcEvents.forEach(c => {
+      const sg = c.sessionGroup || c.name || 'Unknown';
+      if (!groups[sg]) groups[sg] = [];
+      groups[sg].push(c);
+    });
+
+    const toAdd: any[] = [];
+    const skipped: any[] = [];
+
+    Object.entries(groups).forEach(([sg, events]) => {
+      const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date));
+      const taken  = sorted.slice(0, 8); // maks 8 pertemuan
+
+      taken.forEach(ev => {
+        const newDate = mapDateToTargetMonth(ev.date, tgtYear, tgtMonth);
+        if (!newDate) {
+          skipped.push({ reason: 'Minggu ke-N tidak ada di bulan tujuan', src: ev });
+          return;
+        }
+        // Cek duplikat: sudah ada jadwal sessionGroup + date yang sama di bulan tujuan?
+        const isDuplicate = db.calendar.some(
+          c => c.date === newDate && (c.sessionGroup === sg || c.name === sg)
+        );
+        if (isDuplicate) {
+          skipped.push({ reason: 'Duplikat (jadwal sudah ada)', src: ev, newDate });
+          return;
+        }
+        toAdd.push({ ...ev, id: '', date: newDate, updatedAt: '' }); // id & updatedAt diisi saat save
+      });
+    });
+
+    setCopyPreview(toAdd);
+    setCopySkipped(skipped);
+    setShowCopyModal(true);
+  };
+
+  const handleConfirmCopy = () => {
+    if (copyPreview.length === 0) { setShowCopyModal(false); return; }
+    const newEntries = copyPreview.map(ev => ({
+      ...ev,
+      id: generateId('CAL', 'calendar'),
+      updatedAt: getLocalTimestamp(),
+    }));
+    setDb(p => ({ ...p, calendar: [...p.calendar, ...newEntries] }));
+    showToast(`${newEntries.length} jadwal berhasil disalin!`, 'success');
+    setShowCopyModal(false);
+  };
+  // ── END COPY FROM PREVIOUS MONTH ─────────────────────────────────────────
 
   // NEW: State for Filters & Pagination
   const [filterMonth, setFilterMonth] = useState<number | string>(new Date().getMonth() + 1);
@@ -11519,7 +11719,12 @@ function CalendarModule({ db, setDb, generateId, user, showToast, softDelete }) 
      <div className="space-y-6">
         <div className="flex justify-between items-center">
            <div><h2 className="text-2xl font-bold text-white mb-1">Academic Calendar</h2><p className="text-gray-400 text-sm">View and manage scheduled classes and events.</p></div>
-           {user.role === 'admin' && <Button onClick={() => { setFormData({ id: '', date: getTodayDateLocal(), startTime: '15:00', endTime: '16:30', sessionGroup: SESSIONS[0], tutor: '', type: 'Regular Class', notes: '' }); setIsAdding(!isAdding); }} icon={Plus}>Add Event</Button>}
+           {user.role === 'admin' && (
+             <div className="flex gap-2">
+               <Button variant="secondary" onClick={handleOpenCopyModal} icon={Copy}>Salin Bulan Lalu</Button>
+               <Button onClick={() => { setFormData({ id: '', date: getTodayDateLocal(), startTime: '15:00', endTime: '16:30', sessionGroup: SESSIONS[0], tutor: '', type: 'Regular Class', notes: '' }); setIsAdding(!isAdding); }} icon={Plus}>Add Event</Button>
+             </div>
+           )}
         </div>
         {isAdding && user.role === 'admin' && (
            <Card className="border border-[#00D4FF]/20 shadow-[0_0_24px_rgba(0,212,255,0.06)]">
@@ -11654,6 +11859,104 @@ function CalendarModule({ db, setDb, generateId, user, showToast, softDelete }) 
               </div>
            </div>
         </Card>
+
+        {/* ── MODAL: COPY FROM PREVIOUS MONTH ───────────────────────────── */}
+        {showCopyModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.75)', backdropFilter:'blur(4px)'}}>
+            <div className="bg-[#151B26] border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-gray-800 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-[#00D4FF]/10 border border-[#00D4FF]/20">
+                    <Copy size={18} className="text-[#00D4FF]" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Salin Jadwal Bulan Sebelumnya</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Preview jadwal yang akan ditambahkan</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowCopyModal(false)} className="text-gray-500 hover:text-white p-1.5 hover:bg-gray-800 rounded-lg transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="overflow-y-auto custom-scrollbar flex-1 p-5 space-y-4">
+                {/* Summary */}
+                <div className="flex gap-3">
+                  <div className="flex-1 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-black text-emerald-400">{copyPreview.length}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Jadwal akan disalin</p>
+                  </div>
+                  <div className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-black text-amber-400">{copySkipped.length}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Dilewati</p>
+                  </div>
+                </div>
+
+                {/* Preview list */}
+                {copyPreview.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Akan Ditambahkan</p>
+                    <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                      {copyPreview.map((ev, i) => (
+                        <div key={i} className="flex items-center gap-3 bg-[#0B0F19] border border-gray-800 rounded-lg px-3 py-2">
+                          <CheckCircle2 size={14} className="text-emerald-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-white truncate">{ev.sessionGroup}</p>
+                            <p className="text-[11px] text-gray-500">{safeDateDisplay(ev.date, 'id-ID', {weekday:'short', day:'numeric', month:'short'})} • {ev.startTime}–{ev.endTime}</p>
+                          </div>
+                          <span className="text-[10px] text-gray-600 flex-shrink-0">{ev.tutor}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Skipped list */}
+                {copySkipped.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Dilewati</p>
+                    <div className="space-y-1.5">
+                      {copySkipped.map((s, i) => (
+                        <div key={i} className="flex items-center gap-3 bg-[#0B0F19] border border-amber-800/30 rounded-lg px-3 py-2">
+                          <AlertCircle size={14} className="text-amber-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-gray-300 truncate">{s.src.sessionGroup}</p>
+                            <p className="text-[11px] text-amber-500/80">{s.reason}</p>
+                          </div>
+                          <span className="text-[10px] text-gray-600 flex-shrink-0">{s.newDate || s.src.date}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {copyPreview.length === 0 && copySkipped.length === 0 && (
+                  <div className="text-center py-8">
+                    <CalendarIcon size={32} className="text-gray-700 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm font-medium">Tidak ada jadwal di bulan sebelumnya</p>
+                    <p className="text-gray-600 text-xs mt-1">Pastikan bulan sebelumnya sudah memiliki jadwal Regular Class.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-5 border-t border-gray-800 flex justify-end gap-3 flex-shrink-0">
+                <Button variant="secondary" onClick={() => setShowCopyModal(false)}>Batal</Button>
+                <Button
+                  onClick={handleConfirmCopy}
+                  icon={Copy}
+                  disabled={copyPreview.length === 0}
+                >
+                  Konfirmasi Salin ({copyPreview.length} jadwal)
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ── END MODAL ──────────────────────────────────────────────────── */}
+
      </div>
   );
 }
