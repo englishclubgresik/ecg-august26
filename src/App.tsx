@@ -100,6 +100,27 @@ const getStudentSession = (student) => {
   return getSessionGroup(student.class);
 };
 
+// Global helper: Resolve the REAL tutor name for a journal entry from the Academic Calendar,
+// instead of journal.tutorName (which is just whoever was logged in when the journal was
+// saved — e.g. admin "Vicky" entering data on behalf of a tutor). Match priority:
+//   1) calendar entry whose id === journal.scheduleId (exact link)
+//   2) calendar entry on the same date with a matching sessionGroup/name (fallback)
+// Falls back to journal.tutorName only if no calendar record can be found at all.
+const getJournalTutorName = (journal, calendar) => {
+  if (!journal) return '';
+  const cal = Array.isArray(calendar) ? calendar : [];
+  let sched = journal.scheduleId ? cal.find(c => String(c.id) === String(journal.scheduleId)) : null;
+  if (!sched) {
+    const jg = (journal.sessionGroup || '').toLowerCase().trim();
+    sched = cal.find(c => {
+      if (c.date !== journal.date) return false;
+      const cg = (c.sessionGroup || c.name || '').toLowerCase().trim();
+      return cg === jg || (jg && (cg.includes(jg) || jg.includes(cg)));
+    }) || null;
+  }
+  return (sched && sched.tutor) ? sched.tutor : (journal.tutorName || '');
+};
+
 // Global helper: Kembalikan tarif per sesi siswa.
 // Siswa Private Session (atau siapapun yang ratePerSession-nya diisi admin) pakai rate custom.
 // Siswa lain pakai tarif reguler Rp 25.000.
@@ -602,127 +623,107 @@ const generateAutoComment = (student, attRate, avgScore, assessments, presentCou
     if (attRate === 0) {
       const sessionCtx = totalSessions > 0 ? ` out of ${totalSessions} ${packageLabel} sessions available this period` : ` this period`;
       return pick([
-        `Our records show that ${name} has not attended any learning sessions${sessionCtx}. We understand there may be various obstacles, but we want to express our genuine concern — each missed session means important material not delivered, and the gap grows harder to close over time. We warmly invite you to contact us so we can discuss a solution and get ${name} back on track. We are fully committed to supporting ${name}'s progress.`,
-        `We would like to respectfully inform you that ${name} has no attendance recorded${sessionCtx}. Consistent attendance is the cornerstone of language development, and we are concerned this may affect ${name}'s progress significantly. Please feel free to reach out to us at any time — we are open to finding the best arrangement to support ${name}.`,
-        `We wish to highlight that ${name}'s attendance record shows no sessions attended${sessionCtx}. We believe this may be due to circumstances we are not yet aware of, and we would very much like to discuss how we can help. Please contact us so we can work together to ensure ${name} gets back to learning as soon as possible.`
+        `Our records show ${name} hasn't attended any sessions${sessionCtx}. Please reach out so we can find a solution together and get ${name} back on track.`,
+        `We wanted to flag that ${name} has no attendance recorded${sessionCtx}. Consistent attendance matters a lot for progress — feel free to contact us anytime to discuss next steps.`
       ]);
     }
 
     let enComment = "";
     if (isKids) {
       if (avgScore === 0) {
-        enComment = `${name} has just joined English Club and is currently in the process of settling in with their classmates and tutor. We are delighted to welcome ${name} and have already noticed great enthusiasm and curiosity from the very first session. The adjustment period is an important part of the learning journey, and we will make sure ${name} feels comfortable and confident at every session. We look forward to seeing ${name}'s progress unfold!`;
+        enComment = `${name} has just joined English Club and is settling in well with classmates and tutor. We've already seen great enthusiasm from the very first session, and we can't wait to see ${name} grow!`;
       } else if (avgScore >= 85) {
         enComment = pick([
-          `${name} has shown outstanding and truly impressive progress this period. `,
-          `We are thrilled to report that ${name} has performed consistently excellent in every learning session. `,
-          `${name}'s development this period has genuinely made us proud as tutors. `,
-          `${name} is one of the students who displays the highest enthusiasm for learning in the group. `
+          `${name} has shown excellent, consistent progress this period. `,
+          `We're delighted to report ${name} has performed brilliantly in every session. `,
+          `${name}'s growth this period has made us very proud. `
         ]) + pick([
-          `English language skills are developing at a remarkable pace — ${name} can already understand instructions, respond to questions, and interact using an increasingly rich vocabulary. Every session is attended with full enthusiasm, and ${name} never hesitates to try new things. `,
-          `At every meeting, ${name} arrives with great energy and immediately engages actively in class activities. The ability to absorb new vocabulary and use it in conversational contexts grows noticeably from week to week. `,
-          `${name}'s confidence in speaking, singing, and participating in English language games is something we truly admire. Progress is visible not just in grades but in how ${name} communicates more confidently in English every day. `,
+          `English skills are developing fast — ${name} follows instructions, answers confidently, and uses an increasingly rich vocabulary. `,
+          `${name} joins every session with great energy, picking up new vocabulary and using it naturally in conversation. `
         ]) + pick([
-          `The average score achieved reflects real hard work and dedication. `,
-          `This period's assessment results are very satisfying and reflect a genuine commitment to learning. `,
-        ]) + pick([
-          `Congratulations to ${name} and family on this wonderful achievement! Keep up the great spirit — we are confident ${name} will continue to excel!`,
-          `Thank you for your trust and support. Together, we will continue to help ${name} grow into a confident English communicator. Keep it up, ${name}!`,
+          `Congratulations to ${name} and family — keep up this wonderful momentum!`,
+          `Thank you for your support — we'll keep helping ${name} grow into a confident English speaker!`,
         ]);
       } else if (avgScore >= 70) {
         enComment = pick([
-          `${name} has shown good and consistent progress throughout this period. `,
-          `We are pleased to report that ${name} continues to show steady and encouraging improvement. `,
+          `${name} has shown good, steady progress this period. `,
+          `We're pleased to see ${name} continuing to improve consistently. `,
         ]) + pick([
-          `${name} is active in class discussions and is not hesitant to try answering questions or using English in conversation. Understanding of the material delivered continues to grow well over time. `,
-          `${name}'s ability to understand and use English continues to grow consistently. At every meeting there is always progress to note — in vocabulary, fluency, and the ability to respond in real contexts. `,
+          `${name} is active in class, and understanding of the material keeps growing well. `,
+          `${name}'s English is improving steadily — vocabulary, fluency, and confidence all keep growing. `,
         ]) + pick([
-          `The score achieved this period reflects a serious and dedicated learning process. `,
-          `Assessment results show that ${name}'s effort and consistency are producing real, measurable progress. `,
-        ]) + pick([
-          `To further support ${name}'s development, we highly recommend continued practice outside class — watching English content, reading, or writing regularly. With practice both in class and at home, the results will be even greater. Keep it up!`,
-          `Thank you for your ongoing trust and support. ${name}'s consistent commitment to learning is the greatest asset for reaching higher achievements. We will continue to provide the best approach for ${name}'s needs!`,
+          `A bit of extra practice at home — reading or watching English content — will help even more. Keep it up!`,
+          `Thank you for your continued trust — we'll keep tailoring our approach to ${name}'s needs!`,
         ]);
       } else {
         enComment = pick([
-          `${name} has shown genuine effort in attending every learning session this period. `,
-          `We appreciate ${name}'s consistent attendance and willingness to keep trying even when the material feels challenging. `,
+          `${name} has shown real effort attending and engaging in sessions this period. `,
+          `We appreciate ${name}'s consistent attendance and willingness to keep trying. `,
         ]) + pick([
-          `${name} is currently in the phase of building a strong English language foundation. We understand that every individual has a different pace and learning style, and we continuously adapt our approach to best fit ${name}'s specific needs. `,
-          `We are focusing with ${name} on building active vocabulary and the confidence to communicate in English. We use a gradual and enjoyable approach so ${name} can build confidence organically. `,
+          `${name} is still building a strong foundation, and we're adapting our approach to fit ${name}'s pace. `,
+          `We're focusing on vocabulary and speaking confidence, using a gradual, pressure-free approach. `,
         ]) + pick([
-          `We will continue to monitor ${name}'s development regularly and are ready to adjust our teaching strategy as needed. `,
-          `With the dedication already shown, we are confident that ${name}'s results will continue to improve steadily and surely. `,
-        ]) + pick([
-          `We greatly encourage active support at home — such as practising simple vocabulary, reading English books, or watching educational videos together. The combination of classroom learning and home practice makes a huge difference. Please feel free to contact us anytime!`,
-          `Thank you for trusting us with ${name}'s education. We are committed to being a reliable learning partner and will ensure every session is effective and meaningful for ${name}'s overall development. Together, we will get there!`,
+          `A little extra practice at home — simple vocabulary, reading, or videos — will make a real difference. We're here anytime!`,
+          `Thank you for trusting us with ${name}'s learning — we're committed to seeing this through together!`,
         ]);
       }
     } else {
       if (avgScore === 0) {
-        enComment = `${name} has recently joined English Club and is currently in the early stages of getting acquainted with the learning materials, methods, and classroom dynamics. We have already seen enthusiasm and a positive attitude in engaging with the sessions. Full assessment data will be available after a few evaluation sessions — but most importantly, ${name} has started this learning journey on the right foot!`;
+        enComment = `${name} has recently joined English Club and is getting familiar with the materials and class routine. We've already seen enthusiasm and a positive attitude — full assessment data will follow after a few more sessions!`;
       } else if (avgScore >= 85) {
         enComment = pick([
-          `${name}'s performance this period has been truly exceptional and highly commendable. `,
-          `We are extremely pleased to report that ${name} has achieved outstanding results this period, reflecting excellent dedication and effort. `,
-          `${name} has demonstrated impressive academic achievement this period, and we couldn't be more proud. `,
-          `This period, ${name} has shown the kind of commitment and ability that inspires everyone around them. `
+          `${name}'s performance this period has been truly outstanding. `,
+          `We're very pleased to report excellent results from ${name} this period. `,
+          `${name} has shown the kind of commitment that inspires everyone around them. `
         ]) + pick([
-          `${name} demonstrates a strong command of English across all skill areas — speaking with confidence, writing with clarity, and comprehending spoken and written material with ease. The progress has been remarkable and very rewarding to witness as tutors. `,
-          `Every session with ${name} is a pleasure — they come prepared, engage actively, and consistently push to achieve more. The growth in fluency and accuracy this period has been outstanding. `,
+          `${name} speaks confidently, writes clearly, and handles both spoken and written material with ease. The level of focus and discipline ${name} brings to every session is genuinely impressive. `,
+          `Every session with ${name} is a pleasure — well-prepared, deeply engaged, and always pushing to improve further. It's clear that the effort ${name} puts in extends well beyond the classroom. `,
+          `${name}'s grasp of vocabulary, grammar, and real-context communication has grown remarkably. Each session shows measurable, meaningful progress that reflects hard work and consistent dedication. `,
         ]) + pick([
-          `The scores achieved this period are a direct reflection of ${name}'s consistent hard work and dedication. `,
-          `Academic achievement this period places ${name} among the top performers and is something to be truly proud of. `,
-        ]) + pick([
-          `We extend our warmest congratulations to ${name} and family. Please maintain this wonderful momentum — we are excited to see what ${name} will achieve next!`,
-          `Thank you for your trust and ongoing support. ${name}'s dedication is an inspiration to us as tutors. Keep striving and aiming higher!`,
-          `We are very proud of ${name}'s learning journey and cannot wait to see the next great achievements ahead. Keep up the enthusiasm, curiosity, and consistency that have been ${name}'s greatest strengths!`,
+          `Warmest congratulations to ${name} and family — keep up this wonderful momentum and continue to challenge yourself with more complex English materials!`,
+          `Thank you for your continued support — ${name}'s dedication is truly inspiring, and we're excited to see how much further ${name} will go in the months ahead!`,
+          `We are proud of ${name}'s achievements this period. Please keep practising — reading, writing, and speaking English daily will help sustain this excellent trajectory!`,
         ]);
       } else if (avgScore >= 70) {
         enComment = pick([
-          `${name} has shown good and consistent progress this period. `,
-          `We are pleased to report that ${name} continues to demonstrate steady and encouraging improvement throughout this period. `,
-          `During this period, ${name} has displayed a positive learning attitude and always strives to give their best in every session. `,
-          `${name}'s performance this period has been solid, showing real and promising progress. `
+          `${name} has shown good, consistent progress this period. `,
+          `We're pleased to see steady, encouraging improvement from ${name}. `,
+          `${name} has demonstrated a positive attitude and genuine effort throughout this period. `,
         ]) + pick([
-          `${name} is active in class discussions and demonstrates the ability to communicate in English with growing confidence. Understanding of the material continues to develop well across all skill areas. `,
-          `${name}'s ability to understand and use English continues to grow consistently. At every meeting there is always visible progress — in vocabulary, fluency, and the ability to respond in real-life contexts. `,
-          `One of ${name}'s key strengths is the desire to keep learning and not giving up when faced with challenging material. This attitude is something we deeply appreciate and forms an important foundation for long-term development. `,
+          `${name} is active in discussions and communicates in English with growing confidence. Vocabulary, fluency, and real-context responses all show steady, encouraging growth. `,
+          `${name}'s English keeps improving — the ability to understand spoken instructions, respond naturally, and express ideas clearly has developed well this period. `,
+          `The progress ${name} has made is clear and consistent. Participation in class is strong, and the ability to apply new language in context is improving session by session. `,
         ]) + pick([
-          `The scores achieved this period reflect a serious and dedicated learning process. `,
-          `Assessment results show that ${name}'s effort and consistency are producing real, measurable impact. `,
-        ]) + pick([
-          `To further support ${name}'s development, we highly recommend continued practice outside class — watching English content, reading, or writing regularly. With practice both in class and at home, results will be even greater. Keep it up!`,
-          `Thank you for your ongoing trust and support. ${name}'s consistent commitment to learning is the greatest asset on the path to higher achievement. We will keep providing the best approaches for ${name}'s needs. Feel free to reach out anytime!`,
+          `Extra practice outside class — watching English videos, reading short stories, or keeping a simple English journal — will help accelerate progress even further. Thank you for your continued trust — we'll keep refining our approach for ${name}'s needs!`,
+          `We encourage ${name} to continue building on this progress by engaging with English outside the classroom as much as possible. We're committed to making every session as effective and enjoyable as it can be!`,
+          `Keep up the great work, ${name}! Consistent effort — both inside and outside class — is the key to unlocking the next level. We'll be right here to support every step of the journey.`,
         ]);
       } else {
         enComment = pick([
-          `${name} has shown sincere effort in attending and engaging with every learning session this period. `,
-          `We appreciate ${name}'s consistent attendance and willingness to keep trying even when the material feels challenging. `,
-          `${name} continues to work with full dedication, and as tutors we deeply appreciate every step taken. `,
-          `Throughout this period, ${name} has demonstrated a never-give-up learning attitude, which is the most important asset on any language learning journey. `
+          `${name} has shown sincere effort attending and engaging with every session this period. `,
+          `We appreciate ${name}'s consistent attendance and willingness to keep trying, even when the material feels challenging. `,
+          `${name} has been a committed member of the class this period, and that effort is something we genuinely value. `,
         ]) + pick([
-          `${name} is currently in the phase of building a strong English language foundation. We understand that every learner has a unique pace and style, and we continue to adapt our approach to best fit ${name}'s specific needs. Progress is not always reflected in numbers alone — we can see real development in ${name}'s confidence and willingness to participate. `,
-          `We are focusing with ${name} on building active vocabulary and the confidence to communicate in English. We use a gradual, enjoyable approach so ${name} can build confidence organically, without pressure. We are confident that with time and the right support, progress will become increasingly visible. `,
+          `${name} is building a strong foundation, and we're carefully adapting our approach to best fit ${name}'s learning pace and personal style. Progress may feel gradual, but it is real and meaningful. `,
+          `We're focused on building active vocabulary and speaking confidence, using a step-by-step approach so that every new concept feels achievable and rewarding for ${name}. `,
+          `Language learning takes time, and ${name} is making steady progress. We're here every step of the way, adjusting how we teach to make sure ${name} gets the most out of each session. `,
         ]) + pick([
-          `We will continue to monitor ${name}'s development regularly and are ready to adjust our strategy as needed. `,
-          `With the dedication already shown, we are confident that ${name}'s results will continue to improve steadily. `,
-        ]) + pick([
-          `We greatly encourage active support at home — practising simple vocabulary, reading English books together, or watching educational videos. The synergy between classroom learning and home practice will have a huge positive impact. Please feel free to contact us anytime to discuss the best learning strategy for ${name}!`,
-          `Thank you for trusting us with ${name}'s education. We understand that progress is not always linear, and we remain committed to being a reliable learning partner. Together, we will help ${name} reach their fullest potential. Keep going!`,
+          `Practising at home — reading simple English texts, watching short videos, or writing a few sentences daily — would make a significant difference. We'll keep monitoring progress closely and are always here to help!`,
+          `Thank you for trusting us with ${name}'s education — we remain fully committed to helping ${name} reach their potential. Please feel free to reach out anytime if you'd like to discuss how we can support ${name} further.`,
+          `We encourage ${name} to stay consistent and positive. Every session counts, and the effort being put in now will absolutely pay off. We're cheering ${name} on every step of the way!`,
         ]);
       }
     }
 
     if (attRate < 50 && attRate > 0) {
       enComment += pick([
-        ` ⚠️ Important Note: ${name}'s attendance this period is recorded at ${attDetail}. This figure is calculated solely from ${name}'s ${packageLabel} sessions — not from the total course schedule — so it accurately reflects attendance relative to the purchased package. With more than half of the ${packageLabel} sessions missed, continuity of learning is affected and the material missed becomes increasingly difficult to recover. We sincerely hope to see stronger attendance commitment next period. Please reach out if there are any difficulties — we are open to finding solutions together.`,
-        ` ⚠️ Attendance Note: ${name}'s attendance this period stands at ${attDetail}. This is calculated purely from ${name}'s ${packageLabel} sessions, adjusted to the package purchased. With more than half of these sessions missed, ${name}'s potential development has not been fully realised and catching up on missed material becomes challenging. We invite you to work with us to find a solution so ${name} can attend more regularly next period.`,
+        ` ⚠️ Attendance note: ${name} attended ${attDetail} this period (calculated from ${packageLabel} sessions only). With over half missed, it's affecting continuity — please reach out so we can find a solution together.`,
+        ` ⚠️ Please note: ${name}'s attendance this period is ${attDetail}, based on the ${packageLabel}. Missing more than half the sessions makes it harder to keep up — we'd welcome a chat about how to support more regular attendance.`,
       ]);
     } else if (attRate >= 90 && attRate > 0) {
       enComment += pick([
-        ` ${name}'s attendance this period, at ${attDetail}, is greatly appreciated — it reflects outstanding commitment and discipline in making the most of the ${packageLabel}.`,
-        ` We also commend ${name}'s excellent attendance rate of ${attDetail} — this level of consistency with the ${packageLabel} is one of the most important factors in successful language learning.`,
+        ` ${name}'s attendance of ${attDetail} this period is excellent — real commitment to the ${packageLabel}.`,
+        ` We also want to note ${name}'s great attendance rate of ${attDetail} — consistency like this really pays off.`,
       ]);
     }
     return enComment;
@@ -735,190 +736,125 @@ const generateAutoComment = (student, attRate, avgScore, assessments, presentCou
   if (attRate === 0) {
     const sessionCtx = totalSessions > 0 ? ` dari ${totalSessions} sesi ${packageLabel} yang tersedia pada periode ini` : ` pada periode ini`;
     const neverAttended = [
-      `Berdasarkan catatan kami, ${name} belum tercatat hadir dalam satu pun sesi pembelajaran${sessionCtx}. Kami sangat memahami bahwa ada berbagai hal yang mungkin menjadi kendala, namun kami ingin menyampaikan dengan penuh perhatian bahwa ketidakhadiran yang berlanjut akan sangat berdampak pada perkembangan belajar ${name}. Setiap sesi yang terlewat berarti materi penting yang tidak tersampaikan, dan ketertinggalan ini akan semakin sulit dikejar seiring berjalannya waktu. Kami sangat mengharapkan agar ${name} dapat segera aktif kembali mengikuti sesi, dan kami siap menyambut serta mendampingi ${name} dengan sepenuh hati. Mohon hubungi kami untuk mendiskusikan jadwal atau kendala yang ada — kami terbuka untuk mencari solusi terbaik bersama.`,
-      `Kami perlu menyampaikan dengan hormat bahwa berdasarkan data kehadiran periode ini, ${name} belum tercatat hadir sama sekali${sessionCtx}. Tentu kami tidak ingin menyimpulkan tanpa mengetahui kondisi sebenarnya, namun hal ini menjadi perhatian serius bagi kami sebagai tutor yang peduli pada perkembangan setiap siswa. Proses belajar bahasa Inggris membutuhkan konsistensi dan kesinambungan — semakin banyak sesi yang terlewat, semakin besar jarak yang harus ditempuh untuk mengejar ketertinggalan. Kami dengan tulus mengundang Bapak/Ibu untuk menghubungi kami agar kita dapat mendiskusikan situasi ini dan menemukan solusi terbaik demi kepentingan perkembangan ${name}.`,
-      `Dengan penuh rasa hormat, kami ingin menyampaikan bahwa catatan kehadiran ${name} pada periode ini menunjukkan tidak adanya kehadiran dalam satu pun sesi yang telah terlaksana${sessionCtx}. Kami sangat berharap ini bukan karena ada kendala yang tidak kami ketahui. Perkembangan bahasa Inggris yang optimal memerlukan kehadiran dan latihan yang berkesinambungan, dan kami khawatir ketidakhadiran ini dapat memperlambat pencapaian ${name} secara signifikan. Kami mengajak Bapak/Ibu untuk segera berkoordinasi dengan kami agar kami dapat membantu ${name} kembali ke jalur belajar yang tepat. Kami siap mendukung sepenuhnya!`
+      `Berdasarkan catatan kami, ${name} belum tercatat hadir dalam sesi apa pun${sessionCtx}. Mohon hubungi kami agar kita bisa mencari solusi terbaik bersama dan membantu ${name} kembali aktif belajar.`,
+      `Kami ingin menyampaikan bahwa kehadiran ${name} belum tercatat sama sekali${sessionCtx}. Kesinambungan sangat penting dalam belajar bahasa — silakan hubungi kami kapan saja untuk mendiskusikan solusinya.`
     ];
     return pick(neverAttended);
   }
 
   if (isKids) {
     if (avgScore === 0) {
-      comment = `${name} baru saja bergabung di English Club dan saat ini sedang dalam masa adaptasi bersama teman-teman dan tutor. Kami sangat senang menyambut kehadiran ${name} dan sudah melihat antusias serta rasa ingin tahu yang besar sejak hari pertama. Proses adaptasi adalah bagian penting dari perjalanan belajar, dan kami akan memastikan ${name} merasa nyaman dan percaya diri di setiap sesi. Kami akan terus memantau perkembangan ${name} dengan penuh perhatian dan tidak sabar untuk melihat progresnya ke depan!`;
+      comment = `${name} baru saja bergabung di English Club dan sedang dalam masa adaptasi bersama teman-teman dan tutor. Kami sudah melihat antusias yang besar sejak sesi pertama, dan tidak sabar melihat ${name} berkembang!`;
     } else if (avgScore >= 85) {
       const intros = [
-        `${name} menunjukkan perkembangan yang luar biasa dan sangat membanggakan selama periode ini. `,
-        `Kami sangat senang melaporkan bahwa ${name} tampil dengan sangat baik dan konsisten di setiap sesi belajar. `,
-        `Perkembangan ${name} selama periode ini benar-benar membuat kami bangga dan antusias sebagai tutor. `,
-        `${name} adalah salah satu murid yang menunjukkan semangat belajar paling tinggi di kelasnya. `
+        `${name} menunjukkan perkembangan yang luar biasa selama periode ini. `,
+        `Kami senang melaporkan ${name} tampil sangat baik dan konsisten di setiap sesi. `,
+        `Perkembangan ${name} periode ini benar-benar membanggakan. `
       ];
       const middles = [
-        `Kemampuan bahasa Inggrisnya berkembang sangat pesat — ${name} sudah mampu memahami instruksi, merespons pertanyaan, dan berinteraksi dengan kosakata yang semakin kaya. Setiap sesi selalu diikuti dengan penuh antusias, dan ${name} tidak pernah ragu untuk mencoba hal-hal baru. `,
-        `Di setiap pertemuan, ${name} selalu hadir dengan semangat yang tinggi dan langsung terlibat aktif dalam kegiatan kelas. Kemampuan menyerap kosakata baru dan menggunakannya dalam konteks percakapan terus meningkat secara nyata dari minggu ke minggu. `,
-        `Keberanian ${name} untuk berbicara, bernyanyi, dan berpartisipasi dalam permainan bahasa Inggris sangat kami apresiasi. Progres yang terlihat bukan hanya dari nilai, tapi juga dari cara ${name} semakin percaya diri berkomunikasi dalam bahasa Inggris sehari-hari. `,
-        `${name} menunjukkan kematangan belajar yang jarang kami temui pada anak seusianya — fokus, aktif bertanya, dan mampu mengikuti instruksi dengan sangat baik. Kemajuan ini adalah buah dari semangat dan konsistensi yang luar biasa. `
-      ];
-      const specifics = [
-        `Nilai rata-rata yang diraih mencerminkan kerja keras dan ketekunan yang nyata. `,
-        `Hasil penilaian periode ini sangat memuaskan dan mencerminkan dedikasi belajar yang sungguh-sungguh. `,
-        `Capaian nilai ${name} periode ini berada di level yang sangat baik dan membuktikan potensi besarnya. `,
-        `Pencapaian akademik ${name} periode ini adalah yang terbaik di kelompok belajarnya. `
+        `Kemampuan bahasa Inggrisnya berkembang pesat — ${name} memahami instruksi, merespons pertanyaan, dan menggunakan kosakata yang semakin kaya. `,
+        `${name} selalu hadir dengan semangat tinggi dan aktif dalam kegiatan kelas, dengan kosakata yang terus bertambah. `
       ];
       const closings = [
-        `Kami mengucapkan selamat kepada ${name} dan keluarga atas pencapaian yang membanggakan ini. Terus pertahankan semangat dan kebiasaan belajar yang positif — kami yakin ${name} akan terus meraih hal-hal hebat ke depannya!`,
-        `Terima kasih atas kepercayaan dan dukungan yang diberikan kepada kami. Bersama, kita akan terus mendampingi ${name} untuk tumbuh menjadi komunikator bahasa Inggris yang percaya diri. Keep it up, ${name}!`,
-        `Kami sangat antusias melihat perjalanan belajar ${name} ke depan. Dengan semangat seperti ini, tidak ada yang tidak bisa dicapai. Good job, ${name} — kami bangga dengan kamu!`,
-        `Kolaborasi antara tutor dan orang tua sangat berperan dalam kesuksesan ${name}. Teruslah dukung kebiasaan belajar di rumah, dan kami siap memberikan yang terbaik di setiap sesi. Semangat terus!`
+        `Selamat untuk ${name} dan keluarga — pertahankan semangat ini!`,
+        `Terima kasih atas dukungannya — kami akan terus mendampingi ${name} menjadi komunikator yang percaya diri!`
       ];
-      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+      comment = pick(intros) + pick(middles) + pick(closings);
     } else if (avgScore >= 70) {
       const intros = [
-        `${name} menunjukkan perkembangan yang menggembirakan dan terus bergerak ke arah yang positif selama periode ini. `,
-        `Kami senang melaporkan bahwa ${name} menunjukkan kemajuan yang konsisten dan semakin nyaman dalam belajar bahasa Inggris. `,
-        `Selama periode ini, ${name} terus berkembang dengan caranya sendiri dan menunjukkan keberanian yang semakin meningkat di kelas. `,
-        `Perkembangan ${name} selama beberapa bulan ini memberikan sinyal yang sangat positif dan menjanjikan. `
+        `${name} menunjukkan perkembangan yang baik dan konsisten selama periode ini. `,
+        `Kami senang melihat kemajuan ${name} yang stabil dan menggembirakan. `
       ];
       const middles = [
-        `${name} semakin aktif berpartisipasi dalam kegiatan kelas dan tidak ragu untuk mencoba berbicara bahasa Inggris, meski kadang masih butuh sedikit dorongan. Kemampuan memahami instruksi dan kosakata dasar terus berkembang dari sesi ke sesi, dan ini adalah fondasi yang sangat baik untuk ke depannya. `,
-        `Kemampuan bahasa Inggris ${name} terus tumbuh secara bertahap namun pasti — terutama dalam hal kosakata dan kemampuan mengikuti instruksi kelas. ${name} juga mulai menunjukkan inisiatif untuk menjawab pertanyaan tanpa perlu diminta terlebih dahulu, yang merupakan perkembangan yang sangat kami apresiasi. `,
-        `Di setiap pertemuan, selalu ada hal baru yang berhasil dikuasai oleh ${name}. Proses belajar yang konsisten dan sikap positif yang selalu ditunjukkan membuat kami yakin bahwa perkembangan ${name} akan semakin pesat di periode berikutnya. `,
-        `${name} menunjukkan ketertarikan yang tulus terhadap bahasa Inggris, yang terlihat dari caranya merespons materi dan berinteraksi dengan teman-teman di kelas. Fondasi yang sedang dibangun saat ini sangat kuat dan akan menjadi modal besar ke depannya. `
-      ];
-      const specifics = [
-        `Nilai yang diraih mencerminkan proses belajar yang berjalan dengan baik dan konsisten. `,
-        `Hasil penilaian periode ini menunjukkan pertumbuhan yang nyata dan layak untuk dirayakan bersama. `,
-        `Capaian periode ini membuktikan bahwa usaha dan ketekunan ${name} memberikan hasil yang nyata. `,
-        `Penilaian yang diperoleh mencerminkan potensi besar yang terus berkembang dengan baik. `
+        `${name} semakin aktif di kelas dan pemahaman terhadap instruksi serta kosakata dasar terus berkembang. `,
+        `Kemampuan bahasa Inggris ${name} tumbuh bertahap, terutama dalam kosakata dan keberanian menjawab. `
       ];
       const closings = [
-        `Kami sangat menganjurkan untuk terus mendukung kebiasaan belajar ${name} di rumah, misalnya dengan menonton konten bahasa Inggris anak-anak atau sesekali berbicara dalam bahasa Inggris. Dukungan dari rumah akan mempercepat perkembangan yang sudah terlihat. Semangat terus, ${name}!`,
-        `Terima kasih atas kepercayaan Bapak/Ibu kepada kami. Kami akan terus mendampingi ${name} dengan penuh dedikasi. Mari bersama-sama kita bantu ${name} mencapai potensi terbaiknya. Terus semangat!`,
-        `Dengan dukungan yang konsisten dari rumah dan semangat yang sudah dimiliki, kami yakin ${name} akan mencapai hasil yang semakin membanggakan di periode berikutnya. Kami tidak sabar melihat perkembangan selanjutnya!`,
-        `Kami mengapresiasi kepercayaan keluarga kepada English Club. Bersama, kita akan terus mendorong ${name} untuk tumbuh percaya diri dan mencintai bahasa Inggris. Tetap semangat!`
+        `Dukungan di rumah — menonton konten anak berbahasa Inggris atau sesekali berbicara bahasa Inggris — akan sangat membantu. Semangat terus, ${name}!`,
+        `Terima kasih atas kepercayaannya — kami akan terus mendampingi ${name} dengan penuh dedikasi!`
       ];
-      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+      comment = pick(intros) + pick(middles) + pick(closings);
     } else {
       const intros = [
-        `${name} adalah anak yang bersemangat dan kami sangat menikmati setiap sesi belajar bersamanya. `,
-        `Kami melihat potensi yang besar pada diri ${name} dan terus berusaha mengembangkannya di setiap pertemuan. `,
-        `Kehadiran ${name} di kelas selalu membawa energi yang positif, dan kami sangat menghargai semangatnya. `,
-        `${name} adalah murid yang menyenangkan untuk didampingi, dan kami berkomitmen penuh untuk mendukung perkembangannya. `
+        `${name} telah menunjukkan usaha yang sungguh-sungguh di setiap sesi selama periode ini. `,
+        `Kami menghargai semangat dan kehadiran ${name} yang konsisten. `
       ];
       const middles = [
-        `Saat ini, ${name} sedang dalam fase membangun fondasi yang kuat dalam belajar bahasa Inggris. Setiap anak memiliki ritme belajarnya masing-masing, dan kami dengan sabar mendampingi setiap langkah ${name} dengan pendekatan yang disesuaikan dengan kebutuhannya. `,
-        `Proses belajar bahasa baru memang membutuhkan waktu dan kesabaran, dan ${name} sudah menunjukkan langkah-langkah awal yang baik. Kami terus menggunakan metode yang menyenangkan agar ${name} semakin tertarik dan tidak merasa tertekan dalam belajar bahasa Inggris. `,
-        `Kami memahami bahwa setiap anak berkembang dengan kecepatan yang berbeda, dan kami sangat menghargai usaha yang telah ditunjukkan ${name}. Fokus kami saat ini adalah memastikan ${name} merasa nyaman dan percaya diri, karena itu adalah kunci utama dalam pembelajaran bahasa. `,
-        `${name} sudah menunjukkan kemajuan dalam hal keberanian untuk mencoba, dan itu adalah hal yang sangat kami apresiasi. Membangun kepercayaan diri dalam berbahasa adalah prioritas utama kami untuk ${name} saat ini. `
-      ];
-      const specifics = [
-        `Kami akan terus memantau perkembangan ${name} dan menyesuaikan metode pembelajaran agar semakin efektif. `,
-        `Dengan pendekatan yang tepat dan dukungan penuh dari semua pihak, kami yakin ${name} akan menunjukkan kemajuan yang signifikan. `,
-        `Setiap langkah kecil yang diambil ${name} adalah pencapaian nyata yang patut dirayakan bersama. `,
-        `Kami berkomitmen untuk terus mencari cara terbaik agar ${name} bisa berkembang optimal di setiap sesinya. `
+        `${name} sedang membangun fondasi bahasa Inggris yang kuat, dan kami menyesuaikan pendekatan agar sesuai kebutuhannya. `,
+        `Kami fokus pada kosakata aktif dan rasa percaya diri, dengan pendekatan bertahap tanpa tekanan. `
       ];
       const closings = [
-        `Kami sangat mengharapkan keterlibatan aktif Bapak/Ibu di rumah — misalnya dengan mengajak ${name} mendengarkan lagu anak berbahasa Inggris atau menonton video edukatif bersama. Sinergi antara kelas dan rumah adalah kunci percepatan belajar ${name}. Kami selalu terbuka untuk berdiskusi lebih lanjut tentang perkembangan ${name}!`,
-        `Terima kasih atas kepercayaan dan kesabaran Bapak/Ibu. Kami berkomitmen untuk terus memberikan perhatian penuh kepada ${name} dan memastikan setiap sesi berlangsung dengan menyenangkan dan bermakna. Bersama, kita pasti bisa!`,
-        `Jangan ragu untuk menghubungi kami jika ada hal yang ingin didiskusikan mengenai perkembangan ${name}. Kami selalu senang berbagi informasi dan berkolaborasi demi kemajuan ${name} yang optimal. Semangat terus!`,
-        `Kami yakin dengan konsistensi kehadiran dan dukungan dari rumah, ${name} akan segera menunjukkan lompatan perkembangan yang membanggakan. Terima kasih telah mempercayakan pendidikan bahasa Inggris ${name} kepada kami!`
+        `Dukungan di rumah — lagu anak berbahasa Inggris atau video edukatif bersama — akan sangat membantu. Kami selalu terbuka untuk berdiskusi!`,
+        `Terima kasih atas kepercayaan dan kesabarannya — kami berkomitmen penuh mendampingi ${name}!`
       ];
-      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+      comment = pick(intros) + pick(middles) + pick(closings);
     }
   } else {
     if (avgScore === 0) {
-      comment = `${name} baru bergabung di English Club dan kami sangat antusias menyambut kehadirannya. Di sesi-sesi awal ini, ${name} sedang dalam proses pengenalan materi, metode belajar, dan dinamika kelas. Kami sudah melihat antusias dan kemauan yang baik dari ${name} untuk mengikuti setiap kegiatan. Data penilaian lengkap akan tersedia setelah beberapa sesi evaluasi terlaksana — namun yang terpenting, ${name} sudah memulai perjalanan belajar ini dengan langkah yang tepat!`;
+      comment = `${name} baru bergabung di English Club dan sedang mengenal materi, metode, dan dinamika kelas. Kami sudah melihat antusias yang baik — data penilaian lengkap akan tersedia setelah beberapa sesi evaluasi!`;
     } else if (avgScore >= 85) {
       const intros = [
-        `Kami dengan bangga melaporkan bahwa ${name} menunjukkan performa akademik yang sangat memuaskan selama periode ini. `,
-        `Proses belajar ${name} selama periode ini mencerminkan dedikasi, ketekunan, dan komitmen yang patut diapresiasi. `,
-        `${name} tampil luar biasa selama periode ini dan membuktikan bahwa kerja keras benar-benar membuahkan hasil. `,
-        `Selama periode ini, ${name} secara konsisten menunjukkan kemampuan dan etos belajar yang sangat tinggi. `
+        `Kami bangga melaporkan performa akademik ${name} yang sangat memuaskan selama periode ini. `,
+        `${name} tampil luar biasa periode ini, membuktikan bahwa kerja keras dan konsistensi benar-benar membuahkan hasil. `,
+        `Selama periode ini, ${name} konsisten menunjukkan etos belajar yang sangat tinggi dan layak mendapat apresiasi penuh. `
       ];
       const middles = [
-        `${name} aktif berpartisipasi di setiap sesi, tidak ragu mengajukan pertanyaan, dan selalu berusaha memahami materi secara mendalam. Kemampuan berbicara, mendengarkan, membaca, dan menulis dalam bahasa Inggris terus berkembang secara seimbang dan nyata dari waktu ke waktu. `,
-        `Apa yang paling kami kagumi dari ${name} adalah kemampuannya untuk tidak hanya memahami materi, tetapi juga menerapkannya secara aktif dalam percakapan dan latihan di kelas. Daya serap yang cepat dan keberanian untuk mencoba membuat setiap sesi menjadi sangat produktif. `,
-        `${name} selalu datang ke kelas dengan persiapan yang baik dan sikap belajar yang positif. Kemampuan berargumentasi, mengekspresikan pendapat, serta berkomunikasi dalam bahasa Inggris terus meningkat secara signifikan dan konsisten. `,
-        `Perkembangan ${name} tidak hanya terlihat dari angka penilaian, tetapi juga dari kepercayaan dirinya yang semakin kuat dalam menggunakan bahasa Inggris di berbagai konteks. Ini adalah pencapaian yang jauh lebih berharga dari sekadar nilai. `
-      ];
-      const specifics = [
-        `Hasil penilaian yang diraih ${name} periode ini sangat memuaskan dan mencerminkan proses belajar yang sungguh-sungguh. `,
-        `Nilai rata-rata yang diperoleh berada di level excellent, membuktikan konsistensi dan kualitas belajar yang luar biasa. `,
-        `Capaian akademik ${name} periode ini adalah yang terbaik dan menjadi tolok ukur yang membanggakan. `,
-        `Penilaian akhir periode ini mencerminkan pertumbuhan nyata yang telah berhasil diraih dengan kerja keras. `
+        `${name} aktif berpartisipasi, tidak ragu bertanya, dan terus berkembang secara seimbang dalam berbicara, mendengarkan, membaca, dan menulis. Tingkat fokus dan dedikasi yang ${name} bawa ke setiap sesi sungguh membanggakan. `,
+        `${name} selalu datang dengan persiapan baik, sikap belajar positif, dan kemampuan komunikasi yang terus meningkat. Jelas sekali bahwa usaha ${name} tidak berhenti di dalam kelas saja. `,
+        `Penguasaan ${name} atas kosakata, tata bahasa, dan komunikasi dalam konteks nyata berkembang dengan sangat pesat. Setiap sesi menunjukkan kemajuan yang nyata dan bermakna, mencerminkan kerja keras yang konsisten. `
       ];
       const closings = [
-        `Kami mengucapkan selamat dan penghargaan setinggi-tingginya kepada ${name} dan keluarga atas pencapaian yang luar biasa ini. Momentum positif ini kami harap dapat terus dipertahankan dan bahkan ditingkatkan di periode berikutnya. Terus semangat dan jangan berhenti bermimpi besar!`,
-        `Terima kasih atas kepercayaan dan dukungan penuh yang diberikan kepada kami. Pencapaian ${name} adalah kebanggaan bersama. Kami akan terus berkomitmen memberikan pembelajaran terbaik agar ${name} dapat mencapai potensi tertingginya. Keep up the amazing work!`,
-        `Kami sangat bangga dengan perjalanan belajar ${name} dan tidak sabar melihat pencapaian-pencapaian hebat berikutnya. Teruslah jaga semangat, rasa ingin tahu, dan konsistensi yang telah menjadi kekuatan utama ${name} selama ini. Kami selalu ada untuk mendukung!`,
-        `Dedikasi ${name} adalah inspirasi bagi kami sebagai tutor. Bersama orang tua yang suportif dan semangat belajar yang tinggi, kami yakin masa depan ${name} dalam penguasaan bahasa Inggris sangat cerah. Terus berjuang dan raih yang terbaik!`
+        `Selamat dan apresiasi setinggi-tingginya untuk ${name} dan keluarga — pertahankan momentum ini dan terus tantang diri dengan materi bahasa Inggris yang lebih kompleks!`,
+        `Terima kasih atas kepercayaannya — kami akan terus mendukung ${name} mencapai potensi tertingginya, dan kami tidak sabar melihat seberapa jauh ${name} akan berkembang ke depannya!`,
+        `Kami bangga atas pencapaian ${name} periode ini. Teruslah berlatih — membaca, menulis, dan berbicara bahasa Inggris setiap hari akan membantu mempertahankan jalur luar biasa ini!`
       ];
-      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+      comment = pick(intros) + pick(middles) + pick(closings);
     } else if (avgScore >= 70) {
       const intros = [
-        `${name} menunjukkan perkembangan yang baik dan konsisten selama mengikuti kelas di periode ini. `,
-        `Kami senang melaporkan bahwa ${name} terus menunjukkan kemajuan yang stabil dan menggembirakan selama periode ini. `,
-        `Selama periode ini, ${name} menampilkan sikap belajar yang positif dan selalu berusaha memberikan yang terbaik di setiap sesi. `,
-        `Performa ${name} selama periode ini berjalan dengan baik dan memperlihatkan progres yang nyata serta menjanjikan. `
+        `${name} menunjukkan perkembangan yang baik dan konsisten selama periode ini. `,
+        `Kami senang melaporkan kemajuan ${name} yang stabil dan menggembirakan. `,
+        `${name} menunjukkan sikap positif dan usaha yang sungguh-sungguh sepanjang periode ini. `
       ];
       const middles = [
-        `${name} aktif dalam diskusi kelas dan tidak segan untuk mencoba menjawab pertanyaan maupun menggunakan bahasa Inggris dalam percakapan. Pemahaman terhadap materi yang diberikan terus berkembang dengan baik dari waktu ke waktu, dan kami melihat peningkatan yang nyata terutama dalam kemampuan komunikasi. `,
-        `Kemampuan ${name} dalam memahami dan menggunakan bahasa Inggris terus tumbuh secara konsisten. Di setiap pertemuan selalu ada kemajuan yang bisa kami catat — baik dari sisi pemahaman kosakata, kelancaran berbicara, maupun kemampuan merespons dalam konteks nyata. `,
-        `Salah satu kekuatan utama ${name} adalah keinginan untuk terus belajar dan tidak mudah menyerah saat menghadapi materi yang sulit. Sikap ini sangat kami apresiasi dan menjadi fondasi penting untuk perkembangan jangka panjang. Kemampuan bahasa Inggrisnya pun semakin terasa dalam interaksi sehari-hari di kelas. `,
-        `${name} menunjukkan kemampuan yang solid dalam mengikuti pembelajaran, dengan keterlibatan aktif yang selalu kami apresiasi. Proses belajar yang dijalani dengan tekun dan konsisten ini adalah investasi terbaik yang hasilnya akan semakin terasa ke depan. `
-      ];
-      const specifics = [
-        `Nilai yang diraih periode ini mencerminkan proses belajar yang serius dan penuh dedikasi. `,
-        `Hasil penilaian menunjukkan bahwa usaha dan konsistensi ${name} memberikan dampak yang nyata dan terukur. `,
-        `Capaian penilaian ${name} periode ini membuktikan bahwa langkah-langkah yang diambil sudah berada di jalur yang tepat. `,
-        `Penilaian akhir periode ini adalah cerminan dari kerja keras dan kesungguhan ${name} selama ini. `
+        `${name} aktif dalam diskusi kelas dan pemahaman terhadap materi terus berkembang baik. Kemampuan ${name} dalam memahami dan menggunakan bahasa Inggris terus tumbuh konsisten setiap pertemuan. `,
+        `Kemampuan ${name} dalam memahami instruksi lisan, merespons secara alami, dan mengungkapkan ide dengan jelas berkembang dengan baik selama periode ini. `,
+        `Kemajuan yang telah dicapai ${name} sangat jelas dan konsisten. Partisipasi di kelas semakin kuat, dan kemampuan menerapkan bahasa baru dalam konteks nyata terus meningkat dari sesi ke sesi. `
       ];
       const closings = [
-        `Untuk mendukung perkembangan lebih lanjut, kami sangat menganjurkan agar ${name} terus berlatih secara mandiri di luar jam kelas — misalnya dengan menonton konten berbahasa Inggris, membaca, atau berlatih menulis secara rutin. Dengan kombinasi latihan di kelas dan di rumah, kami yakin hasilnya akan semakin luar biasa. Terus semangat!`,
-        `Kami berterima kasih atas kepercayaan dan dukungan Bapak/Ibu selama ini. Komitmen belajar ${name} yang konsisten adalah modal terbesar menuju pencapaian yang lebih tinggi. Kami akan terus berupaya memberikan materi dan metode terbaik yang sesuai dengan kebutuhan ${name}. Jangan ragu untuk menghubungi kami kapan saja!`,
-        `Kami sangat optimis bahwa dengan konsistensi yang sudah ditunjukkan, ${name} akan meraih hasil yang semakin membanggakan di periode-periode berikutnya. Dukungan dari rumah dalam bentuk latihan rutin akan sangat membantu mempercepat perkembangan ini. Tetap semangat!`,
-        `Terima kasih telah mempercayakan pendidikan bahasa Inggris ${name} kepada kami. Kami akan terus mendampingi dan mendorong ${name} untuk mencapai potensi terbaiknya. Pertahankan semangat ini dan teruslah berkembang!`
+        `Latihan mandiri di luar kelas — menonton video berbahasa Inggris, membaca cerita pendek, atau membuat jurnal sederhana — akan membantu mempercepat kemajuan lebih jauh. Terima kasih atas kepercayaannya — kami akan terus memberikan pendekatan terbaik untuk ${name}!`,
+        `Kami mendorong ${name} untuk terus membangun kemajuan ini dengan aktif berbahasa Inggris di luar kelas sebanyak mungkin. Kami berkomitmen menjadikan setiap sesi seefektif dan semenyenangkan mungkin!`,
+        `Terus semangat, ${name}! Konsistensi — baik di dalam maupun di luar kelas — adalah kunci untuk mencapai level berikutnya. Kami akan selalu ada untuk mendukung setiap langkah perjalanan belajar ${name}.`
       ];
-      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+      comment = pick(intros) + pick(middles) + pick(closings);
     } else {
       const intros = [
-        `${name} telah menunjukkan usaha yang sungguh-sungguh dalam mengikuti setiap sesi pembelajaran selama periode ini. `,
-        `Kami menghargai semangat dan kehadiran ${name} yang konsisten, serta kesediaan untuk terus mencoba meski materi terasa menantang. `,
-        `${name} terus berusaha dengan penuh kesungguhan, dan kami sebagai tutor sangat mengapresiasi setiap langkah yang sudah ditempuh. `,
-        `Selama periode ini, ${name} menunjukkan karakter belajar yang pantang menyerah, dan itu adalah modal terpenting dalam perjalanan belajar bahasa. `
+        `${name} telah menunjukkan usaha yang sungguh-sungguh dalam mengikuti setiap sesi periode ini. `,
+        `Kami menghargai semangat dan kehadiran ${name} yang konsisten meski materi terasa menantang. `
       ];
       const middles = [
-        `Saat ini, ${name} sedang dalam fase membangun fondasi kemampuan bahasa Inggris yang kuat. Kami memahami bahwa setiap individu memiliki ritme dan gaya belajar yang berbeda, dan kami terus menyesuaikan pendekatan pembelajaran agar sesuai dengan kebutuhan spesifik ${name}. Progres memang tidak selalu terlihat dari angka semata, tetapi kami merasakan perkembangan nyata dalam hal kepercayaan diri dan kemauan ${name} untuk berpartisipasi. `,
-        `Beberapa area yang sedang kami fokuskan bersama ${name} adalah peningkatan pemahaman kosakata aktif dan keberanian untuk berkomunikasi dalam bahasa Inggris. Kami menggunakan pendekatan yang bertahap dan menyenangkan agar ${name} dapat membangun kepercayaan diri secara organik tanpa tekanan. Kami yakin bahwa dengan waktu dan dukungan yang tepat, perkembangan akan semakin terasa nyata. `,
-        `Kami terus mendampingi ${name} dengan penuh perhatian dan mencari metode yang paling efektif untuknya. Yang membuat kami optimis adalah semangat dan ketekunan yang tidak pernah padam dalam diri ${name} — dua hal yang jauh lebih penting daripada sekadar nilai. Fondasi yang dibangun saat ini akan menjadi kekuatan besar ke depannya. `,
-        `Perjalanan belajar bahasa Inggris memang membutuhkan proses, dan ${name} sedang melewati fase penting dalam perjalanan tersebut. Kami berkomitmen penuh untuk memastikan setiap sesi berjalan efektif, menyenangkan, dan bermakna bagi perkembangan ${name} secara keseluruhan. `
-      ];
-      const specifics = [
-        `Kami akan terus memonitor perkembangan ${name} secara berkala dan siap menyesuaikan strategi pembelajaran jika diperlukan. `,
-        `Dengan dedikasi yang sudah ditunjukkan, kami yakin hasil belajar ${name} akan terus meningkat secara bertahap namun pasti. `,
-        `Setiap langkah kemajuan yang diraih ${name}, sekecil apapun, adalah pencapaian nyata yang layak untuk dirayakan bersama. `,
-        `Kami berkomitmen untuk terus memberikan perhatian personal kepada ${name} demi memaksimalkan potensinya. `
+        `${name} sedang membangun fondasi bahasa Inggris yang kuat, dan kami terus menyesuaikan pendekatan agar paling sesuai dengan kecepatan belajar dan gaya pribadi ${name}. Kemajuan mungkin terasa bertahap, namun nyata dan bermakna. `,
+        `Kami fokus pada kosakata aktif dan keberanian berkomunikasi, dengan pendekatan bertahap dan menyenangkan sehingga setiap konsep baru terasa bisa dicapai dan memuaskan. `,
+        `Belajar bahasa butuh waktu, dan ${name} terus membuat kemajuan yang stabil. Kami selalu hadir di setiap langkah, menyesuaikan cara mengajar agar ${name} mendapat manfaat maksimal dari setiap sesi. `
       ];
       const closings = [
-        `Kami sangat mengharapkan dukungan aktif dari Bapak/Ibu di rumah, seperti mengajak ${name} berlatih kosakata sederhana, membaca buku berbahasa Inggris, atau menonton video edukatif bersama. Sinergi antara pembelajaran di kelas dan pembiasaan di rumah akan memberikan dampak yang sangat besar. Kami selalu terbuka untuk berdiskusi tentang strategi belajar terbaik untuk ${name}. Jangan ragu menghubungi kami kapan saja!`,
-        `Terima kasih atas kepercayaan Bapak/Ibu kepada kami. Kami memahami bahwa melihat perkembangan anak tidak selalu linier, dan kami berkomitmen untuk terus hadir sebagai mitra belajar yang dapat diandalkan. Bersama, kita pasti bisa membantu ${name} mencapai potensi terbaiknya. Semangat terus!`,
-        `Kami mengundang Bapak/Ibu untuk terus berkomunikasi dengan kami mengenai perkembangan ${name}. Dengan sinergi yang baik antara tutor dan orang tua, kami optimis ${name} akan segera menunjukkan lompatan perkembangan yang membanggakan. Terima kasih atas kepercayaan dan kesabaran yang luar biasa!`,
-        `Jangan ragu untuk menghubungi kami jika ingin mendiskusikan lebih lanjut mengenai perkembangan dan kebutuhan belajar ${name}. Kami berkomitmen memberikan pendampingan terbaik dan memastikan setiap sesi membawa manfaat nyata. Kami yakin, dengan kerja sama yang baik, ${name} akan segera berkembang pesat!`
+        `Dukungan aktif di rumah — membaca teks bahasa Inggris sederhana, menonton video pendek, atau menulis beberapa kalimat setiap hari — akan membuat perbedaan yang signifikan. Jangan ragu menghubungi kami kapan saja!`,
+        `Terima kasih atas kepercayaannya — kami berkomitmen penuh membantu ${name} mencapai potensi terbaiknya. Silakan hubungi kami kapan pun ingin mendiskusikan cara terbaik mendukung perkembangan ${name}.`,
+        `Kami mendorong ${name} untuk tetap konsisten dan optimis. Setiap sesi memberi dampak, dan usaha yang diberikan sekarang pasti akan membuahkan hasil. Kami selalu menyemangati ${name} di setiap langkah perjalanan ini!`
       ];
-      comment = pick(intros) + pick(middles) + pick(specifics) + pick(closings);
+      comment = pick(intros) + pick(middles) + pick(closings);
     }
   }
 
   if (attRate < 50 && attRate > 0) {
     const attNotes = [
-      ` ⚠️ Catatan Penting: Tingkat kehadiran ${name} pada periode ini tercatat ${attDetail}. Perlu kami jelaskan bahwa angka ini dihitung khusus dari sesi ${packageLabel} yang dimiliki ${name} — bukan dari keseluruhan sesi kursus yang ada — sehingga sudah benar-benar mencerminkan kehadiran relatif terhadap paket yang sudah dibeli. Dengan lebih dari separuh sesi ${packageLabel} yang tidak dihadiri, kesinambungan materi menjadi terganggu dan berdampak langsung pada perkembangan belajar ${name}. Kami sangat mengharapkan agar kehadiran dapat ditingkatkan di periode berikutnya. Jangan ragu menghubungi kami jika ada kendala — kami terbuka untuk mencari solusi bersama.`,
-      ` ⚠️ Perhatian Khusus: Kami perlu menyampaikan bahwa kehadiran ${name} pada periode ini adalah ${attDetail}. Angka ini murni dihitung dari sesi ${packageLabel} ${name} saja, bukan total seluruh sesi kursus, sehingga sudah menyesuaikan paket yang diambil. Dengan lebih dari separuh sesi ${packageLabel} yang terlewat, potensi perkembangan ${name} belum dapat dimaksimalkan dan materi yang terlewat sulit untuk dikejar. Kami mengajak Bapak/Ibu untuk bersama-sama mencari solusi agar ${name} dapat hadir lebih rutin di periode berikutnya.`,
-      ` ⚠️ Catatan Kehadiran: Berdasarkan data periode ini, ${name} hadir sebanyak ${attDetail}. Persentase ini dihitung dari total sesi ${packageLabel} yang dimiliki ${name} — bukan dari keseluruhan jadwal kursus yang ada — jadi sudah menyesuaikan dengan paket yang diambil. Meski demikian, tingkat kehadiran di bawah 50% dari ${packageLabel} ini menjadi perhatian serius kami karena berdampak langsung pada kesinambungan belajar ${name}. Kami sangat berharap dapat melihat komitmen kehadiran yang lebih kuat di periode berikutnya dan siap mendukung sepenuhnya.`
+      ` ⚠️ Catatan kehadiran: ${name} hadir ${attDetail} periode ini (dihitung dari sesi ${packageLabel} saja). Dengan lebih dari separuh sesi terlewat, kesinambungan belajar terganggu — silakan hubungi kami untuk mencari solusi bersama.`,
+      ` ⚠️ Perhatian: kehadiran ${name} periode ini ${attDetail}, berdasarkan ${packageLabel}. Lebih dari separuh sesi terlewat membuat materi sulit dikejar — kami terbuka mendiskusikan solusinya.`
     ];
     comment += pick(attNotes);
   } else if (attRate >= 90 && attRate > 0) {
     const attPraise = [
-      ` Kehadiran ${name} yang mencapai ${attDetail} pada periode ini sangat kami apresiasi — ini mencerminkan komitmen dan disiplin yang luar biasa dalam memanfaatkan ${packageLabel} secara optimal.`,
-      ` Kami juga mengapresiasi tingkat kehadiran ${name} yang sangat baik yaitu ${attDetail} — konsistensi memanfaatkan ${packageLabel} seperti ini adalah salah satu faktor terpenting dalam keberhasilan belajar bahasa.`
+      ` Kehadiran ${name} yang mencapai ${attDetail} periode ini sangat kami apresiasi — komitmen yang luar biasa.`,
+      ` Kami juga mengapresiasi kehadiran ${name} yang sangat baik yaitu ${attDetail} — konsistensi seperti ini penting untuk keberhasilan belajar.`
     ];
     comment += pick(attPraise);
   }
@@ -1746,7 +1682,7 @@ const RadarChart = ({ data, theme = 'dark' }: any) => {
   const valueColor = theme === 'dark' ? '#FFFFFF' : '#0F172A';
 
   return (
-    <svg viewBox="0 0 100 100" className="w-full h-full overflow-visible drop-shadow-sm">
+    <svg viewBox="-15 -15 130 130" className="w-full h-full drop-shadow-sm" style={{ overflow: 'hidden' }}>
       {/* Jaring Belakang */}
       {[20, 40, 60, 80, 100].map((val) => {
         const r = (val / 100) * maxRadius;
@@ -3134,6 +3070,198 @@ const ConnectionMonitorPanel = ({
     </div>
   );
 };
+
+/* ─── SessionComboChart: Chart.js bar + line combo ─── */
+function SessionComboChart({ canvasId, chartData, avgScore, bestIdx }: {
+  canvasId: string;
+  chartData: { score: number | null; label: string }[];
+  avgScore: number;
+  bestIdx: number;
+}) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const chartRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    const initChart = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || !(window as any).Chart) return;
+      const ChartJS = (window as any).Chart;
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; }
+
+      const scores = chartData.map(b => b.score);
+      const labels = chartData.map((b, i) => b.label ? [`S${i+1}`, b.label] : [`S${i+1}`, '']);
+      const barColors = scores.map(s =>
+        s === null ? 'rgba(203,213,225,0.4)' : s >= 85 ? 'rgba(16,185,129,0.85)' : s >= 75 ? 'rgba(26,86,219,0.85)' : 'rgba(245,158,11,0.85)'
+      );
+      const borderColors = scores.map(s =>
+        s === null ? '#CBD5E1' : s >= 85 ? '#10B981' : s >= 75 ? '#1A56DB' : '#F59E0B'
+      );
+      const trendData = scores.map(s => s === null ? NaN : s);
+
+      chartRef.current = new ChartJS(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: 'Score',
+              data: scores.map(s => s === null ? 0 : s),
+              backgroundColor: barColors,
+              borderColor: borderColors,
+              borderWidth: 1.5,
+              borderRadius: { topLeft: 4, topRight: 4 },
+              borderSkipped: 'bottom',
+              order: 2,
+            },
+            {
+              type: 'line',
+              label: 'Trend',
+              data: trendData,
+              borderColor: '#E34948',
+              borderWidth: 2,
+              pointBackgroundColor: scores.map((s, i) => i === bestIdx ? '#E34948' : '#ffffff'),
+              pointBorderColor: '#E34948',
+              pointBorderWidth: 2,
+              pointRadius: scores.map((s, i) => s === null ? 0 : i === bestIdx ? 6 : 4),
+              tension: 0.35,
+              fill: { target: 'origin', above: 'rgba(227,73,72,0.05)' },
+              order: 1,
+              spanGaps: false,
+            },
+            {
+              type: 'line',
+              label: 'Average',
+              data: Array(scores.length).fill(avgScore),
+              borderColor: '#94A3B8',
+              borderWidth: 1,
+              borderDash: [4, 4],
+              pointRadius: 0,
+              fill: false,
+              order: 3,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 500 },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: '#ffffff',
+              borderColor: '#E2E8F0',
+              borderWidth: 1,
+              titleColor: '#1E293B',
+              bodyColor: '#475569',
+              padding: 8,
+              callbacks: {
+                title: (items: any[]) => `Session ${items[0].dataIndex + 1}`,
+                label: (item: any) => {
+                  if (item.datasetIndex === 2) return `  Avg: ${item.raw}`;
+                  if (item.datasetIndex === 1) {
+                    const s = item.raw;
+                    return isNaN(s) ? null : `  Score: ${s} · ${s >= 85 ? 'Excellent' : s >= 75 ? 'Good' : 'Fair'}`;
+                  }
+                  return null;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              border: { color: '#E2E8F0' },
+              ticks: { color: '#94A3B8', font: { size: 10 }, maxRotation: 0, autoSkip: false }
+            },
+            y: {
+              min: 60, max: 100,
+              grid: { color: '#F1F5F9', lineWidth: 1 },
+              border: { dash: [2, 2], color: 'transparent' },
+              ticks: { color: '#94A3B8', font: { size: 10 }, stepSize: 10 }
+            }
+          }
+        },
+        plugins: [{
+          id: 'bestLabel',
+          afterDraw(chart: any) {
+            const { ctx } = chart;
+            const meta = chart.getDatasetMeta(0);
+            if (!meta.data[bestIdx]) return;
+            const bar = meta.data[bestIdx];
+            const score = scores[bestIdx];
+            if (!score) return;
+            ctx.save();
+            ctx.font = '600 9px sans-serif';
+            ctx.fillStyle = '#10B981';
+            ctx.textAlign = 'center';
+            ctx.fillText('★ Best', bar.x, bar.y - 14);
+            ctx.restore();
+          }
+        }]
+      });
+    };
+
+    if ((window as any).Chart) {
+      initChart();
+    } else {
+      const existing = document.getElementById('chartjs-cdn');
+      if (!existing) {
+        const script = document.createElement('script');
+        script.id = 'chartjs-cdn';
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+        script.onload = initChart;
+        document.head.appendChild(script);
+      } else {
+        existing.addEventListener('load', initChart);
+      }
+    }
+    return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null; } };
+  }, [canvasId, JSON.stringify(chartData), avgScore, bestIdx]);
+
+  const validScores = chartData.map(b => b.score).filter(s => s !== null) as number[];
+
+  return (
+    <div className="chart-grow mb-3 break-inside-avoid">
+      <div className="bg-[#F8FAFC] border border-slate-200 rounded-[10px] px-4 py-3">
+        {/* Header row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+          <div>
+            <p style={{ fontSize: '9px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Session Score Progress</p>
+            <p style={{ fontSize: '11px', color: '#64748B', margin: '1px 0 0' }}>{validScores.length} session{validScores.length !== 1 ? 's' : ''} recorded</p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: '9px', color: '#94A3B8', margin: 0 }}>Avg</p>
+            <p style={{ fontSize: '20px', fontWeight: 600, color: '#1A56DB', margin: 0, lineHeight: 1.1 }}>{avgScore}</p>
+          </div>
+        </div>
+        {/* Chart canvas */}
+        <div style={{ position: 'relative', width: '100%', height: '130px' }}>
+          <canvas ref={canvasRef} id={canvasId} role="img" aria-label="Session score progress bar and line chart" />
+        </div>
+        {/* Legend */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+          {[['#10B981', '≥ 85 Excellent'], ['#1A56DB', '75–84 Good'], ['#F59E0B', '< 75 Fair']].map(([color, label]) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+              <span style={{ fontSize: '8px', color: '#64748B' }}>{label}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ width: 16, height: 2, background: '#E34948', borderRadius: 1, flexShrink: 0 }} />
+            <span style={{ fontSize: '8px', color: '#64748B' }}>Trend</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ width: 16, height: 0, borderTop: '1px dashed #94A3B8', flexShrink: 0 }} />
+            <span style={{ fontSize: '8px', color: '#64748B' }}>Avg {avgScore}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MainApp() {
   const [db, setDb] = useState(defaultDbStructure);
@@ -5178,7 +5306,7 @@ function MainApp() {
       case 'journals':
         return <JournalsModule db={db} setDb={setDb} user={currentUser} showToast={showToast} generateId={generateId} softDelete={softDelete} />;
       case 'my_journals': // STUDENT: Read Only Journal
-        return <StudentReadOnlyJournalsModule db={db} user={currentUser} language={language} />;
+        return <StudentReadOnlyJournalsModule db={db} user={currentUser} language={language} downloadPNG={downloadPNG} handleShareImage={handleShareImage} />;
       case 'assessments':
         return <AssessmentsModule db={db} setDb={setDb} generateId={generateId} showToast={showToast} user={currentUser} />;
       case 'my_assessments': // STUDENT: Read Only Assessment
@@ -5248,7 +5376,7 @@ function MainApp() {
   };
 
   return (
-    <div className="flex h-screen bg-[#0B0F19] text-[#F3F4F6] font-['Poppins',sans-serif] overflow-hidden selection:bg-[#00D4FF] selection:text-[#0B0F19]">
+    <div className="flex h-screen bg-[#0B0F19] text-[#F3F4F6] font-['Poppins',sans-serif] overflow-hidden selection:bg-[#00D4FF] selection:text-[#0B0F19] print:bg-white print:block print:h-auto print:overflow-visible print:text-black">
       <Toaster
         position="top-right"
         toastOptions={{
@@ -5482,7 +5610,7 @@ function MainApp() {
 
       {/* pt-16 = kompensasi mobile sticky header h-16 (64px); md:pt-12 untuk desktop */}
       {/* pb-20 md:pb-0 = kompensasi bottom nav student di mobile */}
-      <main className={`flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-12 relative custom-scrollbar ${currentUser?.role === 'student' ? 'pb-20 md:pb-0' : ''}`}>
+      <main className={`flex-1 overflow-y-auto p-4 md:p-8 pt-16 md:pt-12 relative custom-scrollbar print:bg-white print:p-0 print:pt-0 print:overflow-visible print:block ${currentUser?.role === 'student' ? 'pb-20 md:pb-0' : ''}`}>
           
           {/* DESKTOP CLOUD AUTO-SAVE INDICATOR */}
           <div className="hidden md:flex absolute top-6 right-8 z-50 print:hidden pointer-events-none">
@@ -9385,6 +9513,80 @@ function BillingRecapModule({ db, setDb, showToast, language = 'en', downloadPNG
 }
 
 
+// ── ECG Verify QR Code ───────────────────────────────────────────
+const ECG_VERIFY_SECRET = "ECG-ACADEMIC-SUITE-GRESIK-2024-SECRET";
+
+async function buildVerifyToken(payload: { name: string; studentId: string; className: string; date: string }): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(ECG_VERIFY_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sigBuffer = await crypto.subtle.sign(
+    "HMAC", key,
+    new TextEncoder().encode(JSON.stringify(payload))
+  );
+  const sig = btoa(Array.from(new Uint8Array(sigBuffer)).map(b => String.fromCharCode(b)).join(''));
+  return btoa(JSON.stringify({ ...payload, sig }));
+}
+
+function VerifyQrCode({ name, studentId, className, date }: { name: string; studentId: string; className: string; date: string }) {
+  const [qrSrc, setQrSrc] = React.useState('');
+  const [verifyUrl, setVerifyUrl] = React.useState('');
+  React.useEffect(() => {
+    buildVerifyToken({ name, studentId, className, date }).then(token => {
+      const url = `https://www.englishclub.my.id/verify/?t=${encodeURIComponent(token)}`;
+      setVerifyUrl(url);
+      setQrSrc(`https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=4&data=${encodeURIComponent(url)}`);
+    });
+  }, [name, studentId, className, date]);
+  if (!qrSrc) return <div style={{ width: 80, height: 80 }} />;
+  return (
+    <a href={verifyUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', lineHeight: 0 }}>
+      <img
+        src={qrSrc}
+        alt="Verification QR"
+        style={{ width: '80px', height: '80px', display: 'block' }}
+        crossOrigin="anonymous"
+      />
+    </a>
+  );
+}
+// ────────────────────────────────────────────────────────────────
+
+
+function VerifyLink({ name, studentId, className, date }: { name: string; studentId: string; className: string; date: string }) {
+  const [url, setUrl] = React.useState('');
+  React.useEffect(() => {
+    buildVerifyToken({ name, studentId, className, date }).then(token => {
+      setUrl(`https://www.englishclub.my.id/verify/?t=${encodeURIComponent(token)}`);
+    });
+  }, [name, studentId, className, date]);
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="qr-verify-link"
+      style={{
+        fontSize: '7px',
+        color: '#1A56DB',
+        textDecoration: 'underline',
+        textAlign: 'center',
+        display: 'block',
+        marginTop: '1px',
+        wordBreak: 'break-all',
+        maxWidth: '80px',
+        lineHeight: '1.3',
+      }}
+    >
+      Verify Online ↗
+    </a>
+  );
+}
 function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleShareImage, downloadPNG }) {
   const [view, setView] = useState('directory');
   const [dirType, setDirType] = useState('student');
@@ -9778,6 +9980,13 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
     // fallback ke autoGeneratedComment hanya kalau textarea belum terisi sama sekali
     const finalCommentDisplay = currentTeacherComment || autoGeneratedComment;
 
+    // FIX 5: Tanggal tanda tangan dikunci ke hari terakhir bulan periode rapor,
+    // bukan new Date() — sehingga tidak berubah tiap kali dokumen dibuka ulang.
+    const issuedDateDisplay = (() => {
+      const lastDay = new Date(reportPickerYear, reportPickerMonth, 0); // day 0 = last day of prev month
+      return lastDay.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    })();
+
     const handleGenerateCommentBtn = () => {
       setCurrentTeacherComment(autoGeneratedComment);
       showToast('Comment generated automatically');
@@ -9809,11 +10018,68 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
       setTimeout(() => { document.title = originalTitle; }, 1000);
     };
 
+    const handleDownloadPDF = () => {
+      // Print-based PDF: sama kualitasnya dengan Print tapi filename sudah diset otomatis.
+      // html2canvas tidak dipakai karena merusak font web (Inter) dan letter-spacing.
+      const safeName = (student?.name || 'student').replace(/[\s/\\?%*:|"<>-]/g, '_');
+      const periodStr = `${reportPickerYear}-${String(reportPickerMonth).padStart(2, '0')}`;
+      const originalTitle = document.title;
+      document.title = `${safeName}_report_${periodStr}`;
+      window.print();
+      setTimeout(() => { document.title = originalTitle; }, 1500);
+    };
+
+    // ── JOURNAL PDF: print only #journal-print, hide everything else ──
+    const handlePrintJournal = () => {
+      const safeName = (student?.name || 'student').replace(/[\s/\\?%*:|"<>-]/g, '_');
+      const periodStr = `${reportPickerYear}-${String(reportPickerMonth).padStart(2, '0')}`;
+      const originalTitle = document.title;
+      document.title = `${safeName}_journal_${periodStr}`;
+      // Add temporary class to body so CSS can target it
+      document.body.classList.add('print-journal-only');
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('print-journal-only');
+        document.title = originalTitle;
+      }, 1500);
+    };
+
+    // Pre-compute journal rows data (shared between hidden div and button logic)
+    const journalPrintRows = (() => {
+      const sortedAttJ = [...att].sort((a, b) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      // Tutor name for print must come from the Academic Calendar (db.calendar.tutor),
+      // not from journal.tutorName — which is just whoever was logged in when the entry
+      // was saved (e.g. admin "Vicky" entering data on behalf of the real tutor).
+      const tutorNamesFromCalendar = Array.from(new Set(
+        journals.map(j => getJournalTutorName(j, db.calendar)).filter(Boolean)
+      ));
+      const tutorDisplay = tutorNamesFromCalendar.length > 0 ? tutorNamesFromCalendar.join(' & ') : latestTutor;
+      const rows = sortedAttJ.map((attEntry, idx) => {
+        const jEntry = journals.find(j => j.date === attEntry.date && j.scheduleId === attEntry.scheduleId)
+          || journals.find(j => j.date === attEntry.date);
+        const status = attEntry.status || '—';
+        const isAbsent = ['Absent', 'Sick', 'Excused'].includes(status);
+        return {
+          no: idx + 1,
+          date: attEntry.date,
+          topic: jEntry?.topic || '—',
+          activities: jEntry?.activities || '—',
+          followUp: jEntry?.followUp || '',
+          status,
+          isAbsent,
+          tutorDisplay: jEntry ? (getJournalTutorName(jEntry, db.calendar) || tutorDisplay) : tutorDisplay,
+        };
+      });
+      return { rows, tutorDisplay };
+    })();
+
     return (
-      <div className="w-full animation-fade-in relative text-slate-900 bg-white rounded-xl shadow-2xl print:shadow-none print:w-full font-sans max-w-5xl mx-auto" id="report-print">
+      <div className="w-full animation-fade-in relative text-slate-900 bg-white rounded-xl shadow-2xl print:shadow-none print:w-full font-sans max-w-5xl mx-auto">
         
         {/* Control Bar & Editor (Print Hidden) */}
-        <div className="p-8 pb-0 print:hidden">
+        <div id="report-control-bar" className="p-8 pb-0 print:hidden">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 bg-[#0B0F19] p-4 rounded-lg text-white gap-4">
             <Button variant="ghost" onClick={() => setView('directory')} icon={ArrowLeft}>Back</Button>
 
@@ -9840,7 +10106,27 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
             </div>
 
             <div className="flex items-center gap-2 flex-wrap justify-end">
-              <Button onClick={handlePrintStudentReport} icon={Printer}>Print Premium PDF</Button>
+              {assessments.length === 0 && (
+                <span className="text-xs text-amber-400 italic flex items-center gap-1.5">
+                  <AlertCircle size={14} />
+                  No assessment data — Report PDF disabled
+                </span>
+              )}
+              {assessments.length > 0 && (
+                <Button onClick={handleDownloadPDF} icon={Printer}>
+                  Download Report PDF
+                </Button>
+              )}
+              {journalPrintRows.rows.length > 0 && (
+                <Button
+                  onClick={handlePrintJournal}
+                  icon={BookOpen}
+                  variant="secondary"
+                  className="bg-purple-600/20 border-purple-500/40 text-purple-300 hover:bg-purple-600/30"
+                >
+                  Download Journal PDF
+                </Button>
+              )}
             </div>
           </div>
 
@@ -9877,15 +10163,15 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
         </div>
 
         {/* Actual Print Area */}
-        <div className="w-full relative bg-white p-8 border-2 border-[#1A56DB] print:p-0 print:border-2 print:border-[#1A56DB] font-sans max-w-4xl mx-auto text-[11px] text-slate-900">
+        <div id="report-print" className="w-full relative bg-white p-8 border-2 border-[#1A56DB] print:p-6 print:border-2 print:border-[#1A56DB] print:shadow-none print:w-full print:max-w-none print:mx-0 print:rounded-none font-sans max-w-4xl mx-auto text-[11px] text-slate-900">
           {/* Subtle Watermark */}
-          <div className="fixed inset-0 flex items-center justify-center opacity-[0.02] z-0 pointer-events-none hidden print:flex">
-            <img src={LOGO_URL} className="w-[400px] h-auto grayscale" alt="watermark" />
+          <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] z-0 pointer-events-none hidden print:flex">
+            <img src={LOGO_URL} className="w-[300px] h-auto grayscale" alt="watermark" />
           </div>
 
           <div className="relative z-10">
             {/* 1. PREMIUM HEADER */}
-            <div className="mb-4 print:mt-2">
+            <div className="mb-4">
               {/* Top accent bar */}
               <div className="h-1 w-full bg-gradient-to-r from-[#1A56DB] via-[#3B82F6] to-[#93C5FD] rounded-full mb-4" />
               <div className="flex justify-between items-center pb-3 border-b border-slate-200">
@@ -9932,9 +10218,9 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
               </div>
 
               {/* Skill Radar Chart */}
-              <div className="md:col-span-3 print:col-span-3 bg-white border border-slate-200 rounded-[10px] p-3 shadow-sm flex flex-col items-center justify-center relative">
-                 <p className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.8px] absolute top-3 left-3">Skill Analytics</p>
-                 <div className="w-full max-w-[110px] aspect-square mt-3">
+              <div className="md:col-span-3 print:col-span-3 bg-white border border-slate-200 rounded-[10px] p-3 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
+                 <p className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.8px] mb-1">Skill Analytics</p>
+                 <div className="w-full max-w-[110px] aspect-square" style={{ overflow: 'visible' }}>
                      <RadarChart data={skillProgress} theme="light" />
                  </div>
               </div>
@@ -9964,11 +10250,32 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                        <p className="text-xl font-black text-slate-900 leading-none">{assessments.length > 0 ? avgScore : '—'}</p>
                     </div>
                     {assessments.length > 0 && (
-                       <div className="bg-[#F8FAFC] border border-slate-100 rounded-lg p-1.5 flex items-center justify-between h-[30px]">
+                      <>
+                        {/* Progress bar */}
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-1.5">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              avgScore >= 85 ? 'bg-emerald-500' : avgScore >= 75 ? 'bg-blue-500' : 'bg-amber-400'
+                            }`}
+                            style={{ width: `${Math.min(avgScore, 100)}%` }}
+                          />
+                        </div>
+                        <div className="bg-[#F8FAFC] border border-slate-100 rounded-lg p-1.5 flex items-center justify-between h-[30px]">
                           <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">Final Grade</span>
-                          {/* Fix #9: pakai sortedAssessments[0] — sudah diurutkan terbaru */}
-                          <span className="font-black text-base text-blue-600 leading-none">{sortedAssessments[0]?.grade || '—'}</span>
-                       </div>
+                          {/* Grade badge berwarna: A=hijau, B=biru, C=kuning, D/E=merah */}
+                          {(() => {
+                            const g = sortedAssessments[0]?.grade || '—';
+                            const gc = g === 'A' ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                     : g === 'B' ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                     : g === 'C' ? 'bg-amber-100 text-amber-700 border-amber-200'
+                                     : g === '—' ? 'bg-slate-100 text-slate-500 border-slate-200'
+                                     : 'bg-red-100 text-red-700 border-red-200';
+                            return (
+                              <span className={`inline-block font-black text-sm border rounded px-2 leading-tight ${gc}`}>{g}</span>
+                            );
+                          })()}
+                        </div>
+                      </>
                     )}
                  </div>
               </div>
@@ -9977,18 +10284,18 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
             {/* 3. ACADEMIC ADVISOR COMMENTS */}
             <div className="mb-4 break-inside-avoid">
                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Academic Advisor Comments</p>
-               <div className="bg-[#F8FAFC] border-l-4 border-blue-600 rounded-[10px] overflow-hidden">
+               <div className="advisor-comment-box bg-[#F8FAFC] border-l-4 border-blue-600 rounded-[10px] overflow-hidden">
                   {assessments.length ? (
-                    <div className="grid grid-cols-2 print:grid-cols-2 divide-x divide-slate-200">
-                      <div className="p-3">
+                    <div className="grid grid-cols-2 print:grid-cols-2 divide-x divide-slate-200" style={{alignItems:'stretch'}}>
+                      <div className="p-3 flex flex-col">
                         <p className="text-[9px] font-bold text-blue-500 uppercase tracking-[0.6px] mb-1">English</p>
-                        <p className="text-[10.5px] leading-snug text-slate-800 font-medium italic">
+                        <p className="advisor-comment-text text-[10.5px] leading-snug text-slate-800 font-medium italic flex-1">
                           &ldquo;{finalCommentDisplay}&rdquo;
                         </p>
                       </div>
-                      <div className="p-3">
+                      <div className="p-3 flex flex-col">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.6px] mb-1">Bahasa Indonesia</p>
-                        <p className="text-[10.5px] leading-snug text-slate-600 italic">
+                        <p className="advisor-comment-text text-[10.5px] leading-snug text-slate-600 italic flex-1">
                           &ldquo;{autoGeneratedCommentID}&rdquo;
                         </p>
                       </div>
@@ -10003,36 +10310,49 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                </div>
             </div>
 
-            {/* 4. ASSESSMENT TABLE */}
+            {/* 4. ASSESSMENT TABLE — unified with subject performance (no duplication) */}
             <div className="mb-5 break-inside-avoid">
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Monthly Assessment Grades</p>
               {(assessments.length > 0) ? (
+                <>
                   <div className="w-full border border-slate-200 rounded-[10px] overflow-hidden">
-                      <table className="w-full text-[11px] text-left">
-                        <thead className="bg-[#EFF6FF] text-[#1E3A8A]">
-                          <tr>
-                            <th className="py-2.5 px-4 font-semibold w-24">Period</th>
-                            {reportSubjects.map(sub => (
-                              <th key={sub} className="py-2.5 px-4 text-center font-semibold">{sub}</th>
-                            ))}
-                            <th className="py-2.5 px-4 text-center font-semibold w-20">Average</th>
-                            <th className="py-2.5 px-4 text-center font-semibold w-16">Grade</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200">
-                          {assessments.map((a, idx) => (
-                            <tr key={a.id} className="bg-white even:bg-[#FAFAFA]">
-                              <td className="py-2.5 px-4 font-semibold text-slate-900">{MONTHS[parseInt(a.month)-1].substring(0,3)} '{String(a.year).slice(2)}</td>
-                              {reportSubjects.map(sub => (
-                                <td key={sub} className="py-2.5 px-4 text-center text-slate-700">{a.scores?.[sub] || '—'}</td>
-                              ))}
-                              <td className="py-2.5 px-4 text-center font-bold text-slate-900">{a.average || '—'}</td>
-                              <td className="py-2.5 px-4 text-center font-bold text-blue-600">{a.grade || '—'}</td>
-                            </tr>
+                    <table className="w-full text-[11px] text-left">
+                      <thead className="bg-[#EFF6FF] text-[#1E3A8A]">
+                        <tr>
+                          <th className="py-2.5 px-4 font-semibold w-24">Period</th>
+                          {reportSubjects.map(sub => (
+                            <th key={sub} className="py-2.5 px-4 text-center font-semibold">{sub}</th>
                           ))}
-                        </tbody>
-                      </table>
+                          <th className="py-2.5 px-4 text-center font-semibold w-20">Average</th>
+                          <th className="py-2.5 px-4 text-center font-semibold w-16">Grade</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {assessments.map((a, idx) => (
+                          <tr key={a.id} className="bg-white even:bg-[#FAFAFA]">
+                            <td className="py-2.5 px-4 font-semibold text-slate-900">{MONTHS[parseInt(a.month)-1].substring(0,3)} '{String(a.year).slice(2)}</td>
+                            {reportSubjects.map(sub => (
+                              <td key={sub} className="py-2.5 px-4 text-center text-slate-700">{a.scores?.[sub] || '—'}</td>
+                            ))}
+                            <td className="py-2.5 px-4 text-center font-bold text-slate-900">{a.average || '—'}</td>
+                            <td className="py-2.5 px-4 text-center">
+                              {(() => {
+                                const g = a.grade || '—';
+                                const cls = g === 'A' ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                  : g === 'B' ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                  : g === 'C' ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                                  : g === 'D' ? 'bg-red-100 text-red-700 border border-red-300'
+                                  : 'bg-slate-100 text-slate-500';
+                                return <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black ${cls}`}>{g}</span>;
+                              })()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
+
+                </>
               ) : (
                   <div className="bg-[#F8FAFC] border border-slate-200 rounded-[10px] py-3 px-4 flex items-center gap-2 text-slate-500 w-max">
                       <FileText size={14} className="text-slate-400" />
@@ -10119,7 +10439,26 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                                    {session.status !== '—' ? session.status : '—'}
                                  </span>
                               </td>
-                              <td className="py-2.5 px-4 text-right text-slate-500 text-[10px] hidden sm:table-cell print:table-cell">{session.note}</td>
+                              <td className="py-2.5 px-4 text-right hidden sm:table-cell print:table-cell">
+                                {(() => {
+                                  const rawNote = session.note || '';
+                                  const scoreMatch = rawNote.match(/^(\d+)$/);
+                                  if (scoreMatch) {
+                                    const sc = parseInt(scoreMatch[1], 10);
+                                    const badgeCls = sc >= 85
+                                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                      : sc >= 75
+                                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                      : 'bg-amber-100 text-amber-700 border border-amber-200';
+                                    return (
+                                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black ${badgeCls}`}>
+                                        {sc}
+                                      </span>
+                                    );
+                                  }
+                                  return <span className="text-slate-500 text-[10px] italic">{rawNote}</span>;
+                                })()}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -10134,8 +10473,42 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
               })()}
             </div>
 
+            {/* 6a. SESSION SCORE CHART — Chart.js combo bar+line */}
+            {latestAss && (() => {
+              const savedScores: Record<string, number> = latestAss.sessionScores || {};
+              const sortedAtt2 = [...att].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+              const MAX_SESSIONS = 8;
+              const chartData: { score: number | null; label: string }[] = [];
+              sortedAtt2.forEach((attEntry) => {
+                const jEntry = journals.find(j => j.date === attEntry.date && j.scheduleId === attEntry.scheduleId)
+                  || journals.find(j => j.date === attEntry.date);
+                const scoreVal = jEntry ? (savedScores[jEntry.id] || 0) : 0;
+                const d = new Date(attEntry.date);
+                const dateLabel = `${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]}`;
+                chartData.push({ score: scoreVal || null, label: dateLabel });
+              });
+              while (chartData.length < MAX_SESSIONS) chartData.push({ score: null, label: '' });
+              const hasAnyScore = chartData.some(b => b.score !== null && b.score > 0);
+              if (!hasAnyScore) return null;
+              const scores = chartData.map(b => b.score);
+              const validScores = scores.filter(s => s !== null) as number[];
+              const avgScore2 = validScores.length ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
+              const bestIdx = scores.indexOf(Math.max(...validScores));
+              const canvasId = `sessionChart_${student.id}`;
+              return (
+                <SessionComboChart
+                  key={canvasId}
+                  canvasId={canvasId}
+                  chartData={chartData}
+                  avgScore={avgScore2}
+                  bestIdx={bestIdx}
+                />
+              );
+            })()}
+
             {/* 6. SIGNATURE SECTION */}
-            <div className="flex justify-between items-end break-inside-avoid text-[11px] signature-section mb-3">
+            <div className="flex justify-between items-end break-inside-avoid text-[11px] signature-section-wrapper mt-auto pt-2">
+              <div className="flex justify-between items-end w-full signature-section mb-3">
                {/* Left: stamp/note area */}
                <div className="text-[10px] text-slate-400 space-y-1">
                  <p className="font-semibold text-slate-500 uppercase tracking-[0.6px] text-[9px]">Official Document</p>
@@ -10143,14 +10516,26 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                  <p>and reflects the student's academic progress</p>
                  <p>for the stated reporting period.</p>
                </div>
+               {/* QR Code — verify page dengan HMAC-SHA256 token */}
+               <div className="flex flex-col items-center gap-2 self-end mb-0.5 qr-verify-block">
+                 <VerifyQrCode
+                   name={student.name}
+                   studentId={student.id}
+                   className={studentSession}
+                   date={issuedDateDisplay}
+                 />
+                 <p className="text-[9px] text-slate-500 text-center leading-tight font-semibold tracking-widest uppercase">Scan to Verify</p>
+                 <VerifyLink name={student.name} studentId={student.id} className={studentSession} date={issuedDateDisplay} />
+               </div>
                <div className="text-right">
-                 <p className="text-slate-500 mb-6 text-[11px]">Gresik, {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                 <p className="text-slate-500 mb-6 text-[11px]">Gresik, {issuedDateDisplay}</p>
                  <div className="border-t-2 border-slate-800 pt-1.5 inline-block w-44">
                      <p className="font-black text-slate-900 tracking-wide text-[12px]">Akhmad Akmal Rifqi</p>
                      <p className="text-slate-500 text-[10px]">Academic Advisor</p>
                      <p className="text-[9px] text-blue-600 font-semibold mt-0.5">English Club Gresik</p>
                  </div>
                </div>
+              </div>
             </div>
 
             {/* 7. PREMIUM FOOTER */}
@@ -10161,6 +10546,135 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
                 <span>Issued &amp; Certified by Academic Division</span>
                 <span className="font-semibold text-blue-500">www.englishclub.my.id</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── HIDDEN JOURNAL PRINT DIV — only visible when print-journal-only class is on body ── */}
+        <div id="journal-print" className="font-sans text-slate-900 bg-white p-8" style={{ display: 'none' }}>
+          {/* Header */}
+          <div className="mb-4">
+            <div style={{ height: '4px', background: 'linear-gradient(to right, #1A56DB, #3B82F6, #93C5FD)', borderRadius: '999px', marginBottom: '16px' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <img src={LOGO_URL} style={{ height: '56px', objectFit: 'contain' }} alt="Logo" />
+                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '16px' }}>
+                  <p style={{ fontSize: '10px', fontWeight: 800, color: '#1A56DB', textTransform: 'uppercase', letterSpacing: '1px' }}>English Club Gresik</p>
+                  <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>Perumahan Taman Anggrek Blok AB 05, Kedanyang, Kebomas, Gresik</p>
+                  <p style={{ fontSize: '10px', color: '#94a3b8' }}>www.englishclub.my.id</p>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', lineHeight: 1 }}>Learning Journal</p>
+                <p style={{ fontSize: '22px', fontWeight: 900, color: '#1A56DB', textTransform: 'uppercase', lineHeight: 1 }}>Session Log</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                  <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase' }}>Period:</span>
+                  <span style={{ fontSize: '11px', fontWeight: 600, color: '#334155' }}>
+                    {safeDateDisplay(startDate, 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} – {safeDateDisplay(endDate, 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Student Identity Strip */}
+          <div style={{ marginBottom: '16px', background: 'linear-gradient(135deg, #EFF6FF, #F8FAFC)', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ fontSize: '9px', fontWeight: 800, color: '#3B82F6', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Student</p>
+              <p style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a', lineHeight: 1.2 }}>{student.name}</p>
+              <p style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>
+                ID: <span style={{ fontWeight: 600, color: '#475569' }}>{student.id}</span>
+                &nbsp;·&nbsp; {student.level} — {student.class}
+                &nbsp;·&nbsp; {studentSession}
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '9px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '2px' }}>Total Sessions</p>
+              <p style={{ fontSize: '22px', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{journalPrintRows.rows.length}</p>
+            </div>
+          </div>
+
+          {/* Section label */}
+          <p style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Learning Journal Log</p>
+
+          {/* Table */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', fontSize: '10px' }}>
+            <thead>
+              <tr style={{ background: '#EFF6FF', color: '#1E3A8A' }}>
+                <th style={{ padding: '8px 10px', fontWeight: 600, textAlign: 'center', width: '28px', borderBottom: '1px solid #e2e8f0' }}>No</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600, width: '72px', borderBottom: '1px solid #e2e8f0' }}>Date</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600, width: '56px', borderBottom: '1px solid #e2e8f0' }}>Day</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600, width: '100px', borderBottom: '1px solid #e2e8f0' }}>Topic / Material</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600, borderBottom: '1px solid #e2e8f0' }}>Activities</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600, width: '110px', borderBottom: '1px solid #e2e8f0' }}>Follow Up / Notes</th>
+                <th style={{ padding: '8px 10px', fontWeight: 600, textAlign: 'center', width: '64px', borderBottom: '1px solid #e2e8f0' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {journalPrintRows.rows.map((row, i) => (
+                <tr key={row.date} style={{ background: row.isAbsent ? '#FEF2F2' : (i % 2 === 0 ? '#ffffff' : '#FAFAFA'), borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748b' }}>{row.no}</td>
+                  <td style={{ padding: '7px 10px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                    {new Date(row.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </td>
+                  <td style={{ padding: '7px 10px', color: '#64748b' }}>{getDayName(row.date)}</td>
+                  <td style={{ padding: '7px 10px', color: row.isAbsent ? '#94a3b8' : '#334155', fontWeight: row.isAbsent ? 'normal' : 500, fontStyle: row.isAbsent ? 'italic' : 'normal' }}>
+                    {row.topic}
+                  </td>
+                  <td style={{ padding: '7px 10px', color: row.isAbsent ? '#f87171' : '#475569', fontStyle: row.isAbsent ? 'italic' : 'normal', lineHeight: 1.4 }}>
+                    {row.isAbsent ? `Student was ${row.status.toLowerCase()} this session.` : (row.activities || '—')}
+                  </td>
+                  <td style={{ padding: '7px 10px', color: '#64748b', fontStyle: 'italic', lineHeight: 1.4 }}>
+                    {row.followUp || '—'}
+                  </td>
+                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                    <span style={{
+                      display: 'inline-block', padding: '2px 8px', borderRadius: '999px', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
+                      background: row.status === 'Present' ? '#d1fae5' : row.status === 'Sick' ? '#fef3c7' : row.status === 'Excused' ? '#dbeafe' : row.status === 'Absent' ? '#fee2e2' : '#f1f5f9',
+                      color: row.status === 'Present' ? '#065f46' : row.status === 'Sick' ? '#92400e' : row.status === 'Excused' ? '#1e40af' : row.status === 'Absent' ? '#991b1b' : '#475569',
+                    }}>{row.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Signature */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '24px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+            {/* Kiri: Tutor */}
+            <div style={{ textAlign: 'left' }}>
+              <p style={{ fontSize: '11px', color: '#64748b', marginBottom: '24px' }}>Gresik, {issuedDateDisplay}</p>
+              <div style={{ borderTop: '2px solid #0f172a', paddingTop: '6px', display: 'inline-block', minWidth: '160px' }}>
+                <p style={{ fontWeight: 900, color: '#0f172a', fontSize: '12px', letterSpacing: '0.3px' }}>{journalPrintRows.tutorDisplay}</p>
+                <p style={{ fontSize: '10px', color: '#64748b' }}>Class Tutor</p>
+                <p style={{ fontSize: '9px', color: '#1A56DB', fontWeight: 600, marginTop: '2px' }}>English Club Gresik</p>
+              </div>
+            </div>
+            {/* Tengah: Official note */}
+            <div style={{ fontSize: '10px', color: '#94a3b8', textAlign: 'center', lineHeight: 1.6 }}>
+              <p style={{ fontWeight: 700, color: '#64748b', textTransform: 'uppercase', fontSize: '9px', letterSpacing: '0.6px' }}>Official Document</p>
+              <p>This journal log is issued by English Club Gresik</p>
+              <p>and reflects the student's learning activities</p>
+              <p>for the stated reporting period.</p>
+            </div>
+            {/* Kanan: Academic Advisor */}
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '11px', color: '#64748b', marginBottom: '24px' }}>Gresik, {issuedDateDisplay}</p>
+              <div style={{ borderTop: '2px solid #0f172a', paddingTop: '6px', display: 'inline-block', minWidth: '160px' }}>
+                <p style={{ fontWeight: 900, color: '#0f172a', fontSize: '12px', letterSpacing: '0.3px' }}>Akhmad Akmal Rifqi</p>
+                <p style={{ fontSize: '10px', color: '#64748b' }}>Academic Advisor</p>
+                <p style={{ fontSize: '9px', color: '#1A56DB', fontWeight: 600, marginTop: '2px' }}>English Club Gresik</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ marginTop: '12px' }}>
+            <div style={{ height: '1px', background: 'linear-gradient(to right, #1A56DB, #3B82F6, #93C5FD)', marginBottom: '8px' }} />
+            <div style={{ fontSize: '9.5px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 600, color: '#64748b' }}>English Club Gresik — Academic Division</span>
+              <span>Issued &amp; Certified by Academic Division</span>
+              <span style={{ fontWeight: 600, color: '#1A56DB' }}>www.englishclub.my.id</span>
             </div>
           </div>
         </div>
@@ -10197,7 +10711,7 @@ function HistoryReportsModule({ db, setDb, showToast, handlePrint, user, handleS
     };
 
     return (
-      <div className="w-full animation-fade-in relative text-black bg-white rounded-xl shadow-2xl p-8 print:p-0 print:shadow-none print:bg-transparent print:w-full" id="report-print">
+      <div className="w-full animation-fade-in relative text-black bg-white rounded-xl shadow-2xl p-8 print:p-0 print:shadow-none print:bg-transparent print:w-full" id="tutor-report-print">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center print-hidden mb-6 bg-[#0B0F19] p-4 rounded-lg text-white gap-4">
           <Button variant="ghost" onClick={() => setView('directory')} icon={ArrowLeft}>Back</Button>
           <div className="flex items-center gap-2 flex-wrap">
@@ -12775,7 +13289,7 @@ function StudentReadOnlyAttendanceModule({ db, user, language = 'en' }) {
   )
 }
 
-function StudentReadOnlyJournalsModule({ db, user, language = 'en' }) {
+function StudentReadOnlyJournalsModule({ db, user, language = 'en', downloadPNG, handleShareImage }) {
   const [filterMonth, setFilterMonth] = useState<number | string>(new Date().getMonth() + 1);
   const [filterYear, setFilterYear] = useState(new Date().getFullYear());
 
@@ -12801,19 +13315,62 @@ function StudentReadOnlyJournalsModule({ db, user, language = 'en' }) {
      return j.date.startsWith(String(filterYear));
   }).reverse();
 
+  // ── JOURNAL PRINT / DOWNLOAD HANDLERS ──
+  const safeName = (student?.name || 'student').replace(/[\s/\\?%*:|"<>-]/g, '_');
+  const periodStr = filterMonth === 'All'
+    ? String(filterYear)
+    : `${filterYear}-${String(filterMonth).padStart(2, '0')}`;
+
+  const handlePrintJournal = () => {
+    const originalTitle = document.title;
+    document.title = `${safeName}_journal_${periodStr}`;
+    document.body.classList.add('print-journal-only');
+    window.print();
+    setTimeout(() => {
+      document.body.classList.remove('print-journal-only');
+      document.title = originalTitle;
+    }, 1500);
+  };
+
+  const handleDownloadJournalPNG = () => {
+    if (downloadPNG) downloadPNG('journal-print', `${safeName}_journal_${periodStr}`);
+  };
+
+  const handleShareJournal = () => {
+    if (handleShareImage) handleShareImage('journal-print', `${safeName}_journal_${periodStr}`, `Learning Journal – ${student?.name || user.name}`);
+  };
+
+  // Period label for the print layout
+  const periodLabel = filterMonth === 'All'
+    ? String(filterYear)
+    : `${MONTHS[Number(filterMonth) - 1]} ${filterYear}`;
+
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-white mb-1">{language === 'id' ? 'Materi Belajar Saya' : 'My Learning Materials'}</h2><p className="text-gray-400 text-sm">{language === 'id' ? 'Akses materi dan sumber belajar Anda.' : 'Access your learning materials and resources.'}</p></div>
-      <Card className="p-0 flex flex-col">
-        <div className="p-4 sm:p-5 bg-[#0A0E17] border-b border-gray-800 flex flex-wrap gap-3 justify-between items-center">
-           <div className="flex gap-2 w-full sm:w-auto">
-              <select className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#00D4FF] flex-1 sm:flex-none" value={filterMonth} onChange={e => setFilterMonth(e.target.value === 'All' ? 'All' : Number(e.target.value))}>
-                <option value="All">{language === 'id' ? 'Semua Bulan' : 'All Months'}</option>
-                {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-              </select>
-              <input type="number" className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white w-24 focus:border-[#00D4FF]" value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} />
-           </div>
+      {/* ── Header & Controls ── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-[#0A0E17] p-4 rounded-xl border border-gray-800 shadow-sm gap-4 print-hidden">
+        <div>
+          <h2 className="text-xl font-bold text-white">{language === 'id' ? 'Jurnal Belajar Saya' : 'My Learning Journal'}</h2>
+          <p className="text-sm text-gray-400">{language === 'id' ? 'Lihat dan unduh jurnal pembelajaran Anda' : 'View and download your learning journal entries'}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <select className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-[#00D4FF]" value={filterMonth} onChange={e => setFilterMonth(e.target.value === 'All' ? 'All' : Number(e.target.value))}>
+            <option value="All">{language === 'id' ? 'Semua Bulan' : 'All Months'}</option>
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+          <input type="number" className="bg-[#151B26] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white w-24 focus:border-[#00D4FF]" value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} />
+          {myJournals.length > 0 && (
+            <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+              <Button onClick={handlePrintJournal} icon={Printer} className="flex-1 sm:flex-none">{language === 'id' ? 'Cetak PDF' : 'Print PDF'}</Button>
+              <Button onClick={handleDownloadJournalPNG} variant="secondary" icon={Download} title={language === 'id' ? 'Unduh Gambar' : 'Download Image'} className="px-3" />
+              <Button onClick={handleShareJournal} variant="secondary" icon={Share2} title={language === 'id' ? 'Bagikan' : 'Share'} className="px-3" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Journal Cards (on-screen) ── */}
+      <Card className="p-0 flex flex-col print-hidden">
         <div className="p-4 sm:p-5 space-y-4 bg-[#151B26]">
         {myJournals.length > 0 ? myJournals.map((j, idx) => (
           <div key={j.id} className="bg-[#0B0F19] border border-[#00D4FF]/20 rounded-xl shadow-md p-5">
@@ -12822,19 +13379,91 @@ function StudentReadOnlyJournalsModule({ db, user, language = 'en' }) {
                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#00D4FF]/10 border border-[#00D4FF]/20 text-[11px] font-black text-[#00D4FF] shrink-0 mt-0.5">{String(idx + 1).padStart(2, '0')}</span>
                  <div>
                     <h3 className="text-lg font-bold text-white">{j.topic}</h3>
-                    <p className="text-[#00D4FF] text-sm">Tutor: {j.tutorName}</p>
+                    <p className="text-[#00D4FF] text-sm">Tutor: {getJournalTutorName(j, db.calendar)}</p>
                  </div>
               </div>
               <span className="text-xs text-gray-400 shrink-0 ml-2">{j.date}</span>
             </div>
             <div className="mt-4 pt-4 border-t border-gray-800">
-              <p className="text-sm text-gray-300"><strong>{language === 'id' ? 'Activities:' : 'Activities:'}</strong> {j.activities}</p>
+              <p className="text-sm text-gray-300"><strong>{language === 'id' ? 'Aktivitas:' : 'Activities:'}</strong> {j.activities}</p>
               {j.followUp && <p className="text-sm text-gray-400 mt-2"><strong>{language === 'id' ? 'Tindak Lanjut:' : 'Follow Up:'}</strong> {j.followUp}</p>}
             </div>
           </div>
-        )) : <div className="p-8 text-center text-gray-500 bg-[#151B26] rounded-xl">{language === 'id' ? 'Tidak ada materi tersedia untuk sesi Anda.' : 'No materials available for your session.'}</div>}
+        )) : <div className="p-8 text-center text-gray-500 bg-[#151B26] rounded-xl">{language === 'id' ? 'Tidak ada jurnal tersedia untuk sesi Anda.' : 'No journal entries available for your session.'}</div>}
         </div>
       </Card>
+
+      {/* ── HIDDEN JOURNAL PRINT DIV ──
+           Sama persis dengan pola admin di HistoryReportsModule.
+           display:none di layar; CSS print-journal-only override ke display:block saat @media print. ── */}
+      <div id="journal-print" className="font-sans text-slate-900 bg-white p-8" style={{ display: 'none' }}>
+          {/* Header */}
+          <div className="flex justify-between items-center pb-4 mb-6 border-b-2 border-blue-600">
+            <div className="flex items-center gap-4">
+              <img src={LOGO_URL} className="h-14 object-contain" alt="Logo" />
+              <div className="border-l border-slate-200 pl-4">
+                <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">English Club Gresik</p>
+                <p className="text-xs text-slate-400 mt-0.5">Perumahan Taman Anggrek Blok AB 05, Kedanyang, Kebomas, Gresik</p>
+                <p className="text-xs text-slate-400">www.englishclub.my.id</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <h1 className="text-xl font-black text-slate-900 uppercase leading-none">Learning Journal</h1>
+              <p className="text-xs text-slate-500 mt-1">Period: {periodLabel}</p>
+            </div>
+          </div>
+
+          {/* Student Info */}
+          <div className="mb-5 p-3 bg-slate-50 border border-slate-200 rounded-lg grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+            <div><span className="text-slate-400 uppercase tracking-wide text-[10px]">Student Name</span><p className="font-bold text-slate-800">{student?.name || user.name}</p></div>
+            <div><span className="text-slate-400 uppercase tracking-wide text-[10px]">Student ID</span><p className="font-bold text-slate-800">{student?.id || '-'}</p></div>
+            <div><span className="text-slate-400 uppercase tracking-wide text-[10px]">Level</span><p className="font-bold text-slate-800">{student?.level || '-'}</p></div>
+            <div><span className="text-slate-400 uppercase tracking-wide text-[10px]">Class</span><p className="font-bold text-slate-800">{student?.class || '-'}</p></div>
+          </div>
+
+          {/* Journal Table */}
+          {myJournals.length > 0 ? (
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="bg-blue-600 text-white">
+                  <th className="border border-blue-500 p-2 text-center w-8">No.</th>
+                  <th className="border border-blue-500 p-2 text-center w-24">Date</th>
+                  <th className="border border-blue-500 p-2 text-left">Topic</th>
+                  <th className="border border-blue-500 p-2 text-left">Activities</th>
+                  <th className="border border-blue-500 p-2 text-left">Follow-Up</th>
+                  <th className="border border-blue-500 p-2 text-center w-24">Tutor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myJournals.map((j, idx) => (
+                  <tr key={j.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                    <td className="border border-slate-200 p-2 text-center font-bold text-slate-500">{idx + 1}</td>
+                    <td className="border border-slate-200 p-2 text-center text-slate-700">{j.date}</td>
+                    <td className="border border-slate-200 p-2 font-semibold text-slate-800">{j.topic}</td>
+                    <td className="border border-slate-200 p-2 text-slate-700">{j.activities}</td>
+                    <td className="border border-slate-200 p-2 text-slate-500 italic">{j.followUp || '—'}</td>
+                    <td className="border border-slate-200 p-2 text-center text-slate-700">{getJournalTutorName(j, db.calendar)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-center text-slate-400 py-8">No journal entries for this period.</p>
+          )}
+
+          {/* Footer */}
+          <div className="mt-8 pt-4 border-t border-slate-200 flex justify-between items-end text-xs text-slate-400">
+            <div>
+              <p>Generated: {new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+              <p>English Club Gresik — www.englishclub.my.id</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-slate-300">Student Signature</p>
+              <div className="mt-6 border-b border-slate-400 w-32 ml-auto" />
+              <p className="mt-1 font-semibold text-slate-600">{student?.name || user.name}</p>
+            </div>
+          </div>
+      </div>
     </div>
   )
 }
@@ -13209,17 +13838,17 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
       </div>
 
       {/* Premium PDF Layout - Read Only */}
-      <div className="w-full animation-fade-in relative bg-white rounded-xl shadow-2xl p-8 border-2 border-[#1A56DB] print:p-0 print:border-2 print:border-[#1A56DB] print:shadow-none print:w-full font-sans max-w-4xl mx-auto text-[11px] text-slate-900" id="report-print">
+      <div className="w-full animation-fade-in relative bg-white rounded-xl shadow-2xl p-8 border-2 border-[#1A56DB] print:p-6 print:border-2 print:border-[#1A56DB] print:shadow-none print:w-full print:max-w-none print:mx-0 print:rounded-none font-sans max-w-4xl mx-auto text-[11px] text-slate-900" id="report-print">
         
         {/* Subtle Watermark */}
-        <div className="fixed inset-0 flex items-center justify-center opacity-[0.02] z-0 pointer-events-none hidden print:flex">
-          <img src={LOGO_URL} className="w-[400px] h-auto grayscale" alt="watermark" />
+        <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] z-0 pointer-events-none hidden print:flex">
+          <img src={LOGO_URL} className="w-[300px] h-auto grayscale" alt="watermark" />
         </div>
 
         <div className="relative z-10">
           
           {/* 1. PREMIUM HEADER */}
-          <div className="mb-4 print:mt-2">
+          <div className="mb-4">
             {/* Top accent bar */}
             <div className="h-1 w-full bg-gradient-to-r from-[#1A56DB] via-[#3B82F6] to-[#93C5FD] rounded-full mb-4" />
             <div className="flex justify-between items-center pb-3 border-b border-slate-200">
@@ -13236,7 +13865,9 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
                 <h1 className="text-[22px] font-black text-blue-600 tracking-tight uppercase leading-none">Progress Report</h1>
                 <div className="flex items-center justify-end gap-2 mt-1.5">
                   <span className="text-[10px] text-slate-400 uppercase tracking-[0.6px]">Period:</span>
-                  <span className="text-[11px] font-semibold text-slate-700">{MONTHS[reportMonth - 1]} {reportYear}</span>
+                  <span className="text-[11px] font-semibold text-slate-700">
+                    {`1 ${MONTHS[reportMonth - 1]} ${reportYear} – ${new Date(reportYear, reportMonth, 0).getDate()} ${MONTHS[reportMonth - 1]} ${reportYear}`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -13311,17 +13942,17 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
           {/* 3. ACADEMIC ADVISOR COMMENTS */}
           <div className="mb-4 break-inside-avoid">
              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Academic Advisor Comments</p>
-             <div className="bg-[#F8FAFC] border-l-4 border-blue-600 rounded-[10px] overflow-hidden">
+             <div className="advisor-comment-box bg-[#F8FAFC] border-l-4 border-blue-600 rounded-[10px] overflow-hidden">
                <div className="grid grid-cols-2 print:grid-cols-2 divide-x divide-slate-200">
                  <div className="p-3">
                    <p className="text-[9px] font-bold text-blue-500 uppercase tracking-[0.6px] mb-1">English</p>
-                   <p className={`text-[10.5px] leading-snug font-medium italic ${hasAssessments ? 'text-slate-800' : 'text-slate-500'}`}>
+                   <p className={`advisor-comment-text text-[10.5px] leading-snug font-medium italic ${hasAssessments ? 'text-slate-800' : 'text-slate-500'}`}>
                      &ldquo;{finalCommentEN}&rdquo;
                    </p>
                  </div>
                  <div className="p-3">
                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.6px] mb-1">Bahasa Indonesia</p>
-                   <p className={`text-[10.5px] leading-snug italic ${hasAssessments ? 'text-slate-600' : 'text-slate-500'}`}>
+                   <p className={`advisor-comment-text text-[10.5px] leading-snug italic ${hasAssessments ? 'text-slate-600' : 'text-slate-500'}`}>
                      &ldquo;{finalCommentID}&rdquo;
                    </p>
                  </div>
@@ -13329,36 +13960,48 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
              </div>
           </div>
 
-          {/* 4. ASSESSMENT TABLE */}
+          {/* 4. ASSESSMENT TABLE — unified with subject performance */}
           <div className="mb-5 break-inside-avoid">
             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.8px] mb-1.5">Monthly Assessment Grades</p>
             {(assessments.length > 0) ? (
+              <>
                 <div className="w-full border border-slate-200 rounded-[10px] overflow-hidden">
-                    <table className="w-full text-[11px] text-left">
-                      <thead className="bg-[#EFF6FF] text-[#1E3A8A]">
-                        <tr>
-                          <th className="py-2.5 px-4 font-semibold w-24">Period</th>
-                          {reportSubjects.map(sub => (
-                            <th key={sub} className="py-2.5 px-4 text-center font-semibold">{sub}</th>
-                          ))}
-                          <th className="py-2.5 px-4 text-center font-semibold w-20">Average</th>
-                          <th className="py-2.5 px-4 text-center font-semibold w-16">Grade</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {assessments.map((a, idx) => (
-                          <tr key={a.id} className="bg-white even:bg-[#FAFAFA]">
-                            <td className="py-2.5 px-4 font-semibold text-slate-900">{MONTHS[parseInt(a.month)-1].substring(0,3)} '{String(a.year).slice(2)}</td>
-                            {reportSubjects.map(sub => (
-                              <td key={sub} className="py-2.5 px-4 text-center text-slate-700">{a.scores?.[sub] || '—'}</td>
-                            ))}
-                            <td className="py-2.5 px-4 text-center font-bold text-slate-900">{a.average || '—'}</td>
-                            <td className="py-2.5 px-4 text-center font-bold text-blue-600">{a.grade || '—'}</td>
-                          </tr>
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-[#EFF6FF] text-[#1E3A8A]">
+                      <tr>
+                        <th className="py-2.5 px-4 font-semibold w-24">Period</th>
+                        {reportSubjects.map(sub => (
+                          <th key={sub} className="py-2.5 px-4 text-center font-semibold">{sub}</th>
                         ))}
-                      </tbody>
-                    </table>
+                        <th className="py-2.5 px-4 text-center font-semibold w-20">Average</th>
+                        <th className="py-2.5 px-4 text-center font-semibold w-16">Grade</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {assessments.map((a, idx) => (
+                        <tr key={a.id} className="bg-white even:bg-[#FAFAFA]">
+                          <td className="py-2.5 px-4 font-semibold text-slate-900">{MONTHS[parseInt(a.month)-1].substring(0,3)} '{String(a.year).slice(2)}</td>
+                          {reportSubjects.map(sub => (
+                            <td key={sub} className="py-2.5 px-4 text-center text-slate-700">{a.scores?.[sub] || '—'}</td>
+                          ))}
+                          <td className="py-2.5 px-4 text-center font-bold text-slate-900">{a.average || '—'}</td>
+                          <td className="py-2.5 px-4 text-center">
+                            {(() => {
+                              const g = a.grade || '—';
+                              const cls = g === 'A' ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                : g === 'B' ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                                : g === 'C' ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                                : g === 'D' ? 'bg-red-100 text-red-700 border border-red-300'
+                                : 'bg-slate-100 text-slate-500';
+                              return <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black ${cls}`}>{g}</span>;
+                            })()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+              </>
             ) : (
                 <div className="bg-[#F8FAFC] border border-slate-200 rounded-[10px] py-3 px-4 flex items-center gap-2 text-slate-500 w-max">
                     <FileText size={14} className="text-slate-400" />
@@ -13453,6 +14096,37 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
             })()}
           </div>
 
+          {/* 6a. SESSION SCORE CHART — history module */}
+          {latestAss && (() => {
+            const savedScoresH: Record<string, number> = latestAss.sessionScores || {};
+            const sortedAttH = [...att].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            const MAX_SESSIONS = 8;
+            const chartDataH: { score: number | null; label: string }[] = [];
+            sortedAttH.forEach(attEntry => {
+              const jEntry = journals.find(j => j.date === attEntry.date && j.scheduleId === attEntry.scheduleId)
+                || journals.find(j => j.date === attEntry.date);
+              const scoreH = jEntry ? (savedScoresH[jEntry.id] || 0) : 0;
+              const d = new Date(attEntry.date);
+              const dateLabel = `${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]}`;
+              chartDataH.push({ score: scoreH || null, label: dateLabel });
+            });
+            while (chartDataH.length < MAX_SESSIONS) chartDataH.push({ score: null, label: '' });
+            const hasAnyScoreH = chartDataH.some(b => b.score !== null && b.score > 0);
+            if (!hasAnyScoreH) return null;
+            const validH = chartDataH.map(b => b.score).filter(s => s !== null) as number[];
+            const avgH = validH.length ? Math.round(validH.reduce((a, b) => a + b, 0) / validH.length) : 0;
+            const bestIdxH = chartDataH.map(b => b.score).indexOf(Math.max(...validH));
+            return (
+              <SessionComboChart
+                key={`histChart_${student.id}`}
+                canvasId={`histChart_${student.id}`}
+                chartData={chartDataH}
+                avgScore={avgH}
+                bestIdx={bestIdxH}
+              />
+            );
+          })()}
+
           {/* 6. SIGNATURE SECTION */}
           <div className="flex justify-between items-end break-inside-avoid text-[11px] signature-section mb-3">
              {/* Left: stamp/note area */}
@@ -13461,6 +14135,17 @@ function StudentReadOnlyReportModule({ db, user, downloadPNG, handleShareImage, 
                <p>This report is issued by English Club Gresik</p>
                <p>and reflects the student's academic progress</p>
                <p>for the stated reporting period.</p>
+             </div>
+             {/* QR Code — verify page dengan HMAC-SHA256 token */}
+             <div className="flex flex-col items-center gap-2 self-end mb-0.5 qr-verify-block">
+               <VerifyQrCode
+                 name={student.name}
+                 studentId={student.id}
+                 className={studentSession}
+                 date={new Date(reportYear, reportMonth, 0).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+               />
+               <p className="text-[9px] text-slate-500 text-center leading-tight font-semibold tracking-widest uppercase">Scan to Verify</p>
+               <VerifyLink name={student.name} studentId={student.id} className={studentSession} date={new Date(reportYear, reportMonth, 0).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} />
              </div>
              <div className="text-right">
                <p className="text-slate-500 mb-6 text-[11px]">Gresik, {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
@@ -15748,99 +16433,269 @@ if (typeof document !== 'undefined' && !document.getElementById('ecg-styles')) {
     .receipt-pop { animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
     
     @media print {
+      /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         PAGE SETUP
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
       @page {
         size: A4 portrait;
-        margin: 4mm; 
+        margin: 5mm 8mm;
       }
-      body { 
-        background: white !important; 
-        -webkit-print-color-adjust: exact !important; 
-        print-color-adjust: exact !important; 
+
+      /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         GLOBAL RESET
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+      html, body {
+        background: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color: #111 !important;
       }
-      * { 
-        text-shadow: none !important; 
-        box-shadow: none !important; 
-        letter-spacing: normal !important; /* FIX #2: BROKEN LETTER SPACING */
+      #root { background: white !important; }
+
+      html, body, #root,
+      .h-screen, .min-h-screen,
+      .overflow-hidden, .overflow-y-auto,
+      .flex-1, main {
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        position: static !important;
+        background-color: white !important;
+        color: #111827 !important;
       }
-      
-      /* ── STUDENT ACADEMIC REPORT: force 1 page ── */
-      /* Scale down the entire print area to fit A4 in one page */
+
+      .bg-\[#0B0F19\]  { background-color: white !important; }
+      .bg-\[#0A0E17\]  { background-color: white !important; }
+      .bg-\[#151B26\]  { background-color: white !important; }
+      .bg-\[#051126\]  { background-color: white !important; }
+      .bg-\[#1A2234\]  { background-color: white !important; }
+
+      *:not(#report-print):not(#report-print *) {
+        text-shadow: none !important;
+        box-shadow: none !important;
+        letter-spacing: normal !important;
+      }
+
+      /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         REPORT PRINT AREA — tanpa zoom, font & layout asli dijaga
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+      /* Hide the control bar (editor + buttons) above the report */
+      #report-control-bar { display: none !important; }
+
       #report-print {
-        width: 100%;
-        zoom: 0.82;
-        transform-origin: top left;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 3mm 4mm !important;
+        border: 2px solid #1A56DB !important;
+        border-radius: 4px !important;
+        box-shadow: none !important;
+        background: white !important;
+        color: #111827 !important;
+        font-size: 9px !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        min-height: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
       }
 
-      /* Receipt / slip: keep original zoom */
-      #slip-print {
-        width: 100%;
-        zoom: 0.92;
+      /* Content wrapper fills full page height */
+      #report-print > div:first-child { flex: none !important; }
+      #report-print > .relative.z-10 {
+        flex: 1 1 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+      }
+      /* Chart section grows to fill remaining space */
+      #report-print .chart-grow {
+        flex: 1 1 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-end !important;
       }
 
-      /* Tighten all section gaps inside the report */
-      #report-print .mb-5 { margin-bottom: 0.35rem !important; }
-      #report-print .mb-4 { margin-bottom: 0.3rem !important; }
-      #report-print .mb-6 { margin-bottom: 0.4rem !important; }
-      #report-print .pb-4 { padding-bottom: 0.2rem !important; }
-      #report-print .pt-4, #report-print .pt-3 { padding-top: 0.2rem !important; }
-      #report-print .gap-3 { gap: 0.2rem !important; }
-      #report-print .gap-2 { gap: 0.15rem !important; }
-      #report-print .p-4 { padding: 0.45rem !important; }
-      #report-print .p-3 { padding: 0.35rem !important; }
-      #report-print .p-2\.5 { padding: 0.3rem !important; }
-      #report-print .p-1\.5 { padding: 0.2rem !important; }
-      /* Tighten table rows */
-      #report-print td, #report-print th { padding: 0.18rem 0.3rem !important; }
-      /* Header logo smaller */
-      #report-print img.h-16 { height: 48px !important; }
-      /* Title font smaller */
-      #report-print h1 { font-size: 20px !important; }
-      /* Signature section tight */
-      #report-print .signature-section { margin-top: 0 !important; }
-      #report-print .mb-8 { margin-bottom: 0.3rem !important; }
-      
-      /* Aggressively reduce gaps for other print areas */
+      #report-print .bg-\[#EFF6FF\] { background-color: #EFF6FF !important; }
+      #report-print .bg-\[#F8FAFC\] { background-color: #F8FAFC !important; }
+      /* Keep the student profile card gradient intact for print */
+      #report-print .from-\[#EFF6FF\].to-\[#F8FAFC\] {
+        background-image: linear-gradient(to bottom right, #EFF6FF, #F8FAFC) !important;
+      }
+
+      #slip-print { width: 100%; zoom: 0.92; }
+
+      /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         SPACING — target 1 halaman A4 untuk maks 8 sesi
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+      /* Margins */
+      #report-print .mb-8, #report-print .mb-6 { margin-bottom: 0.22rem !important; }
+      #report-print .mb-5                       { margin-bottom: 0.2rem !important; }
+      #report-print .mb-4                       { margin-bottom: 0.18rem !important; }
+      #report-print .mb-3                       { margin-bottom: 0.12rem !important; }
+      #report-print .mb-2                       { margin-bottom: 0.08rem !important; }
+      #report-print .mb-1, #report-print .mb-1\.5 { margin-bottom: 0.05rem !important; }
+      #report-print .mt-2, #report-print .mt-1\.5 { margin-top: 0.08rem !important; }
+      #report-print .mt-1                        { margin-top: 0.05rem !important; }
+      /* Padding */
+      #report-print .p-8                  { padding: 0.28rem !important; }
+      #report-print .p-4                  { padding: 0.28rem !important; }
+      #report-print .p-3                  { padding: 0.22rem !important; }
+      #report-print .p-2\.5               { padding: 0.18rem !important; }
+      #report-print .p-1\.5               { padding: 0.12rem !important; }
+      #report-print .px-4                 { padding-left: 0.4rem !important; padding-right: 0.4rem !important; }
+      #report-print .py-2\.5              { padding-top: 0.14rem !important; padding-bottom: 0.14rem !important; }
+      #report-print .py-3                 { padding-top: 0.18rem !important; padding-bottom: 0.18rem !important; }
+      #report-print .pb-3, #report-print .pb-4 { padding-bottom: 0.12rem !important; }
+      #report-print .pt-2, #report-print .pt-3, #report-print .pt-4 { padding-top: 0.12rem !important; }
+      /* Gaps */
+      #report-print .gap-3  { gap: 0.2rem !important; }
+      #report-print .gap-2  { gap: 0.15rem !important; }
+      #report-print .gap-1  { gap: 0.08rem !important; }
+      /* Table rows — ini yang paling hemat ruang */
+      #report-print td, #report-print th {
+        padding: 0.15rem 0.35rem !important;
+        line-height: 1.25 !important;
+        font-size: 9px !important;
+      }
+      /* Typography — compact untuk muat 1 halaman A4 */
+      #report-print                       { font-size: 9px !important; }
+      #report-print h1                    { font-size: 13px !important; line-height: 1.1 !important; }
+      #report-print .text-\[22px\]        { font-size: 13px !important; }
+      #report-print .text-\[17px\]        { font-size: 12px !important; }
+      #report-print .text-xl              { font-size: 13px !important; }
+      #report-print .text-\[11px\]        { font-size: 8.5px !important; }
+      #report-print .text-\[10\.5px\]     { font-size: 8.5px !important; }
+      #report-print .text-\[10px\]        { font-size: 8px !important; }
+      #report-print .text-\[9px\]         { font-size: 7.5px !important; }
+      #report-print .leading-snug         { line-height: 1.28 !important; }
+      #report-print .leading-tight        { line-height: 1.12 !important; }
+      /* Images */
+      #report-print img.h-14, #report-print img.h-16 { height: 28px !important; }
+      /* Advisor comments — font compact, tampil penuh tanpa truncate */
+      #report-print .advisor-comment-text {
+        display: block !important;
+        overflow: visible !important;
+        font-size: 8px !important;
+        line-height: 1.28 !important;
+        word-break: break-word !important;
+      }
+      /* Advisor comment container — tighter padding untuk hemat ruang */
+      #report-print .advisor-comment-box .p-3 {
+        padding: 0.2rem 0.3rem !important;
+      }
+      /* Show chart legend in print now that there's space */
+      #report-print .chart-legend { display: flex !important; }
+      /* Chart section */
+      #report-print .chart-grow { flex: none !important; }
+      #report-print .chart-grow canvas {
+        max-height: 110px !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      #report-print .chart-grow > div { break-inside: avoid !important; }
+      /* Misc */
+      #report-print .signature-section { margin-top: 0.1rem !important; }
+      #report-print .grid { display: grid !important; }
+      /* QR Code verify block — jaga ukuran agar tetap scannable */
+      #report-print .qr-verify-block img {
+        width: 80px !important;
+        height: 80px !important;
+        min-width: 80px !important;
+        min-height: 80px !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      #report-print .qr-verify-block p {
+        font-size: 7px !important;
+        margin-top: 2px !important;
+      }
+      /* Verify Online link — tetap clickable di PDF */
+      #report-print .qr-verify-link {
+        font-size: 7px !important;
+        color: #1A56DB !important;
+        text-decoration: underline !important;
+        display: block !important;
+        text-align: center !important;
+        max-width: 80px !important;
+        word-break: break-all !important;
+        line-height: 1.3 !important;
+      }
+
+      /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         VISIBILITY & PAGE BREAKS
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+      .print-hidden, aside, header.sticky { display: none !important; }
+      /* Sembunyikan journal-print saat cetak report biasa */
+      body:not(.print-journal-only) #journal-print { display: none !important; }
+
+      .signature-section {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        margin-top: 0 !important;
+      }
+      tr, .break-inside-avoid, .signature-section {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      h2, h3, h4 { page-break-after: avoid !important; }
+
+      /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         JOURNAL-ONLY PRINT MODE (Admin & Student)
+         Aktif saat body.print-journal-only + @media print:
+         sembunyikan semua, tampilkan hanya #journal-print.
+         Dipakai oleh HistoryReportsModule (admin) dan StudentReadOnlyJournalsModule (student).
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+      @media print {
+        body.print-journal-only #report-print,
+        body.print-journal-only #report-control-bar,
+        body.print-journal-only aside,
+        body.print-journal-only header,
+        body.print-journal-only nav { display: none !important; }
+
+        body.print-journal-only #journal-print {
+          display: block !important;
+          position: static !important;
+          width: 100% !important;
+          background: white !important;
+          padding: 0 !important;
+          font-family: sans-serif !important;
+          color: #0f172a !important;
+          font-size: 10px !important;
+        }
+        body.print-journal-only #journal-print * {
+          visibility: visible !important;
+        }
+      }
+
+
+
+      /* Non-report */
       .mb-8 { margin-bottom: 0.5rem !important; }
       .mb-6 { margin-bottom: 0.5rem !important; }
       .mt-8 { margin-top: 0.5rem !important; }
       .mt-10 { margin-top: 0.5rem !important; }
-      .p-8 { padding: 1rem !important; }
+      .p-8  { padding: 1rem !important; }
       .pb-4 { padding-bottom: 0.25rem !important; }
       .pt-4 { padding-top: 0.25rem !important; }
       .pt-6 { padding-top: 0.25rem !important; }
       .gap-4 { gap: 0.25rem !important; }
       td, th { padding: 0.2rem 0.3rem !important; }
-      
-      .signature-section { 
-        page-break-inside: avoid !important; 
-        break-inside: avoid !important;
-        margin-top: 0 !important;
-      }
-      
-      .print-hidden, aside, header.sticky { display: none !important; }
-      .print-border { border: 1px solid #e5e7eb !important; }
+
+      /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         PRINT UTILITY CLASSES
+      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+      .print-border           { border: 1px solid #e5e7eb !important; }
       .print-border-highlight { border: 2px solid #bae6fd !important; }
-      .print-border-gray-200 { border-color: #e5e7eb !important; }
-      .print-border-gray-300 { border-color: #d1d5db !important; }
-      .print-text-gray-900 { color: #111827 !important; }
-      .print-text-black { color: #000 !important; }
-      .print-bg-white { background-color: #fff !important; }
-      .print-shadow-none { box-shadow: none !important; }
-      
-      html, body, #root, .h-screen, .overflow-y-auto, .flex-1, main {
-        height: auto !important;
-        overflow: visible !important;
-        position: static !important;
-      }
-      
-      tr, .break-inside-avoid, .signature-section { page-break-inside: avoid !important; break-inside: avoid !important; }
-      h2, h3, h4 { page-break-after: avoid !important; }
-      
-      table.print-table { border-collapse: collapse; width: 100%; }
+      .print-border-gray-200  { border-color: #e5e7eb !important; }
+      .print-border-gray-300  { border-color: #d1d5db !important; }
+      .print-text-gray-900    { color: #111827 !important; }
+      .print-text-black       { color: #000 !important; }
+      .print-bg-white         { background-color: #fff !important; }
+      .print-shadow-none      { box-shadow: none !important; }
+
+      table.print-table        { border-collapse: collapse; width: 100%; }
       thead.table-header-group { display: table-header-group; }
       tfoot.table-footer-group { display: table-footer-group; }
-      
-      /* FIX #3: Removed print-page-number::after CSS to prevent double page numbers */
     }
   `;
   document.head.appendChild(style);
