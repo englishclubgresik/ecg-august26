@@ -624,93 +624,156 @@ const generateAutoComment = (student, attRate, avgScore, assessments, presentCou
       const sessionCtx = totalSessions > 0 ? ` out of ${totalSessions} ${packageLabel} sessions available this period` : ` this period`;
       return pick([
         `Our records show ${name} hasn't attended any sessions${sessionCtx}. Please reach out so we can find a solution together and get ${name} back on track.`,
-        `We wanted to flag that ${name} has no attendance recorded${sessionCtx}. Consistent attendance matters a lot for progress — feel free to contact us anytime to discuss next steps.`
+        `We wanted to flag that ${name} has no attendance recorded${sessionCtx}. Consistent attendance matters a lot for progress — feel free to contact us anytime to discuss next steps.`,
+        `We noticed ${name} hasn't been able to join any sessions${sessionCtx}. We'd love to help find a schedule that works — please don't hesitate to reach out.`,
+        `Our records indicate no attendance from ${name}${sessionCtx}. It's never too late to start — please get in touch and we'll find the best way to get ${name} learning with us again.`,
+        `We haven't been able to see ${name} in class${sessionCtx}. We understand there may be challenges — please reach out at your convenience so we can work something out together.`,
       ]);
     }
 
     let enComment = "";
     if (isKids) {
       if (avgScore === 0) {
-        enComment = `${name} has just joined English Club and is settling in well with classmates and tutor. We've already seen great enthusiasm from the very first session, and we can't wait to see ${name} grow!`;
+        enComment = pick([
+          `${name} has just joined English Club and is settling in well with classmates and tutor. We've already seen great enthusiasm from the very first session, and we can't wait to see ${name} grow!`,
+          `${name} has recently started their learning journey at English Club and is still getting comfortable with the class. The early enthusiasm shown is very promising — we're confident ${name} will blossom quickly!`,
+          `${name} is brand new to English Club and currently in the settling-in phase. We're already seeing a wonderful spark of curiosity — full assessment data will follow over the coming sessions!`,
+        ]);
       } else if (avgScore >= 85) {
         enComment = pick([
           `${name} has shown excellent, consistent progress this period. `,
           `We're delighted to report ${name} has performed brilliantly in every session. `,
-          `${name}'s growth this period has made us very proud. `
+          `${name}'s growth this period has made us very proud. `,
+          `This period has been a wonderful one for ${name} — the progress has truly been outstanding. `,
+          `We're so pleased to report that ${name} has excelled in every aspect of learning this period. `,
         ]) + pick([
           `English skills are developing fast — ${name} follows instructions, answers confidently, and uses an increasingly rich vocabulary. `,
-          `${name} joins every session with great energy, picking up new vocabulary and using it naturally in conversation. `
+          `${name} joins every session with great energy, picking up new vocabulary and using it naturally in conversation. `,
+          `${name}'s confidence and language skills grow noticeably with every session — instructions are followed with ease and vocabulary keeps expanding beautifully. `,
+          `Every session, ${name} demonstrates impressive focus and enthusiasm, absorbing new words and structures quickly and using them with growing confidence. `,
+          `${name} engages brilliantly in class activities, picks up new concepts quickly, and communicates with increasing fluency and confidence. `,
         ]) + pick([
           `Congratulations to ${name} and family — keep up this wonderful momentum!`,
           `Thank you for your support — we'll keep helping ${name} grow into a confident English speaker!`,
+          `Well done to ${name} and family — this progress is truly wonderful to see. Keep nurturing this love of learning at home!`,
+          `We are so proud of ${name}'s achievements — please keep supporting this learning journey and the sky is the limit!`,
+          `Congratulations on a fantastic period! We're excited to see how much further ${name} will grow — keep up the wonderful work at home too!`,
         ]);
       } else if (avgScore >= 70) {
         enComment = pick([
           `${name} has shown good, steady progress this period. `,
           `We're pleased to see ${name} continuing to improve consistently. `,
+          `It's great to see ${name} making solid, steady progress throughout this period. `,
+          `${name} has had a positive period with encouraging progress on multiple fronts. `,
+          `We're happy to report that ${name} continues to develop well, showing consistent improvement this period. `,
         ]) + pick([
           `${name} is active in class, and understanding of the material keeps growing well. `,
           `${name}'s English is improving steadily — vocabulary, fluency, and confidence all keep growing. `,
+          `${name} participates enthusiastically in class activities and is developing a broader vocabulary and stronger understanding of key concepts. `,
+          `${name} is building confidence session by session — following instructions more easily and using new vocabulary with growing naturalness. `,
+          `The improvement in ${name}'s language skills is clear — better comprehension, expanding vocabulary, and growing willingness to communicate in English. `,
         ]) + pick([
           `A bit of extra practice at home — reading or watching English content — will help even more. Keep it up!`,
           `Thank you for your continued trust — we'll keep tailoring our approach to ${name}'s needs!`,
+          `A little English at home — a song, a short video, or some simple reading — will go a long way. Keep up the great work!`,
+          `Thank you for all your support — we'll keep making each session as engaging and effective as possible for ${name}!`,
+          `With a little extra exposure to English at home, ${name}'s progress will only continue to build. We're cheering ${name} on!`,
         ]);
       } else {
         enComment = pick([
           `${name} has shown real effort attending and engaging in sessions this period. `,
           `We appreciate ${name}'s consistent attendance and willingness to keep trying. `,
+          `${name} has demonstrated commitment and a positive attitude throughout this period — something we genuinely value. `,
+          `We're proud of ${name}'s perseverance this period — showing up consistently and always giving it a go. `,
+          `${name} has been a willing and consistent participant this period, and that enthusiasm is a wonderful foundation to build on. `,
         ]) + pick([
           `${name} is still building a strong foundation, and we're adapting our approach to fit ${name}'s pace. `,
           `We're focusing on vocabulary and speaking confidence, using a gradual, pressure-free approach. `,
+          `Every child learns at their own pace, and we ensure each session is designed to meet ${name} exactly where they are. `,
+          `${name} is in the foundation-building stage — we use fun, visual, and hands-on activities to make every concept feel achievable. `,
+          `We continue to tailor our approach to suit ${name}'s individual learning style, making sure each session is encouraging and enjoyable. `,
         ]) + pick([
           `A little extra practice at home — simple vocabulary, reading, or videos — will make a real difference. We're here anytime!`,
           `Thank you for trusting us with ${name}'s learning — we're committed to seeing this through together!`,
+          `Even a few minutes of English at home each day — a song, a game, or a short video — can make a wonderful difference. We're always here to help!`,
+          `Thank you for your patience and trust — we're fully committed to helping ${name} build confidence and skills at the right pace.`,
+          `We encourage the family to support ${name}'s learning at home with simple, fun English activities. Together, we'll help ${name} shine!`,
         ]);
       }
     } else {
       if (avgScore === 0) {
-        enComment = `${name} has recently joined English Club and is getting familiar with the materials and class routine. We've already seen enthusiasm and a positive attitude — full assessment data will follow after a few more sessions!`;
+        enComment = pick([
+          `${name} has recently joined English Club and is getting familiar with the materials and class routine. We've already seen enthusiasm and a positive attitude — full assessment data will follow after a few more sessions!`,
+          `${name} has just started their journey at English Club and is still in the early adaptation phase. The positive attitude shown so far is very encouraging — we can't wait to see ${name} develop further!`,
+          `${name} is new to English Club and currently getting acquainted with our curriculum and class rhythm. We already see great potential and are confident ${name} will thrive in no time!`,
+        ]);
       } else if (avgScore >= 85) {
         enComment = pick([
           `${name}'s performance this period has been truly outstanding. `,
           `We're very pleased to report excellent results from ${name} this period. `,
-          `${name} has shown the kind of commitment that inspires everyone around them. `
+          `${name} has shown the kind of commitment that inspires everyone around them. `,
+          `This has been an exceptional period for ${name} — the results speak for themselves. `,
+          `${name} has delivered one of the strongest performances we've seen this period. `,
+          `We're proud to report that ${name} has excelled across all areas of learning this period. `,
         ]) + pick([
           `${name} speaks confidently, writes clearly, and handles both spoken and written material with ease. The level of focus and discipline ${name} brings to every session is genuinely impressive. `,
           `Every session with ${name} is a pleasure — well-prepared, deeply engaged, and always pushing to improve further. It's clear that the effort ${name} puts in extends well beyond the classroom. `,
           `${name}'s grasp of vocabulary, grammar, and real-context communication has grown remarkably. Each session shows measurable, meaningful progress that reflects hard work and consistent dedication. `,
+          `${name} consistently demonstrates a high level of English proficiency — listening attentively, expressing ideas clearly, and engaging with complex material with impressive ease. `,
+          `The analytical depth and communicative confidence ${name} brings to class is remarkable. It's clear that the commitment extends well beyond the sessions themselves. `,
+          `${name}'s ability to understand, respond to, and produce English across a wide range of contexts continues to impress. Every session is a testament to genuine dedication and talent. `,
         ]) + pick([
           `Warmest congratulations to ${name} and family — keep up this wonderful momentum and continue to challenge yourself with more complex English materials!`,
           `Thank you for your continued support — ${name}'s dedication is truly inspiring, and we're excited to see how much further ${name} will go in the months ahead!`,
           `We are proud of ${name}'s achievements this period. Please keep practising — reading, writing, and speaking English daily will help sustain this excellent trajectory!`,
+          `Congratulations on a remarkable period, ${name}! We're confident that this dedication and passion for learning will take ${name} very far indeed.`,
+          `We're honoured to be part of ${name}'s learning journey. Keep challenging yourself — the progress speaks for itself and the best is yet to come!`,
+          `${name}'s achievements this period are a source of pride for us all. We encourage ${name} to keep setting higher goals — the potential here is truly exceptional!`,
         ]);
       } else if (avgScore >= 70) {
         enComment = pick([
           `${name} has shown good, consistent progress this period. `,
           `We're pleased to see steady, encouraging improvement from ${name}. `,
           `${name} has demonstrated a positive attitude and genuine effort throughout this period. `,
+          `It's been a solid period for ${name}, with clear and consistent progress across key language areas. `,
+          `We're glad to report that ${name} continues to make meaningful progress, reflecting consistent effort and commitment. `,
+          `${name} has had an encouraging period — the progress made is clear, and the positive attitude has been great to see. `,
         ]) + pick([
           `${name} is active in discussions and communicates in English with growing confidence. Vocabulary, fluency, and real-context responses all show steady, encouraging growth. `,
           `${name}'s English keeps improving — the ability to understand spoken instructions, respond naturally, and express ideas clearly has developed well this period. `,
           `The progress ${name} has made is clear and consistent. Participation in class is strong, and the ability to apply new language in context is improving session by session. `,
+          `${name} engages meaningfully in class, asks thoughtful questions, and demonstrates a growing ability to use English with accuracy and confidence. `,
+          `The improvement in ${name}'s overall language ability is very encouraging — stronger listening skills, richer vocabulary, and greater confidence in real communication. `,
+          `${name} is developing into a more capable and confident English communicator, with steady growth in speaking fluency, reading comprehension, and written expression. `,
         ]) + pick([
           `Extra practice outside class — watching English videos, reading short stories, or keeping a simple English journal — will help accelerate progress even further. Thank you for your continued trust — we'll keep refining our approach for ${name}'s needs!`,
           `We encourage ${name} to continue building on this progress by engaging with English outside the classroom as much as possible. We're committed to making every session as effective and enjoyable as it can be!`,
           `Keep up the great work, ${name}! Consistent effort — both inside and outside class — is the key to unlocking the next level. We'll be right here to support every step of the journey.`,
+          `We encourage ${name} to stay curious and keep practising outside class — every small effort adds up. Thank you for the trust placed in us; we're committed to making every session count!`,
+          `The momentum ${name} has built this period is great to see. Keep it going — consistent exposure to English in daily life will make a real difference. We're always here to help!`,
+          `${name}'s progress is clear and we're excited about what the next period holds. We encourage continued practice at home and are always available to offer guidance and support!`,
         ]);
       } else {
         enComment = pick([
           `${name} has shown sincere effort attending and engaging with every session this period. `,
           `We appreciate ${name}'s consistent attendance and willingness to keep trying, even when the material feels challenging. `,
           `${name} has been a committed member of the class this period, and that effort is something we genuinely value. `,
+          `We appreciate the dedication ${name} has shown this period — showing up consistently and giving full effort is the foundation of real progress. `,
+          `${name}'s perseverance throughout this period is admirable — consistent attendance and a willingness to try are two of the most important ingredients for language success. `,
         ]) + pick([
           `${name} is building a strong foundation, and we're carefully adapting our approach to best fit ${name}'s learning pace and personal style. Progress may feel gradual, but it is real and meaningful. `,
           `We're focused on building active vocabulary and speaking confidence, using a step-by-step approach so that every new concept feels achievable and rewarding for ${name}. `,
           `Language learning takes time, and ${name} is making steady progress. We're here every step of the way, adjusting how we teach to make sure ${name} gets the most out of each session. `,
+          `${name} is on a steady path of growth — we continue to refine our methods to best support ${name}'s unique learning profile, ensuring every session is productive and encouraging. `,
+          `Every step forward ${name} takes is something we celebrate — the groundwork being laid now will pay off significantly in time, and we're proud to be part of that journey. `,
+          `We see real potential in ${name} and continue to work hard to create a learning environment that is supportive, positive, and free of pressure. `,
         ]) + pick([
           `Practising at home — reading simple English texts, watching short videos, or writing a few sentences daily — would make a significant difference. We'll keep monitoring progress closely and are always here to help!`,
           `Thank you for trusting us with ${name}'s education — we remain fully committed to helping ${name} reach their potential. Please feel free to reach out anytime if you'd like to discuss how we can support ${name} further.`,
           `We encourage ${name} to stay consistent and positive. Every session counts, and the effort being put in now will absolutely pay off. We're cheering ${name} on every step of the way!`,
+          `With consistent practice and support at home, ${name}'s confidence and skills will grow meaningfully. We're committed to being a strong partner in this journey — please reach out anytime!`,
+          `Don't give up, ${name} — we believe in you! Progress is happening, even when it feels slow. We're here to support every step, and we're excited about the breakthroughs still to come.`,
+          `Thank you for the trust and patience you've shown. We're fully dedicated to helping ${name} build a strong foundation — with time and consistency, the results will speak for themselves.`,
         ]);
       }
     }
@@ -719,11 +782,17 @@ const generateAutoComment = (student, attRate, avgScore, assessments, presentCou
       enComment += pick([
         ` ⚠️ Attendance note: ${name} attended ${attDetail} this period (calculated from ${packageLabel} sessions only). With over half missed, it's affecting continuity — please reach out so we can find a solution together.`,
         ` ⚠️ Please note: ${name}'s attendance this period is ${attDetail}, based on the ${packageLabel}. Missing more than half the sessions makes it harder to keep up — we'd welcome a chat about how to support more regular attendance.`,
+        ` ⚠️ We'd like to flag that ${name}'s attendance this period was ${attDetail}. Consistent attendance is key to steady progress — please do reach out so we can explore solutions together.`,
+        ` ⚠️ ${name}'s attendance for this period stands at ${attDetail}. With a significant number of sessions missed, learning continuity can be affected — we're happy to discuss how we can help.`,
+        ` ⚠️ Attendance this period for ${name} was ${attDetail}. We understand that circumstances can make attendance difficult, and we're open to finding flexible solutions — please feel free to contact us.`,
       ]);
     } else if (attRate >= 90 && attRate > 0) {
       enComment += pick([
         ` ${name}'s attendance of ${attDetail} this period is excellent — real commitment to the ${packageLabel}.`,
         ` We also want to note ${name}'s great attendance rate of ${attDetail} — consistency like this really pays off.`,
+        ` We'd also like to highlight ${name}'s outstanding attendance of ${attDetail} this period — that level of commitment is a key ingredient for success.`,
+        ` ${name}'s attendance record of ${attDetail} this period is something to be very proud of — consistent showing up is half the battle, and ${name} is doing it brilliantly.`,
+        ` Excellent attendance of ${attDetail} this period — ${name}'s dedication to showing up consistently is a great habit that will continue to pay dividends.`,
       ]);
     }
     return enComment;
@@ -737,109 +806,174 @@ const generateAutoComment = (student, attRate, avgScore, assessments, presentCou
     const sessionCtx = totalSessions > 0 ? ` dari ${totalSessions} sesi ${packageLabel} yang tersedia pada periode ini` : ` pada periode ini`;
     const neverAttended = [
       `Berdasarkan catatan kami, ${name} belum tercatat hadir dalam sesi apa pun${sessionCtx}. Mohon hubungi kami agar kita bisa mencari solusi terbaik bersama dan membantu ${name} kembali aktif belajar.`,
-      `Kami ingin menyampaikan bahwa kehadiran ${name} belum tercatat sama sekali${sessionCtx}. Kesinambungan sangat penting dalam belajar bahasa — silakan hubungi kami kapan saja untuk mendiskusikan solusinya.`
+      `Kami ingin menyampaikan bahwa kehadiran ${name} belum tercatat sama sekali${sessionCtx}. Kesinambungan sangat penting dalam belajar bahasa — silakan hubungi kami kapan saja untuk mendiskusikan solusinya.`,
+      `Catatan kami menunjukkan ${name} belum menghadiri sesi apa pun${sessionCtx}. Kami sangat berharap dapat segera bertemu dan mendukung perjalanan belajar ${name} kembali bersama kami.`,
+      `Kami memperhatikan bahwa ${name} belum tercatat hadir${sessionCtx}. Tidak ada yang terlambat untuk memulai — mohon hubungi kami agar kami bisa membantu menemukan jadwal yang lebih sesuai.`,
+      `Hingga akhir periode ini, ${name} belum sempat mengikuti sesi apa pun${sessionCtx}. Kami sangat terbuka untuk berdiskusi dan mencari cara terbaik agar ${name} bisa segera kembali belajar.`,
     ];
     return pick(neverAttended);
   }
 
   if (isKids) {
     if (avgScore === 0) {
-      comment = `${name} baru saja bergabung di English Club dan sedang dalam masa adaptasi bersama teman-teman dan tutor. Kami sudah melihat antusias yang besar sejak sesi pertama, dan tidak sabar melihat ${name} berkembang!`;
+      comment = pick([
+        `${name} baru saja bergabung di English Club dan sedang dalam masa adaptasi bersama teman-teman dan tutor. Kami sudah melihat antusias yang besar sejak sesi pertama, dan tidak sabar melihat ${name} berkembang!`,
+        `${name} baru memulai perjalanan belajarnya di English Club dan masih beradaptasi dengan suasana kelas. Semangat awal yang ditunjukkan ${name} sangat positif — kami yakin ${name} akan berkembang pesat!`,
+        `${name} baru saja bergabung dan saat ini masih dalam tahap pengenalan. Kami melihat potensi yang besar dan antusias yang menyenangkan — data penilaian lengkap akan tersedia setelah beberapa sesi ke depan!`,
+      ]);
     } else if (avgScore >= 85) {
       const intros = [
         `${name} menunjukkan perkembangan yang luar biasa selama periode ini. `,
         `Kami senang melaporkan ${name} tampil sangat baik dan konsisten di setiap sesi. `,
-        `Perkembangan ${name} periode ini benar-benar membanggakan. `
+        `Perkembangan ${name} periode ini benar-benar membanggakan. `,
+        `Periode ini menjadi bukti nyata betapa pesatnya ${name} berkembang dalam belajar bahasa Inggris. `,
+        `Kami dengan bangga melaporkan performa yang sangat memuaskan dari ${name} sepanjang periode ini. `,
+        `${name} telah membuat kemajuan yang luar biasa, melampaui ekspektasi kami di banyak aspek. `,
       ];
       const middles = [
         `Kemampuan bahasa Inggrisnya berkembang pesat — ${name} memahami instruksi, merespons pertanyaan, dan menggunakan kosakata yang semakin kaya. `,
-        `${name} selalu hadir dengan semangat tinggi dan aktif dalam kegiatan kelas, dengan kosakata yang terus bertambah. `
+        `${name} selalu hadir dengan semangat tinggi dan aktif dalam kegiatan kelas, dengan kosakata yang terus bertambah. `,
+        `Kepercayaan diri ${name} dalam menggunakan bahasa Inggris terus meningkat — dari menyimak, berbicara, hingga menjawab pertanyaan dengan antusias. `,
+        `${name} dengan mudah menyerap kosakata baru, memahami instruksi kompleks, dan berinteraksi dengan penuh percaya diri bersama tutor dan teman-teman. `,
+        `Setiap sesi, ${name} menunjukkan pertumbuhan yang nyata — daya tangkap cepat, kosakata bertambah, dan keberanian berkomunikasi terus meningkat. `,
       ];
       const closings = [
         `Selamat untuk ${name} dan keluarga — pertahankan semangat ini!`,
-        `Terima kasih atas dukungannya — kami akan terus mendampingi ${name} menjadi komunikator yang percaya diri!`
+        `Terima kasih atas dukungannya — kami akan terus mendampingi ${name} menjadi komunikator yang percaya diri!`,
+        `Apresiasi setinggi-tingginya untuk ${name} dan keluarga — teruslah berlatih dan pertahankan momentum yang luar biasa ini!`,
+        `Kami sangat bangga dengan pencapaian ${name} — teruslah berikan dukungan di rumah agar kemajuan ini semakin berkembang!`,
+        `Selamat, ${name}! Kami tidak sabar melihat seberapa jauh ${name} akan berkembang ke depannya. Teruskan semangat belajarnya!`,
       ];
       comment = pick(intros) + pick(middles) + pick(closings);
     } else if (avgScore >= 70) {
       const intros = [
         `${name} menunjukkan perkembangan yang baik dan konsisten selama periode ini. `,
-        `Kami senang melihat kemajuan ${name} yang stabil dan menggembirakan. `
+        `Kami senang melihat kemajuan ${name} yang stabil dan menggembirakan. `,
+        `${name} terus menunjukkan perkembangan yang positif sepanjang periode ini. `,
+        `Periode ini mencatat kemajuan yang nyata dari ${name} dalam belajar bahasa Inggris. `,
+        `Kami dengan senang hati melaporkan perkembangan ${name} yang semakin baik dari waktu ke waktu. `,
       ];
       const middles = [
         `${name} semakin aktif di kelas dan pemahaman terhadap instruksi serta kosakata dasar terus berkembang. `,
-        `Kemampuan bahasa Inggris ${name} tumbuh bertahap, terutama dalam kosakata dan keberanian menjawab. `
+        `Kemampuan bahasa Inggris ${name} tumbuh bertahap, terutama dalam kosakata dan keberanian menjawab. `,
+        `${name} terlihat semakin percaya diri dalam mengikuti aktivitas kelas dan merespons instruksi tutor. `,
+        `Partisipasi ${name} di setiap sesi semakin aktif, dan kemampuan memahami serta menggunakan kosakata baru terus meningkat. `,
+        `${name} menunjukkan antusias yang baik dalam mengikuti kegiatan kelas, dengan pemahaman terhadap materi yang terus berkembang setiap pertemuan. `,
       ];
       const closings = [
         `Dukungan di rumah — menonton konten anak berbahasa Inggris atau sesekali berbicara bahasa Inggris — akan sangat membantu. Semangat terus, ${name}!`,
-        `Terima kasih atas kepercayaannya — kami akan terus mendampingi ${name} dengan penuh dedikasi!`
+        `Terima kasih atas kepercayaannya — kami akan terus mendampingi ${name} dengan penuh dedikasi!`,
+        `Praktik ringan di rumah seperti menyanyi lagu bahasa Inggris atau membaca bersama akan mempercepat kemajuan ${name}. Teruskan semangatnya!`,
+        `Kami mendorong keluarga untuk mendukung belajar ${name} di rumah — sedikit aktivitas bahasa Inggris setiap hari akan memberikan dampak besar. Kami selalu siap membantu!`,
+        `Terima kasih atas kepercayaan dan dukungannya — kami berkomitmen terus membimbing ${name} dengan cara yang paling menyenangkan dan efektif!`,
       ];
       comment = pick(intros) + pick(middles) + pick(closings);
     } else {
       const intros = [
         `${name} telah menunjukkan usaha yang sungguh-sungguh di setiap sesi selama periode ini. `,
-        `Kami menghargai semangat dan kehadiran ${name} yang konsisten. `
+        `Kami menghargai semangat dan kehadiran ${name} yang konsisten. `,
+        `${name} terus berusaha dengan penuh semangat di setiap sesi, dan kami sangat menghargai konsistensi tersebut. `,
+        `Meski materi terasa menantang, ${name} tidak pernah berhenti mencoba dan itu adalah sesuatu yang kami sangat apresiasi. `,
+        `Semangat ${name} dalam mengikuti setiap sesi adalah motivasi tersendiri bagi kami untuk terus memberikan yang terbaik. `,
       ];
       const middles = [
         `${name} sedang membangun fondasi bahasa Inggris yang kuat, dan kami menyesuaikan pendekatan agar sesuai kebutuhannya. `,
-        `Kami fokus pada kosakata aktif dan rasa percaya diri, dengan pendekatan bertahap tanpa tekanan. `
+        `Kami fokus pada kosakata aktif dan rasa percaya diri, dengan pendekatan bertahap tanpa tekanan. `,
+        `Setiap anak berkembang dengan ritmenya sendiri, dan kami memastikan setiap sesi dirancang sesuai dengan kecepatan belajar ${name}. `,
+        `${name} sedang dalam proses membangun dasar yang kuat — kami menggunakan pendekatan yang menyenangkan agar setiap konsep mudah dipahami dan diingat. `,
+        `Kami terus beradaptasi dengan gaya belajar ${name}, menggunakan aktivitas yang interaktif dan visual untuk membuat bahasa Inggris terasa lebih mudah dan menyenangkan. `,
       ];
       const closings = [
         `Dukungan di rumah — lagu anak berbahasa Inggris atau video edukatif bersama — akan sangat membantu. Kami selalu terbuka untuk berdiskusi!`,
-        `Terima kasih atas kepercayaan dan kesabarannya — kami berkomitmen penuh mendampingi ${name}!`
+        `Terima kasih atas kepercayaan dan kesabarannya — kami berkomitmen penuh mendampingi ${name}!`,
+        `Aktivitas ringan di rumah seperti menonton video anak berbahasa Inggris bersama akan membantu memperkuat apa yang sudah dipelajari di kelas. Semangat terus, ${name}!`,
+        `Kami sangat terbuka untuk berdiskusi tentang cara terbaik mendukung ${name} di rumah. Bersama, kita pasti bisa membantu ${name} berkembang!`,
+        `Terima kasih atas kesabaran dan kepercayaan yang diberikan. Proses belajar ${name} sedang berjalan dengan baik — kami akan terus hadir di setiap langkahnya!`,
       ];
       comment = pick(intros) + pick(middles) + pick(closings);
     }
   } else {
     if (avgScore === 0) {
-      comment = `${name} baru bergabung di English Club dan sedang mengenal materi, metode, dan dinamika kelas. Kami sudah melihat antusias yang baik — data penilaian lengkap akan tersedia setelah beberapa sesi evaluasi!`;
+      comment = pick([
+        `${name} baru bergabung di English Club dan sedang mengenal materi, metode, dan dinamika kelas. Kami sudah melihat antusias yang baik — data penilaian lengkap akan tersedia setelah beberapa sesi evaluasi!`,
+        `${name} baru saja memulai perjalanan belajarnya di English Club dan masih dalam tahap adaptasi awal. Sikap positif yang ditunjukkan sangat menjanjikan — kami tidak sabar melihat perkembangan selanjutnya!`,
+        `${name} baru bergabung dan saat ini sedang beradaptasi dengan kurikulum dan ritme kelas kami. Kami melihat potensi yang sangat baik dan yakin ${name} akan berkembang pesat dalam waktu dekat!`,
+      ]);
     } else if (avgScore >= 85) {
       const intros = [
         `Kami bangga melaporkan performa akademik ${name} yang sangat memuaskan selama periode ini. `,
         `${name} tampil luar biasa periode ini, membuktikan bahwa kerja keras dan konsistensi benar-benar membuahkan hasil. `,
-        `Selama periode ini, ${name} konsisten menunjukkan etos belajar yang sangat tinggi dan layak mendapat apresiasi penuh. `
+        `Selama periode ini, ${name} konsisten menunjukkan etos belajar yang sangat tinggi dan layak mendapat apresiasi penuh. `,
+        `Periode ini menjadi bukti nyata dari dedikasi luar biasa ${name} dalam belajar bahasa Inggris. `,
+        `Hasil yang dicapai ${name} periode ini sungguh membanggakan dan melampaui harapan kami. `,
+        `${name} telah menunjukkan komitmen dan kerja keras yang luar biasa, menjadikan periode ini sebagai salah satu yang terbaik. `,
       ];
       const middles = [
         `${name} aktif berpartisipasi, tidak ragu bertanya, dan terus berkembang secara seimbang dalam berbicara, mendengarkan, membaca, dan menulis. Tingkat fokus dan dedikasi yang ${name} bawa ke setiap sesi sungguh membanggakan. `,
         `${name} selalu datang dengan persiapan baik, sikap belajar positif, dan kemampuan komunikasi yang terus meningkat. Jelas sekali bahwa usaha ${name} tidak berhenti di dalam kelas saja. `,
-        `Penguasaan ${name} atas kosakata, tata bahasa, dan komunikasi dalam konteks nyata berkembang dengan sangat pesat. Setiap sesi menunjukkan kemajuan yang nyata dan bermakna, mencerminkan kerja keras yang konsisten. `
+        `Penguasaan ${name} atas kosakata, tata bahasa, dan komunikasi dalam konteks nyata berkembang dengan sangat pesat. Setiap sesi menunjukkan kemajuan yang nyata dan bermakna, mencerminkan kerja keras yang konsisten. `,
+        `Kemampuan ${name} dalam berbicara, menulis, dan memahami bahasa Inggris dalam berbagai konteks terus meningkat secara signifikan. Semangat belajar yang tinggi membuat setiap sesi menjadi sangat produktif. `,
+        `${name} menunjukkan kemampuan analitis yang baik dalam memahami materi, berani bereksperimen dengan bahasa baru, dan selalu aktif berkontribusi dalam setiap sesi. `,
+        `Kepercayaan diri ${name} dalam menggunakan bahasa Inggris di berbagai situasi — baik lisan maupun tulisan — berkembang dengan sangat membanggakan sepanjang periode ini. `,
       ];
       const closings = [
         `Selamat dan apresiasi setinggi-tingginya untuk ${name} dan keluarga — pertahankan momentum ini dan terus tantang diri dengan materi bahasa Inggris yang lebih kompleks!`,
         `Terima kasih atas kepercayaannya — kami akan terus mendukung ${name} mencapai potensi tertingginya, dan kami tidak sabar melihat seberapa jauh ${name} akan berkembang ke depannya!`,
-        `Kami bangga atas pencapaian ${name} periode ini. Teruslah berlatih — membaca, menulis, dan berbicara bahasa Inggris setiap hari akan membantu mempertahankan jalur luar biasa ini!`
+        `Kami bangga atas pencapaian ${name} periode ini. Teruslah berlatih — membaca, menulis, dan berbicara bahasa Inggris setiap hari akan membantu mempertahankan jalur luar biasa ini!`,
+        `Pencapaian ${name} periode ini adalah inspirasi bagi seluruh kelas. Teruslah belajar dengan semangat yang sama — kami yakin masa depan akademis ${name} sangat cerah!`,
+        `Kami sangat bangga menjadi bagian dari perjalanan belajar ${name}. Teruskan kerja keras ini — potensi ${name} masih sangat besar untuk terus dikembangkan!`,
+        `Selamat atas pencapaian luar biasa ini, ${name}! Kami berharap ${name} terus menjaga semangat dan konsistensi yang telah menjadi kunci keberhasilan selama ini.`,
       ];
       comment = pick(intros) + pick(middles) + pick(closings);
     } else if (avgScore >= 70) {
       const intros = [
         `${name} menunjukkan perkembangan yang baik dan konsisten selama periode ini. `,
         `Kami senang melaporkan kemajuan ${name} yang stabil dan menggembirakan. `,
-        `${name} menunjukkan sikap positif dan usaha yang sungguh-sungguh sepanjang periode ini. `
+        `${name} menunjukkan sikap positif dan usaha yang sungguh-sungguh sepanjang periode ini. `,
+        `Perkembangan ${name} selama periode ini berjalan dengan sangat memuaskan dan mencerminkan dedikasi yang nyata. `,
+        `Periode ini mencatat pencapaian yang baik dari ${name} — sebuah hasil dari usaha dan konsistensi yang patut diapresiasi. `,
+        `Kami dengan bangga melaporkan bahwa ${name} terus menunjukkan kemajuan yang nyata dan konsisten di setiap aspek pembelajaran. `,
       ];
       const middles = [
         `${name} aktif dalam diskusi kelas dan pemahaman terhadap materi terus berkembang baik. Kemampuan ${name} dalam memahami dan menggunakan bahasa Inggris terus tumbuh konsisten setiap pertemuan. `,
         `Kemampuan ${name} dalam memahami instruksi lisan, merespons secara alami, dan mengungkapkan ide dengan jelas berkembang dengan baik selama periode ini. `,
-        `Kemajuan yang telah dicapai ${name} sangat jelas dan konsisten. Partisipasi di kelas semakin kuat, dan kemampuan menerapkan bahasa baru dalam konteks nyata terus meningkat dari sesi ke sesi. `
+        `Kemajuan yang telah dicapai ${name} sangat jelas dan konsisten. Partisipasi di kelas semakin kuat, dan kemampuan menerapkan bahasa baru dalam konteks nyata terus meningkat dari sesi ke sesi. `,
+        `${name} semakin percaya diri dalam menggunakan bahasa Inggris, baik secara lisan maupun tulisan. Daya serap terhadap materi baru semakin baik dan terlihat nyata setiap pertemuan. `,
+        `Kemampuan komunikasi ${name} dalam bahasa Inggris terus berkembang positif — kosakata yang semakin kaya, pemahaman yang lebih dalam, dan keberanian yang terus meningkat. `,
+        `${name} menunjukkan perkembangan yang signifikan dalam kemampuan berbicara dan memahami bahasa Inggris, dengan tingkat partisipasi yang semakin aktif dan berkualitas di setiap sesi. `,
       ];
       const closings = [
         `Latihan mandiri di luar kelas — menonton video berbahasa Inggris, membaca cerita pendek, atau membuat jurnal sederhana — akan membantu mempercepat kemajuan lebih jauh. Terima kasih atas kepercayaannya — kami akan terus memberikan pendekatan terbaik untuk ${name}!`,
         `Kami mendorong ${name} untuk terus membangun kemajuan ini dengan aktif berbahasa Inggris di luar kelas sebanyak mungkin. Kami berkomitmen menjadikan setiap sesi seefektif dan semenyenangkan mungkin!`,
-        `Terus semangat, ${name}! Konsistensi — baik di dalam maupun di luar kelas — adalah kunci untuk mencapai level berikutnya. Kami akan selalu ada untuk mendukung setiap langkah perjalanan belajar ${name}.`
+        `Terus semangat, ${name}! Konsistensi — baik di dalam maupun di luar kelas — adalah kunci untuk mencapai level berikutnya. Kami akan selalu ada untuk mendukung setiap langkah perjalanan belajar ${name}.`,
+        `Kami mendorong ${name} untuk membiasakan diri menggunakan bahasa Inggris dalam keseharian — sedikit demi sedikit pasti akan memberikan dampak yang besar. Terima kasih atas kepercayaan yang selalu diberikan!`,
+        `Pertahankan momentum yang baik ini, ${name}! Setiap latihan di luar kelas, sekecil apa pun, adalah investasi nyata untuk kemajuan berbahasa Inggris. Kami siap mendukung sepenuhnya!`,
+        `Kemajuan yang sudah dicapai ${name} sangat nyata — kami optimis dengan potensi yang masih bisa terus dikembangkan. Teruslah berlatih dan percayakan perjalanan belajar ${name} bersama kami!`,
       ];
       comment = pick(intros) + pick(middles) + pick(closings);
     } else {
       const intros = [
         `${name} telah menunjukkan usaha yang sungguh-sungguh dalam mengikuti setiap sesi periode ini. `,
-        `Kami menghargai semangat dan kehadiran ${name} yang konsisten meski materi terasa menantang. `
+        `Kami menghargai semangat dan kehadiran ${name} yang konsisten meski materi terasa menantang. `,
+        `${name} terus hadir dan mencoba dengan penuh semangat — sebuah komitmen yang kami sangat hargai. `,
+        `Meski proses belajar bahasa memerlukan waktu, ${name} tidak pernah berhenti berusaha dan itu adalah kualitas yang sangat berharga. `,
+        `Kami mengapresiasi dedikasi ${name} yang konsisten dalam mengikuti setiap sesi — sebuah fondasi kuat untuk kemajuan ke depan. `,
       ];
       const middles = [
         `${name} sedang membangun fondasi bahasa Inggris yang kuat, dan kami terus menyesuaikan pendekatan agar paling sesuai dengan kecepatan belajar dan gaya pribadi ${name}. Kemajuan mungkin terasa bertahap, namun nyata dan bermakna. `,
         `Kami fokus pada kosakata aktif dan keberanian berkomunikasi, dengan pendekatan bertahap dan menyenangkan sehingga setiap konsep baru terasa bisa dicapai dan memuaskan. `,
-        `Belajar bahasa butuh waktu, dan ${name} terus membuat kemajuan yang stabil. Kami selalu hadir di setiap langkah, menyesuaikan cara mengajar agar ${name} mendapat manfaat maksimal dari setiap sesi. `
+        `Belajar bahasa butuh waktu, dan ${name} terus membuat kemajuan yang stabil. Kami selalu hadir di setiap langkah, menyesuaikan cara mengajar agar ${name} mendapat manfaat maksimal dari setiap sesi. `,
+        `${name} sedang dalam proses membangun kepercayaan diri berbahasa Inggris, dan kami terus mengembangkan metode yang paling sesuai untuk mendukung perkembangan individualnya. `,
+        `Setiap kemajuan kecil yang dicapai ${name} adalah hal yang kami rayakan bersama — fondasi yang dibangun sekarang akan menjadi modal berharga untuk capaian yang lebih besar ke depan. `,
+        `Kami melihat potensi yang besar dalam diri ${name} dan terus bekerja keras menyediakan lingkungan belajar yang mendukung, penuh dorongan, dan bebas tekanan. `,
       ];
       const closings = [
         `Dukungan aktif di rumah — membaca teks bahasa Inggris sederhana, menonton video pendek, atau menulis beberapa kalimat setiap hari — akan membuat perbedaan yang signifikan. Jangan ragu menghubungi kami kapan saja!`,
         `Terima kasih atas kepercayaannya — kami berkomitmen penuh membantu ${name} mencapai potensi terbaiknya. Silakan hubungi kami kapan pun ingin mendiskusikan cara terbaik mendukung perkembangan ${name}.`,
-        `Kami mendorong ${name} untuk tetap konsisten dan optimis. Setiap sesi memberi dampak, dan usaha yang diberikan sekarang pasti akan membuahkan hasil. Kami selalu menyemangati ${name} di setiap langkah perjalanan ini!`
+        `Kami mendorong ${name} untuk tetap konsisten dan optimis. Setiap sesi memberi dampak, dan usaha yang diberikan sekarang pasti akan membuahkan hasil. Kami selalu menyemangati ${name} di setiap langkah perjalanan ini!`,
+        `Proses belajar ${name} sedang berjalan ke arah yang benar. Dengan dukungan yang konsisten dari keluarga dan latihan mandiri ringan di rumah, kami yakin kemajuan ${name} akan semakin terasa. Kami selalu siap membantu!`,
+        `Jangan pernah berhenti mencoba, ${name}! Kami percaya bahwa setiap usaha yang dilakukan sekarang adalah investasi berharga. Bersama, kita akan terus bergerak maju!`,
+        `Terima kasih atas kepercayaan dan kesabaran yang diberikan. Kami berkomitmen untuk terus menjadi mitra belajar terbaik bagi ${name} dalam setiap langkah perjalanannya.`,
       ];
       comment = pick(intros) + pick(middles) + pick(closings);
     }
@@ -848,13 +982,19 @@ const generateAutoComment = (student, attRate, avgScore, assessments, presentCou
   if (attRate < 50 && attRate > 0) {
     const attNotes = [
       ` ⚠️ Catatan kehadiran: ${name} hadir ${attDetail} periode ini (dihitung dari sesi ${packageLabel} saja). Dengan lebih dari separuh sesi terlewat, kesinambungan belajar terganggu — silakan hubungi kami untuk mencari solusi bersama.`,
-      ` ⚠️ Perhatian: kehadiran ${name} periode ini ${attDetail}, berdasarkan ${packageLabel}. Lebih dari separuh sesi terlewat membuat materi sulit dikejar — kami terbuka mendiskusikan solusinya.`
+      ` ⚠️ Perhatian: kehadiran ${name} periode ini ${attDetail}, berdasarkan ${packageLabel}. Lebih dari separuh sesi terlewat membuat materi sulit dikejar — kami terbuka mendiskusikan solusinya.`,
+      ` ⚠️ Tingkat kehadiran ${name} pada periode ini tercatat ${attDetail}. Kami memahami mungkin ada kendala — mohon hubungi kami agar bersama dapat menemukan solusi terbaik.`,
+      ` ⚠️ Perlu kami sampaikan bahwa kehadiran ${name} pada periode ini adalah ${attDetail}. Kehadiran yang lebih rutin akan sangat membantu kesinambungan belajar — kami siap mendiskusikannya bersama.`,
+      ` ⚠️ Kami mencatat kehadiran ${name} pada periode ini sebesar ${attDetail}. Demi kemajuan yang optimal, kami mendorong kehadiran yang lebih konsisten ke depan — tim kami selalu terbuka untuk berdiskusi.`,
     ];
     comment += pick(attNotes);
   } else if (attRate >= 90 && attRate > 0) {
     const attPraise = [
       ` Kehadiran ${name} yang mencapai ${attDetail} periode ini sangat kami apresiasi — komitmen yang luar biasa.`,
-      ` Kami juga mengapresiasi kehadiran ${name} yang sangat baik yaitu ${attDetail} — konsistensi seperti ini penting untuk keberhasilan belajar.`
+      ` Kami juga mengapresiasi kehadiran ${name} yang sangat baik yaitu ${attDetail} — konsistensi seperti ini penting untuk keberhasilan belajar.`,
+      ` Kami juga ingin mengapresiasi kehadiran ${name} yang sangat disiplin yaitu ${attDetail} — sebuah teladan komitmen belajar yang kami banggakan.`,
+      ` Kehadiran ${name} yang mencapai ${attDetail} mencerminkan keseriusan dan komitmen dalam belajar — sesuatu yang kami sangat apresiasi dan hargai.`,
+      ` Catatan kehadiran ${name} sebesar ${attDetail} pada periode ini adalah salah satu yang terbaik — semangat dan konsistensi seperti ini adalah kunci kesuksesan belajar!`,
     ];
     comment += pick(attPraise);
   }
@@ -11086,80 +11226,141 @@ const generateJournalContent = (topic: string): { activities: string; followUp: 
     return shuffled.slice(0, n);
   };
 
-  // ── Komponen kalimat pembuka ──────────────────────────────────────────────
+  // ── 15 Template Pembuka Kelas ─────────────────────────────────────────────
   const openers = [
-    `The session opened with an engaging warm-up activity that helped students shift their focus into English learning mode.`,
-    `Class began with a brief review of previous material to ensure strong foundational understanding before introducing the new topic.`,
-    `The tutor kicked off the session with an interactive question-and-answer segment to activate students' prior knowledge related to the topic.`,
-    `Students were welcomed with a fun vocabulary warm-up game designed to build enthusiasm and confidence before the main lesson.`,
-    `The lesson commenced with a lively discussion prompt that immediately captured students' attention and set the stage for today's material.`,
+    `Sesi dibuka dengan kegiatan pemanasan yang membangkitkan semangat dan kesiapan belajar siswa.`,
+    `Kelas dimulai dengan mengulang materi sebelumnya sebagai jembatan menuju topik baru hari ini.`,
+    `Tutor membuka sesi dengan tanya jawab singkat untuk menggali pengetahuan awal siswa tentang topik.`,
+    `Siswa disambut dengan permainan kosakata yang menyenangkan sebelum masuk ke materi utama.`,
+    `Sesi diawali dengan diskusi pembuka singkat yang langsung menarik perhatian siswa terhadap topik hari ini.`,
+    `Pembelajaran dimulai dengan pemutaran audio/video pendek yang relevan sebagai stimulus awal.`,
+    `Tutor membuka kelas dengan menampilkan gambar atau kartu sebagai media pengantar topik.`,
+    `Sesi dibuka dengan aktivitas ice-breaking ringan untuk menciptakan suasana belajar yang nyaman dan kondusif.`,
+    `Pembelajaran dimulai dengan brainstorming singkat bersama siswa seputar topik yang akan dipelajari.`,
+    `Kelas dibuka dengan kuis singkat tentang materi sebelumnya untuk memperkuat daya ingat siswa.`,
+    `Tutor membuka sesi dengan menyampaikan tujuan pembelajaran agar siswa memahami arah belajar hari ini.`,
+    `Sesi diawali dengan kegiatan prediksi, di mana siswa menebak isi materi berdasarkan petunjuk yang diberikan.`,
+    `Kelas dimulai dengan kegiatan menyimak yang memperkenalkan konteks topik secara menarik.`,
+    `Tutor memulai sesi dengan mengaitkan topik baru dengan pengalaman nyata dalam kehidupan sehari-hari siswa.`,
+    `Sesi dibuka dengan tantangan kosakata cepat yang membuat siswa aktif dan fokus sejak awal kelas.`,
   ];
 
-  // ── Aktivitas inti yang bisa dikombinasi ──────────────────────────────────
+  // ── 15 Template Aktivitas Inti (dengan <TOPIC>) ───────────────────────────
   const coreActivities = [
-    `The main focus of today's session was <TOPIC>. The tutor introduced key vocabulary and expressions related to the topic through visual aids, example sentences, and repetition drills to ensure students could recognize and use them confidently.`,
-    `Students explored the theme of <TOPIC> through a structured presentation followed by guided practice. The tutor carefully broke down each component, providing clear explanations and contextual examples to deepen comprehension.`,
-    `A thorough discussion on <TOPIC> was conducted, during which students were encouraged to ask questions, share their thoughts, and connect the material to their everyday experiences. This made the learning process more meaningful and memorable.`,
-    `The tutor facilitated an in-depth exploration of <TOPIC>, combining teacher-led instruction with student-centered activities. Key concepts were highlighted, and students practiced using new language structures in a variety of contexts.`,
-    `Today's lesson centered on <TOPIC>. Through a mix of direct instruction and collaborative activities, students had multiple opportunities to encounter, practice, and internalize the target language.`,
+    `Fokus utama sesi ini adalah <TOPIC>. Tutor memperkenalkan kosakata dan ekspresi kunci melalui contoh kalimat dan latihan berulang agar siswa mampu memahami serta menggunakannya dengan percaya diri.`,
+    `Siswa mempelajari tema <TOPIC> melalui presentasi terstruktur dan latihan terbimbing. Tutor menguraikan setiap komponen secara bertahap dengan penjelasan yang jelas dan contoh kontekstual.`,
+    `Diskusi mendalam tentang <TOPIC> dilakukan, di mana siswa didorong untuk berbagi pendapat dan mengaitkan materi dengan keseharian mereka agar pembelajaran lebih bermakna.`,
+    `Tutor memfasilitasi eksplorasi <TOPIC> dengan kombinasi penjelasan langsung dan aktivitas berpusat pada siswa, memastikan pemahaman yang menyeluruh.`,
+    `Pelajaran hari ini berfokus pada <TOPIC>, disampaikan melalui instruksi langsung dan latihan kolaboratif yang memberi siswa banyak kesempatan untuk berlatih.`,
+    `Materi <TOPIC> disampaikan dengan pendekatan bertahap — dari pemahaman konsep hingga praktik penggunaan bahasa secara aktif dan mandiri.`,
+    `Siswa belajar tentang <TOPIC> melalui contoh nyata, latihan terpandu, dan umpan balik langsung dari tutor untuk memastikan pemahaman yang solid.`,
+    `Tutor menjelaskan <TOPIC> secara sistematis, memastikan setiap siswa memahami konsep sebelum lanjut ke tahap latihan yang lebih mandiri.`,
+    `Sesi difokuskan pada penguasaan <TOPIC> melalui berbagai kegiatan yang melatih keterampilan berbahasa secara terintegrasi dan menyenangkan.`,
+    `Pembelajaran <TOPIC> dilakukan secara interaktif, dengan tutor memberi ruang bagi siswa untuk bertanya dan bereksperimen dengan bahasa secara bebas.`,
+    `Tutor mengantarkan materi <TOPIC> dengan metode scaffolding, mulai dari contoh sederhana hingga penggunaan yang lebih kompleks secara bertahap.`,
+    `Siswa diajak menggali <TOPIC> melalui teks, dialog, dan situasi komunikatif yang mencerminkan konteks nyata dalam kehidupan sehari-hari.`,
+    `Pelajaran berpusat pada <TOPIC> dengan penekanan pada pemahaman konsep dan kemampuan siswa menggunakannya secara komunikatif.`,
+    `Tutor membawakan <TOPIC> dengan gaya yang energik dan variatif, menjaga keterlibatan siswa dari awal hingga akhir sesi.`,
+    `Materi <TOPIC> dikupas tuntas melalui siklus presentasi, latihan, dan produksi bahasa yang terstruktur dan berkesinambungan.`,
   ];
 
-  // ── Aktivitas pendukung / metode ─────────────────────────────────────────
+  // ── 15 Template Aktivitas Pendukung ──────────────────────────────────────
   const supportActivities = [
-    [
-      `Role-play activities were incorporated to give students hands-on practice in using the target language naturally and spontaneously.`,
-      `Students participated in pair work exercises, taking turns using new vocabulary and sentence structures in realistic conversational contexts.`,
-      `A group discussion activity challenged students to express their opinions and ideas using the language patterns introduced during the session.`,
-    ],
-    [
-      `Listening exercises were used to reinforce comprehension and expose students to authentic use of the vocabulary covered in today's topic.`,
-      `Students engaged in a creative writing task where they applied the lesson's key language in short paragraphs or sentences of their own.`,
-      `The tutor used visual storytelling and picture prompts to help students make connections between the topic and real-life scenarios.`,
-    ],
-    [
-      `A pronunciation drill was conducted to build students' confidence in speaking clearly and accurately on the topic.`,
-      `Students practiced through a structured game that made repetition enjoyable while reinforcing the core language points of the lesson.`,
-      `Peer-to-peer interaction was encouraged through a short presentation activity where each student briefly shared their understanding of the topic.`,
-    ],
+    `Aktivitas role-play diberikan untuk melatih siswa menggunakan bahasa target secara alami dalam situasi komunikatif nyata.`,
+    `Siswa mengerjakan latihan berpasangan secara bergantian menggunakan kosakata dan struktur kalimat baru yang dipelajari.`,
+    `Diskusi kelompok mendorong siswa menyampaikan pendapat dan gagasan menggunakan pola bahasa yang baru dipelajari.`,
+    `Latihan menyimak digunakan untuk memperkuat pemahaman dan memperkenalkan penggunaan kosakata secara autentik.`,
+    `Siswa mengerjakan tugas menulis kreatif pendek dengan menerapkan bahasa yang dipelajari dalam sesi ini.`,
+    `Tutor menggunakan gambar dan media visual untuk membantu siswa menghubungkan topik dengan situasi nyata.`,
+    `Latihan pelafalan dilakukan untuk meningkatkan kepercayaan diri siswa dalam berbicara secara jelas dan tepat.`,
+    `Permainan terstruktur digunakan untuk membuat latihan berulang menjadi menyenangkan sekaligus efektif dan memotivasi.`,
+    `Presentasi singkat antarsiswa mendorong mereka berbagi pemahaman dan meningkatkan kemampuan berbicara di depan umum.`,
+    `Siswa mengerjakan latihan mengisi bagian rumpang (gap-fill) untuk memperkuat pemahaman terhadap struktur bahasa.`,
+    `Kegiatan tanya-jawab cepat dilakukan untuk mengecek pemahaman siswa secara interaktif dan spontan.`,
+    `Siswa berlatih menggunakan flash card kosakata untuk mengingat kata-kata baru yang diperkenalkan pada sesi ini.`,
+    `Tutor menggunakan teknik drilling untuk memastikan siswa menguasai pola kalimat sebelum berlatih secara lebih bebas.`,
+    `Aktivitas menulis berpasangan dilakukan untuk melatih kolaborasi sekaligus memperkuat kemampuan menulis siswa.`,
+    `Siswa mengerjakan latihan pilihan ganda dan menjodohkan untuk menguji pemahaman mereka terhadap materi secara terstruktur.`,
   ];
 
-  // ── Penutup sesi ─────────────────────────────────────────────────────────
+  // ── 15 Template Penutup Sesi ──────────────────────────────────────────────
   const closings = [
-    `The session concluded with a quick recap where students summarized what they had learned. The tutor provided positive reinforcement and constructive feedback to consolidate understanding.`,
-    `To wrap up, the class participated in a mini review quiz that tested retention of key vocabulary and concepts from the lesson. Students showed strong engagement throughout.`,
-    `The tutor closed the session with an open-ended reflection question, encouraging students to think about how they can apply today's material in real-life situations outside the classroom.`,
-    `Class ended with individual oral responses, allowing the tutor to assess each student's grasp of the topic and provide immediate, targeted feedback.`,
-    `The lesson wrapped up with a brief written response task, giving students the chance to demonstrate their understanding and practice the language skills developed throughout the session.`,
+    `Sesi ditutup dengan rekap singkat di mana siswa merangkum hal terpenting yang mereka pelajari hari ini.`,
+    `Kelas diakhiri dengan mini kuis untuk mengecek penguasaan kosakata dan konsep utama dari pelajaran.`,
+    `Tutor menutup sesi dengan pertanyaan refleksi terbuka agar siswa memikirkan penerapan materi di kehidupan nyata.`,
+    `Pelajaran diakhiri dengan respons lisan individual untuk menilai pemahaman masing-masing siswa secara langsung.`,
+    `Sesi ditutup dengan tugas respons tertulis singkat sebagai bukti pemahaman siswa terhadap materi hari ini.`,
+    `Tutor menutup kelas dengan memberikan apresiasi atas partisipasi aktif siswa sepanjang sesi berlangsung.`,
+    `Kelas diakhiri dengan satu kalimat kesimpulan dari masing-masing siswa tentang hal terpenting yang dipelajari.`,
+    `Sesi ditutup dengan aktivitas exit ticket — siswa menuliskan satu kosakata baru dan satu pertanyaan tentang materi.`,
+    `Tutor menutup sesi dengan memberikan umpan balik konstruktif secara menyeluruh kepada seluruh siswa.`,
+    `Kelas diakhiri dengan permainan ringkas untuk memastikan materi yang dipelajari tetap melekat dalam ingatan.`,
+    `Sesi ditutup dengan sesi tanya jawab bebas, memberi kesempatan siswa mengklarifikasi hal yang belum dipahami.`,
+    `Tutor menutup kelas dengan menyampaikan keterkaitan materi hari ini dengan topik yang akan datang berikutnya.`,
+    `Pelajaran diakhiri dengan siswa mempresentasikan satu contoh penggunaan bahasa dari materi yang dipelajari.`,
+    `Sesi ditutup dengan kegiatan refleksi singkat yang mendorong siswa menyadari kemajuan belajar mereka.`,
+    `Tutor mengakhiri kelas dengan merangkum poin-poin kunci dan memastikan seluruh siswa siap untuk pertemuan berikutnya.`,
   ];
 
-  // ── Follow Up / Notes ─────────────────────────────────────────────────────
+  // ── 15 Template Tugas Mandiri / Follow Up (dengan <TOPIC>) ────────────────
   const homeworkOptions = [
-    `Students are encouraged to review today's vocabulary on <TOPIC> and use at least three new words or expressions in a sentence of their own before the next session.`,
-    `As a follow-up task, students should practice speaking about <TOPIC> at home — either by recording themselves, talking to a family member in English, or writing a short reflection.`,
-    `Students are asked to find one example of <TOPIC> from a book, video, or conversation they encounter this week and be ready to share it in the next class.`,
-    `For homework, students should write 3–5 sentences related to <TOPIC> and bring them to the next session for review and discussion.`,
-    `Students are encouraged to review the lesson notes on <TOPIC> and practice using the key expressions introduced today in everyday conversations.`,
+    `Siswa diminta mengulas kosakata <TOPIC> dan membuat minimal tiga kalimat menggunakan kata-kata baru sebelum sesi berikutnya.`,
+    `Sebagai tindak lanjut, siswa berlatih berbicara tentang <TOPIC> di rumah — bisa merekam diri sendiri atau menulis refleksi singkat.`,
+    `Siswa diminta mencari satu contoh penggunaan <TOPIC> dari buku, video, atau percakapan minggu ini untuk dibagikan di kelas berikutnya.`,
+    `Untuk PR, siswa menulis 3–5 kalimat berkaitan dengan <TOPIC> dan membawanya ke sesi berikutnya untuk ditinjau bersama.`,
+    `Siswa dianjurkan mengulas catatan materi <TOPIC> dan mencoba menggunakan ekspresi kunci dalam percakapan sehari-hari.`,
+    `Siswa diminta menonton video pendek berbahasa Inggris tentang <TOPIC> dan mencatat minimal 5 kosakata baru yang ditemukan.`,
+    `Sebagai latihan mandiri, siswa menulis sebuah paragraf pendek yang mendeskripsikan <TOPIC> dengan kata-kata mereka sendiri.`,
+    `Siswa diminta mempraktikkan pengucapan kosakata terkait <TOPIC> dan mengirimkan rekaman suara singkat kepada tutor.`,
+    `Siswa dianjurkan membaca satu teks atau artikel pendek tentang <TOPIC> dan merangkum poinnya dalam bahasa Inggris.`,
+    `Untuk PR, siswa membuat mind map kosakata tentang <TOPIC> dengan minimal 10 kata beserta artinya masing-masing.`,
+    `Siswa diminta mengerjakan latihan tambahan yang diberikan tutor sebagai penguatan pemahaman terhadap <TOPIC>.`,
+    `Siswa dianjurkan mendiskusikan <TOPIC> bersama teman atau keluarga dalam bahasa Inggris selama sekitar 5 menit.`,
+    `Sebagai tindak lanjut, siswa menulis dialog singkat (4–6 baris) yang mencerminkan penggunaan bahasa terkait <TOPIC>.`,
+    `Siswa diminta mempersiapkan pertanyaan tentang <TOPIC> yang ingin mereka diskusikan di sesi berikutnya.`,
+    `Siswa dianjurkan berlatih mandiri menggunakan aplikasi belajar bahasa Inggris dengan fokus pada materi <TOPIC>.`,
   ];
 
+  // ── 15 Template Rencana Sesi Berikutnya ──────────────────────────────────
   const nextSessionNotes = [
-    `Next session will build on today's material by introducing more complex applications and extending students' ability to communicate on this topic with greater fluency.`,
-    `The tutor plans to begin the next session with a review quiz on today's topic to reinforce retention, before moving on to the next theme.`,
-    `Upcoming sessions will continue to develop students' skills related to this topic, with an emphasis on speaking fluency and accurate use of vocabulary.`,
-    `The tutor will introduce a related topic in the next session that complements what was covered today, helping students build a broader communicative repertoire.`,
-    `Next class will include a brief revision activity followed by new material that expands on the foundation established in today's lesson.`,
+    `Sesi berikutnya akan memperluas materi hari ini dengan aplikasi yang lebih kompleks untuk meningkatkan kelancaran berbahasa.`,
+    `Tutor berencana memulai sesi berikutnya dengan kuis ulangan topik hari ini sebelum melanjutkan ke materi baru.`,
+    `Pertemuan mendatang akan terus mengembangkan kemampuan siswa pada topik ini dengan penekanan pada kelancaran berbicara.`,
+    `Tutor akan memperkenalkan topik terkait di sesi berikutnya yang melengkapi materi yang dibahas hari ini.`,
+    `Kelas berikutnya dimulai dengan revisi singkat sebelum lanjut ke materi baru yang memperkuat fondasi sesi ini.`,
+    `Topik yang dibahas hari ini akan dikembangkan lebih lanjut dengan fokus pada keterampilan menulis dan berbicara.`,
+    `Di sesi berikutnya, siswa akan berlatih menggunakan materi hari ini dalam konteks yang lebih beragam dan menantang.`,
+    `Tutor akan menyiapkan aktivitas latihan lanjutan yang menargetkan area yang masih perlu ditingkatkan bersama.`,
+    `Sesi berikutnya akan memadukan materi hari ini dengan tema baru yang memperluas wawasan dan kosakata siswa.`,
+    `Tutor akan mengevaluasi kemajuan siswa di sesi berikutnya berdasarkan tugas mandiri yang dikerjakan hari ini.`,
+    `Pertemuan berikutnya berfokus pada penguatan aspek komunikasi lisan berkaitan dengan topik yang telah dipelajari.`,
+    `Di sesi mendatang, siswa akan diberikan tantangan yang lebih tinggi untuk mendorong penggunaan bahasa secara lebih mandiri.`,
+    `Tutor berencana mengintegrasikan topik hari ini ke dalam proyek mini yang akan dikerjakan di pertemuan berikutnya.`,
+    `Sesi berikutnya dirancang untuk memperkuat pemahaman siswa melalui kegiatan berbasis praktik yang lebih intensif.`,
+    `Tutor akan mempersiapkan materi pengayaan bagi siswa yang sudah menguasai topik hari ini untuk sesi berikutnya.`,
   ];
 
+  // ── 15 Template Catatan Perkembangan Siswa ───────────────────────────────
   const progressNotes = [
-    `Overall, students demonstrated strong participation and a positive attitude toward the material.`,
-    `Students showed good progress in their ability to engage with the topic, and the tutor notes improving confidence in using English.`,
-    `The class responded enthusiastically to today's lesson, with most students actively contributing to discussions and activities.`,
-    `Students are making consistent progress. The tutor will continue to monitor individual development and provide personalized support as needed.`,
-    `Participation was high and the learning atmosphere was positive and productive throughout the session.`,
+    `Secara keseluruhan, siswa menunjukkan partisipasi aktif dan sikap positif terhadap materi yang disampaikan.`,
+    `Siswa memperlihatkan perkembangan yang baik dalam memahami topik dan kepercayaan diri berbahasa Inggris terus meningkat.`,
+    `Kelas merespons dengan antusias; sebagian besar siswa aktif berkontribusi dalam diskusi dan seluruh aktivitas.`,
+    `Siswa menunjukkan kemajuan yang konsisten dan tutor akan terus memantau perkembangan individual masing-masing.`,
+    `Tingkat partisipasi tinggi dan suasana belajar positif serta produktif sepanjang sesi berlangsung.`,
+    `Siswa mampu mengikuti materi dengan baik dan menunjukkan pemahaman yang memuaskan terhadap topik hari ini.`,
+    `Semangat belajar siswa terlihat tinggi; tutor mencatat peningkatan nyata dalam kelancaran dan ketepatan berbahasa.`,
+    `Siswa berhasil menyelesaikan seluruh aktivitas dengan baik dan menunjukkan kemajuan yang sangat menggembirakan.`,
+    `Tutor mencatat bahwa sebagian besar siswa sudah mampu menggunakan kosakata baru secara mandiri dan percaya diri.`,
+    `Perkembangan siswa pada topik ini berjalan sesuai target; tutor puas dengan hasil dan kualitas sesi hari ini.`,
+    `Siswa menunjukkan rasa ingin tahu yang tinggi dan aktif mengajukan pertanyaan yang relevan selama sesi berlangsung.`,
+    `Interaksi antarsiswa berjalan baik; kerja sama dan komunikasi dalam bahasa Inggris terlihat semakin meningkat.`,
+    `Tutor mencatat bahwa beberapa siswa sudah mulai berani menggunakan bahasa Inggris secara spontan tanpa diminta.`,
+    `Secara umum sesi berjalan lancar; siswa tampak menikmati proses belajar dan terlibat aktif dari awal hingga akhir.`,
+    `Kemajuan siswa terlihat nyata; kepercayaan diri dalam menggunakan bahasa Inggris terus bertumbuh setiap pertemuan.`,
   ];
 
-  // ── Build Activities ──────────────────────────────────────────────────────
-  const supportGroup = pick(supportActivities);
-  const [sup1, sup2] = pickN(supportGroup, 2);
+  // ── Bangun teks Class Activities ─────────────────────────────────────────
+  const [sup1, sup2] = pickN(supportActivities, 2);
 
   const activitiesText = [
     pick(openers),
@@ -11172,7 +11373,7 @@ const generateJournalContent = (topic: string): { activities: string; followUp: 
     pick(closings),
   ].join('\n').trim();
 
-  // ── Build Follow Up ───────────────────────────────────────────────────────
+  // ── Bangun teks Follow Up / Notes ─────────────────────────────────────────
   const followUpText = [
     pick(homeworkOptions).replace(/<TOPIC>/g, `"${t}"`),
     pick(nextSessionNotes),
@@ -11186,6 +11387,120 @@ const generateJournalContent = (topic: string): { activities: string; followUp: 
 function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) {
   const [formData, setFormData] = useState({ id: '', scheduleId: '', date: getTodayDateLocal(), sessionGroup: SESSIONS[0], topic: '', activities: '', followUp: '' });
   const [isAdding, setIsAdding] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActivities, setBulkActivities] = useState('');
+  const [bulkFollowUp, setBulkFollowUp] = useState('');
+  const [bulkApplying, setBulkApplying] = useState(false);
+  // Generate state
+  const [bulkGenMode, setBulkGenMode] = useState<'same' | 'per-journal' | null>(null);
+  const [bulkPreview, setBulkPreview] = useState<Record<string, { activities: string; followUp: string }>>({});
+  const [showPreview, setShowPreview] = useState(false);
+
+  const toggleBulkMode = () => {
+    setBulkMode(p => !p);
+    setSelectedIds(new Set());
+    setBulkActivities('');
+    setBulkFollowUp('');
+    setBulkGenMode(null);
+    setBulkPreview({});
+    setShowPreview(false);
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    // When Show All, select from full filtered list; otherwise only current page
+    const pool = isAll ? reversedJournals : paginatedData;
+    const allIds = pool.map(j => j.id);
+    setSelectedIds(prev => prev.size === allIds.length && allIds.every(id => prev.has(id)) ? new Set() : new Set(allIds));
+  };
+
+  const handleBulkApply = () => {
+    if (selectedIds.size === 0) return;
+    // If per-journal mode with preview, apply from preview map
+    if (bulkGenMode === 'per-journal' && Object.keys(bulkPreview).length > 0) {
+      setDb(p => ({
+        ...p,
+        journals: p.journals.map(j => {
+          if (!selectedIds.has(j.id)) return j;
+          const gen = bulkPreview[j.id];
+          if (!gen) return j;
+          return { ...j, activities: gen.activities, followUp: gen.followUp, timestamp: getLocalTimestamp() };
+        }),
+      }));
+      showToast(`${selectedIds.size} jurnal berhasil diperbarui (per-jurnal)`, 'success');
+    } else {
+      if (!bulkActivities.trim() && !bulkFollowUp.trim()) {
+        showToast('Isi minimal satu field (Activities atau Follow Up) sebelum apply.', 'error');
+        return;
+      }
+      setDb(p => ({
+        ...p,
+        journals: p.journals.map(j => {
+          if (!selectedIds.has(j.id)) return j;
+          return {
+            ...j,
+            ...(bulkActivities.trim() ? { activities: bulkActivities.trim() } : {}),
+            ...(bulkFollowUp.trim() ? { followUp: bulkFollowUp.trim() } : {}),
+            timestamp: getLocalTimestamp(),
+          };
+        }),
+      }));
+      showToast(`${selectedIds.size} jurnal berhasil diperbarui`, 'success');
+    }
+    setBulkApplying(false);
+    setSelectedIds(new Set());
+    setBulkActivities('');
+    setBulkFollowUp('');
+    setBulkGenMode(null);
+    setBulkPreview({});
+    setShowPreview(false);
+    setBulkMode(false);
+  };
+
+  // Generate same text for all selected (using first selected journal's topic or generic)
+  const handleGenerateSame = () => {
+    const selectedJournals = db.journals.filter(j => selectedIds.has(j.id));
+    // Pick the most common topic among selected, or first one
+    const topicFreq: Record<string, number> = {};
+    selectedJournals.forEach(j => { const t = (j.topic || '').trim(); if (t) topicFreq[t] = (topicFreq[t] || 0) + 1; });
+    const topTopic = Object.entries(topicFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || selectedJournals[0]?.topic || 'English Learning';
+    const gen = generateJournalContent(topTopic);
+    setBulkActivities(gen.activities);
+    setBulkFollowUp(gen.followUp);
+    setBulkGenMode('same');
+    setBulkPreview({});
+    setShowPreview(false);
+  };
+
+  // Generate unique text per journal based on each journal's own topic
+  const handleGeneratePerJournal = () => {
+    const selectedJournals = db.journals.filter(j => selectedIds.has(j.id));
+    const preview: Record<string, { activities: string; followUp: string }> = {};
+    selectedJournals.forEach(j => {
+      const topic = (j.topic || '').trim() || 'English Learning';
+      preview[j.id] = generateJournalContent(topic);
+    });
+    setBulkPreview(preview);
+    setBulkGenMode('per-journal');
+    setBulkActivities('');
+    setBulkFollowUp('');
+    setShowPreview(true);
+  };
+
+  // Regenerate one entry in per-journal preview
+  const handleRegenerateOne = (jId: string, topic: string) => {
+    const gen = generateJournalContent((topic || '').trim() || 'English Learning');
+    setBulkPreview(prev => ({ ...prev, [jId]: gen }));
+  };
   // Fix 8: Persistent month/year filter
   const [month, setMonth] = useLocalStorage<number>('ecg_journals_month', new Date().getMonth() + 1);
   const [year, setYear] = useLocalStorage<number>('ecg_journals_year', new Date().getFullYear());
@@ -11301,16 +11616,26 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
           <h2 className="text-2xl font-bold text-white mb-1">Learning Journals</h2>
           <p className="text-gray-400 text-sm">Log topics and activities covered in each session.</p>
         </div>
-        <Button
-          onClick={() => { setFormData({ id: '', scheduleId: '', date: '', sessionGroup: '', topic: '', activities: '', followUp: '' }); setIsAdding(!isAdding); }}
-          icon={Plus}
-        >
-          Write Journal
-        </Button>
+        <div className="flex gap-2">
+          <button
+            onClick={toggleBulkMode}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold border transition-all ${bulkMode ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 hover:bg-amber-500/25' : 'bg-[#151B26] border-gray-700 text-gray-400 hover:border-gray-500 hover:text-gray-200'}`}
+          >
+            <CheckSquare size={15} />
+            {bulkMode ? 'Batal Pilih' : 'Bulk Edit'}
+          </button>
+          <Button
+            onClick={() => { const opening = !isAdding; setFormData({ id: '', scheduleId: '', date: '', sessionGroup: '', topic: '', activities: '', followUp: '' }); setIsAdding(!isAdding); if (opening) setTimeout(() => { formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80); }}
+            icon={Plus}
+          >
+            Write Journal
+          </Button>
+        </div>
       </div>
 
       {/* Write/Edit Form */}
       {isAdding && (
+        <div ref={formRef}>
         <Card className="border border-purple-500/25 shadow-[0_0_32px_rgba(168,85,247,0.08)]">
           <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-800">
             <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
@@ -11503,6 +11828,7 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
             </div>
           </form>
         </Card>
+        </div>
       )}
 
       {/* Filter Bar */}
@@ -11554,6 +11880,198 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
         )}
       </div>
 
+      {/* Bulk Edit — Select All bar */}
+      {bulkMode && paginatedData.length > 0 && (() => {
+        const pool = isAll ? reversedJournals : paginatedData;
+        const allSelected = pool.length > 0 && pool.every(j => selectedIds.has(j.id));
+        return (
+          <div className="flex items-center justify-between bg-amber-500/8 border border-amber-500/25 rounded-xl px-4 py-2.5 gap-3 flex-wrap">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={selectAll}
+                className="w-4 h-4 accent-amber-400 cursor-pointer"
+              />
+              <span className="text-sm text-amber-300 font-medium">
+                {selectedIds.size === 0
+                  ? isAll
+                    ? `Pilih semua ${pool.length} jurnal (bulan ini)`
+                    : 'Pilih semua jurnal di halaman ini'
+                  : `${selectedIds.size} jurnal dipilih`}
+              </span>
+            </label>
+            <div className="flex items-center gap-3">
+              {/* When paginated and there are more journals outside this page, offer to select all filtered */}
+              {!isAll && selectedIds.size > 0 && selectedIds.size < reversedJournals.length && (
+                <button
+                  onClick={() => setSelectedIds(new Set(reversedJournals.map(j => j.id)))}
+                  className="text-xs text-amber-400 hover:text-amber-300 transition-colors font-semibold underline underline-offset-2"
+                >
+                  Pilih semua {reversedJournals.length} jurnal bulan ini
+                </button>
+              )}
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs text-amber-500/70 hover:text-amber-400 transition-colors"
+                >Hapus pilihan</button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Bulk Edit — Floating Panel */}
+      {bulkMode && selectedIds.size > 0 && (
+        <div className="sticky top-4 z-30 bg-[#1A2235] border border-amber-500/35 rounded-2xl p-4 shadow-[0_8px_32px_rgba(0,0,0,0.5)] space-y-3">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/25"><Edit2 size={14} className="text-amber-400" /></div>
+              <span className="text-white font-bold text-sm">Bulk Edit</span>
+              <span className="bg-amber-500/20 text-amber-300 text-xs font-semibold px-2 py-0.5 rounded-full border border-amber-500/30">{selectedIds.size} jurnal</span>
+            </div>
+            <button onClick={toggleBulkMode} className="text-gray-500 hover:text-gray-300 transition-colors p-1"><X size={16}/></button>
+          </div>
+
+          {/* Generate buttons row */}
+          <div className="bg-[#0D1420] border border-gray-700/60 rounded-xl p-3 space-y-2">
+            <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">✨ Generate Otomatis</p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={handleGenerateSame}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition-all ${bulkGenMode === 'same' ? 'bg-purple-500/20 border-purple-400/50 text-purple-300' : 'bg-purple-500/10 border-purple-500/25 text-purple-400 hover:bg-purple-500/20 hover:border-purple-400/50'}`}
+              >
+                <RefreshCw size={13} />
+                Generate Sama
+                <span className="text-[10px] opacity-60 font-normal">(1 teks untuk semua)</span>
+              </button>
+              <button
+                onClick={handleGeneratePerJournal}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition-all ${bulkGenMode === 'per-journal' ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-300' : 'bg-cyan-500/10 border-cyan-500/25 text-cyan-400 hover:bg-cyan-500/20 hover:border-cyan-400/50'}`}
+              >
+                <Zap size={13} />
+                Generate Per Jurnal
+                <span className="text-[10px] opacity-60 font-normal">(unik per topic)</span>
+              </button>
+            </div>
+            {bulkGenMode === 'same' && (
+              <p className="text-[11px] text-purple-400/70">Konten di bawah di-generate dari topic jurnal yang paling umum. Edit bebas sebelum apply.</p>
+            )}
+            {bulkGenMode === 'per-journal' && (
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-cyan-400/70">Setiap jurnal mendapat konten unik berdasarkan topic-nya. Preview di bawah.</p>
+                <button onClick={handleGeneratePerJournal} className="flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors font-semibold">
+                  <RefreshCw size={11} /> Regenerate Semua
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Per-journal preview */}
+          {bulkGenMode === 'per-journal' && Object.keys(bulkPreview).length > 0 && (
+            <div className="border border-cyan-500/20 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShowPreview(p => !p)}
+                className="w-full flex items-center justify-between px-3.5 py-2.5 bg-cyan-500/8 hover:bg-cyan-500/12 transition-colors"
+              >
+                <span className="text-cyan-300 text-xs font-semibold flex items-center gap-1.5">
+                  <Eye size={12} /> Preview hasil generate ({Object.keys(bulkPreview).length} jurnal)
+                </span>
+                <ChevronDown size={14} className={`text-cyan-400 transition-transform ${showPreview ? 'rotate-180' : ''}`} />
+              </button>
+              {showPreview && (
+                <div className="max-h-72 overflow-y-auto divide-y divide-gray-800">
+                  {db.journals.filter(j => selectedIds.has(j.id) && bulkPreview[j.id]).map(j => (
+                    <div key={j.id} className="px-3.5 py-3 bg-[#0B1020]">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <p className="text-white text-xs font-bold leading-snug">{j.topic || '(no topic)'}</p>
+                          <p className="text-gray-500 text-[10px]">{j.date} · {j.sessionGroup}</p>
+                        </div>
+                        <button
+                          onClick={() => handleRegenerateOne(j.id, j.topic)}
+                          className="flex-shrink-0 flex items-center gap-1 text-[10px] text-cyan-500 hover:text-cyan-300 transition-colors font-semibold bg-cyan-500/10 hover:bg-cyan-500/20 px-2 py-1 rounded-lg border border-cyan-500/20"
+                        >
+                          <RefreshCw size={9} /> Regen
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="bg-[#151B26] rounded-lg p-2">
+                          <p className="text-[9px] text-gray-500 uppercase font-bold tracking-wide mb-0.5">Activities</p>
+                          <p className="text-[11px] text-gray-300 leading-relaxed line-clamp-2">{bulkPreview[j.id].activities}</p>
+                        </div>
+                        <div className="bg-amber-500/5 border border-amber-500/10 rounded-lg p-2">
+                          <p className="text-[9px] text-amber-500/70 uppercase font-bold tracking-wide mb-0.5">Follow Up</p>
+                          <p className="text-[11px] text-amber-100/60 leading-relaxed line-clamp-2">{bulkPreview[j.id].followUp}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual textarea fields — only shown when NOT in per-journal mode */}
+          {bulkGenMode !== 'per-journal' && (
+            <>
+              <p className="text-[11px] text-gray-500">Field yang diisi akan <span className="text-amber-400 font-medium">menimpa</span> isi jurnal yang dipilih. Kosongkan field yang tidak ingin diubah.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Activities</label>
+                    {bulkGenMode === 'same' && bulkActivities && (
+                      <button onClick={handleGenerateSame} className="flex items-center gap-1 text-[10px] text-purple-400 hover:text-purple-300 transition-colors font-semibold">
+                        <RefreshCw size={9} /> Regen
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={bulkActivities}
+                    onChange={e => setBulkActivities(e.target.value)}
+                    placeholder="Isi manual, atau klik Generate Sama di atas…"
+                    className="w-full bg-[#0B0F19] border border-gray-700 rounded-lg p-2.5 text-white text-sm focus:border-[#00D4FF] focus:outline-none transition-colors leading-relaxed resize-none placeholder-gray-600"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs text-amber-500/80 font-semibold uppercase tracking-wide">Follow Up / Notes</label>
+                    {bulkGenMode === 'same' && bulkFollowUp && (
+                      <button onClick={handleGenerateSame} className="flex items-center gap-1 text-[10px] text-purple-400 hover:text-purple-300 transition-colors font-semibold">
+                        <RefreshCw size={9} /> Regen
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={bulkFollowUp}
+                    onChange={e => setBulkFollowUp(e.target.value)}
+                    placeholder="Isi manual, atau klik Generate Sama di atas…"
+                    className="w-full bg-[#0B0F19] border border-amber-500/20 rounded-lg p-2.5 text-white text-sm focus:border-amber-400 focus:outline-none transition-colors leading-relaxed resize-none placeholder-gray-600"
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={toggleBulkMode} className="px-4 py-2 rounded-xl text-sm font-semibold bg-gray-700/60 text-gray-300 hover:bg-gray-700 transition-colors border border-gray-600">Batal</button>
+            <button
+              onClick={handleBulkApply}
+              disabled={bulkApplying || (bulkGenMode === 'per-journal' ? Object.keys(bulkPreview).length === 0 : !bulkActivities.trim() && !bulkFollowUp.trim())}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_16px_rgba(245,158,11,0.3)]"
+            >
+              <CheckCircle2 size={14} />
+              Apply ke {selectedIds.size} Jurnal
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Timeline / Journal List */}
       {groupedByDate.length === 0 ? (
         <div className="bg-[#151B26] border border-gray-800 rounded-xl py-16 flex flex-col items-center gap-3">
@@ -11587,11 +12105,28 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
                   {journals.map(j => {
                     const c = getSessionColor(j.sessionGroup);
                     return (
-                      <div key={j.id} className={`group relative bg-[#0F1724] border ${c.border} rounded-xl overflow-hidden transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:-translate-y-0.5`}>
+                      <div
+                        key={j.id}
+                        className={`group relative bg-[#0F1724] border rounded-xl overflow-hidden transition-all hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:-translate-y-0.5 ${bulkMode && selectedIds.has(j.id) ? 'border-amber-500/60 shadow-[0_0_0_2px_rgba(245,158,11,0.15)]' : c.border}`}
+                        onClick={bulkMode ? () => toggleSelect(j.id) : undefined}
+                        style={bulkMode ? { cursor: 'pointer' } : {}}
+                      >
                         {/* Left accent bar */}
-                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${c.bar}`} />
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${bulkMode && selectedIds.has(j.id) ? 'bg-amber-500' : c.bar}`} />
 
-                        <div className="pl-5 pr-4 py-4">
+                        {/* Bulk checkbox */}
+                        {bulkMode && (
+                          <div className="absolute top-3.5 left-4 z-10" onClick={e => { e.stopPropagation(); toggleSelect(j.id); }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(j.id)}
+                              onChange={() => toggleSelect(j.id)}
+                              className="w-4 h-4 accent-amber-400 cursor-pointer"
+                            />
+                          </div>
+                        )}
+
+                        <div className={`${bulkMode ? 'pl-10' : 'pl-5'} pr-4 py-4`}>
                           {/* Top row */}
                           <div className="flex items-start justify-between gap-3 mb-3">
                             <div className="flex-1 min-w-0">
@@ -11607,19 +12142,21 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
                                 </span>
                               </div>
                             </div>
-                            {/* Action buttons */}
-                            <div className="absolute top-3.5 right-3.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => { setFormData(j); setIsAdding(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                                className="text-blue-400 p-2 hover:bg-blue-500/15 rounded-lg transition-colors"
-                                title="Edit Journal"
-                              ><Edit2 size={15}/></button>
-                              <button
-                                onClick={() => softDelete('journals', j.id, 'Journal')}
-                                className="text-red-400 p-2 hover:bg-red-500/15 rounded-lg transition-colors"
-                                title="Delete Journal"
-                              ><Trash2 size={15}/></button>
-                            </div>
+                            {/* Action buttons — hidden in bulk mode */}
+                            {!bulkMode && (
+                              <div className="absolute top-3.5 right-3.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => { setFormData(j); setIsAdding(true); setTimeout(() => { formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); const topicEl = formRef.current?.querySelector<HTMLInputElement>('input[placeholder*="topic"], input[name="topic"], textarea[name="topic"]') || formRef.current?.querySelectorAll('input, textarea')[2] as HTMLInputElement; topicEl?.focus(); }, 80); }}
+                                  className="text-blue-400 p-2 hover:bg-blue-500/15 rounded-lg transition-colors"
+                                  title="Edit Journal"
+                                ><Edit2 size={15}/></button>
+                                <button
+                                  onClick={() => softDelete('journals', j.id, 'Journal')}
+                                  className="text-red-400 p-2 hover:bg-red-500/15 rounded-lg transition-colors"
+                                  title="Delete Journal"
+                                ><Trash2 size={15}/></button>
+                              </div>
+                            )}
                           </div>
 
                           {/* Content */}
@@ -11648,7 +12185,7 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
 
       {/* Pagination Footer */}
       <div className="bg-[#151B26] border border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-400">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-gray-500">Show</span>
           <select
             value={rowsPerPage}
@@ -11657,10 +12194,22 @@ function JournalsModule({ db, setDb, user, showToast, generateId, softDelete }) 
           >
             <option value={10}>10</option>
             <option value={20}>20</option>
+            <option value={30}>30</option>
             <option value={50}>50</option>
-            <option value="All">All</option>
+            <option value="All">Semua</option>
           </select>
           <span className="text-gray-500">entries {filteredJournals.length > 0 && <span className="text-gray-300 font-medium">· Total: {filteredJournals.length}</span>}</span>
+          {isAll && filteredJournals.length > 0 && (
+            <span className="text-[11px] text-emerald-500/80 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">Semua ditampilkan</span>
+          )}
+          {isAll && filteredJournals.length > 0 && !bulkMode && (
+            <button
+              onClick={toggleBulkMode}
+              className="text-[11px] text-amber-400/80 hover:text-amber-400 font-semibold flex items-center gap-1 transition-colors"
+            >
+              <CheckSquare size={11} /> Bulk edit semua
+            </button>
+          )}
         </div>
         {!isAll && totalPages > 1 && (
           <div className="flex items-center gap-2">
